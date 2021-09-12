@@ -1,0 +1,3 @@
+[submodule "elisp-ffi"]
+	path = elisp-ffi
+	url = https://github.com/skeeto/elisp-ffi.git
