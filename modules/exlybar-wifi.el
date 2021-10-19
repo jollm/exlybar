@@ -89,37 +89,37 @@ This should be deprecated in favor of something better."
                (:constructor exlybar-wifi-create)
                (:copier nil)))
 
-(defsubst exlybar-wifi--icon-string ()
-  "Return the icon as a string."
-  (string (exlybar-wifi-icon exlybar-wifi--module)))
+(defsubst exlybar-wifi--icon-string (m)
+  "Return M's icon as a string."
+  (string (exlybar-wifi-icon m)))
 
 (defvar exlybar-wifi--update-timer nil "A variable to hold the update timer.")
 
-(defun exlybar-wifi--do-update ()
-  "Poll the wifi status and check whether to update the text."
-  (let ((txt+fonts `((,(exlybar-wifi--icon-string) . ,exlybar-icon-font)
+(defun exlybar-wifi--do-update (m)
+  "Poll the wifi status and check whether to update the M's text."
+  (let ((txt+fonts `((,(exlybar-wifi--icon-string m) . ,exlybar-icon-font)
                      (,(concat exlybar-wifi-text-separator
                                (exlybar-wifi-iw-essid)
                                exlybar-wifi-text-separator
                                (exlybar-wifi-iw-quality))
                       . ,exlybar-text-font))))
-    (unless (equal txt+fonts (exlybar-wifi-text exlybar-wifi--module))
-      (setf (exlybar-module-text exlybar-wifi--module)
+    (unless (equal txt+fonts (exlybar-wifi-text m))
+      (setf (exlybar-module-text m)
             txt+fonts
-            (exlybar-module-needs-refresh? exlybar-wifi--module)
+            (exlybar-module-needs-refresh? m)
             t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-wifi))
   "Set the M's icon and update the text."
   (setf (exlybar-wifi-icon m) ?)
-  (exlybar-wifi--do-update))
+  (exlybar-wifi--do-update m))
 
 (cl-defmethod exlybar-module-init :after ((m exlybar-wifi))
   "Run the update timer."
   (ignore m)
   (unless exlybar-wifi--update-timer
     (setq exlybar-wifi--update-timer
-          (run-at-time nil 10 #'exlybar-wifi--do-update))))
+          (run-at-time nil 10 #'exlybar-wifi--do-update m))))
 
 (cl-defmethod exlybar-module-exit :before ((m exlybar-wifi))
   "Cancel the update timer."
