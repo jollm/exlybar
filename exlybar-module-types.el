@@ -60,8 +60,8 @@
   (animation nil :type 'function)
   (cache nil :type 'alist)
   (width exlybar-module-min-width :type 'fixed)
-  (prev-width 0 :type 'fixed)
-  (xcb nil :type 'list))
+  (xcb nil :type 'list)
+  (needs-refresh? nil :type 'boolean))
 
 (provide 'exlybar-module-types)
 
