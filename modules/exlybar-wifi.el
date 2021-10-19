@@ -1,4 +1,4 @@
-;;; exlybar-module.el --- An exlybar wifi module  -*- lexical-binding: t -*-
+;;; exlybar-wifi.el --- An exlybar wifi module  -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
