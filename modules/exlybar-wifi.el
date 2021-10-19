@@ -85,7 +85,7 @@ This should be deprecated in favor of something better."
 
 ;;; let's just try a simple display of link quality and ssid
 (cl-defstruct (exlybar-wifi
-               (:include exlybar-module (name "wifi"))
+               (:include exlybar-module (name "wifi") (icon ?))
                (:constructor exlybar-wifi-create)
                (:copier nil)))
 
@@ -111,7 +111,6 @@ This should be deprecated in favor of something better."
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-wifi))
   "Set the M's icon and update the text."
-  (setf (exlybar-wifi-icon m) ?)
   (exlybar-wifi--do-update m))
 
 (cl-defmethod exlybar-module-init :after ((m exlybar-wifi))
