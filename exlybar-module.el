@@ -41,7 +41,7 @@
 
 (defcustom exlybar-default-module-text-color
   (exlybar-render-create-color
-   :red #x4242 :green #xffff :blue #x4242 :alpha #xffff)
+   :red #xeeee :green #xffff :blue #xffff :alpha #xffff)
   "The default text color for modules."
   :type 'xcb:render:COLOR
   :group 'exlybar)

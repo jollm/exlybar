@@ -214,7 +214,7 @@ DATA the event data"
   ;; initialize the bar window
   (let ((id (xcb:generate-id exlybar--connection))
         (background-pixel (exlybar--color->pixel
-                           (exlybar--find-foreground-color)))
+                           (exlybar--find-background-color)))
         frame parent depth y)
     (setq exlybar--window id)
     (message "Exlybar window: %s" exlybar--window)
