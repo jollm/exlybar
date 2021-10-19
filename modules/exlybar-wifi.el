@@ -32,13 +32,12 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'dash)
 (require 'f)
 (require 's)
 
-(require 'exlybar)
 (require 'exlybar-module)
-(require 'exlybar-render)
 
 (defgroup exlybar-wifi nil
   "An Exlybar wifi module."
