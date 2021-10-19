@@ -55,6 +55,8 @@
   (text nil :type 'list)
   (fonts `(,exlybar-icon-font ,exlybar-text-font) :type 'list)
   (text-layout nil :type 'list)
+  (lpad 14 :type 'fixed)
+  (rpad 14 :type 'fixed)
   (colors (exlybar-module-rgb-create) :type 'exlybar-module-rgb)
   (icon nil :type 'character)
   (animation nil :type 'function)
