@@ -115,7 +115,7 @@ This default primary method uses a result from fontsloth-layout to set
                      (fontsloth-layout-finalize l)
                      l) into ls finally return ls)))
     (let ((output
-           (cl-loop for l in layouts append (fontsloth-layout-output l))))
+           (cl-loop for l in layouts nconc (fontsloth-layout-output l))))
       (setf (exlybar-module-width m)
             (+ (exlybar-module-rpad m)
                (round (fontsloth-layout-current-pos (car (last layouts)))))
