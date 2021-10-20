@@ -164,8 +164,8 @@ NEW-EXTENTS the new layout extents"
                           :src-x 0 :src-y 0 :dst-x x :dst-y y
                           :width width :height exlybar-height)))))
 
-(defvar exlybar--prev-extents nil "Held by `exlybar--refresh-modules'.")
-(defun exlybar--refresh-modules ()
+(defvar exlybar--prev-extents nil "Held by `exlybar-refresh-modules'.")
+(defun exlybar-refresh-modules ()
   "Ask the modules to refresh and see whether the layout has changed."
   (message "refreshing modules")
   ;; refresh modules to update to latest dimensions
@@ -190,7 +190,7 @@ NEW-EXTENTS the new layout extents"
 (defun exlybar--start-module-refresh-timer ()
   "Start a timer to periodically refresh the modules."
   (setq exlybar--module-refresh-timer
-        (run-at-time nil 10 #'exlybar--refresh-modules)))
+        (run-at-time nil 10 #'exlybar-refresh-modules)))
 
 (defun exlybar--on-Expose (data _synthetic)
   "Can draw things after Expose.
