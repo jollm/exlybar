@@ -24,8 +24,8 @@
 
 ;;; Commentary:
 
-;; This is an implementation of `exlybar-module' for battery status.
-;; information
+;; This is an implementation of `exlybar-module' for battery status
+;; information.
 
 ;; To use this module, add it to `exlybar-modules' with any desired layout
 ;; insructions.
