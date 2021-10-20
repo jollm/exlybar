@@ -99,21 +99,23 @@ This default primary method uses a result from fontsloth-layout to set
          (font-names (exlybar-module-fonts m))
          (fonts (seq-map #'fontsloth-load-font font-names))
          (layouts
-          (cl-loop for txt+font in text collect
-                   (let* ((l (fontsloth-layout-create
-                              :x (exlybar-module-lpad m)))
+          (cl-loop for txt+font in text
+                   for prev-x = (exlybar-module-lpad m)
+                   then (fontsloth-layout-current-pos (car ls)) collect
+                   (let* ((l (fontsloth-layout-create))
                           (txt (car txt+font)) (font-name (cdr txt+font))
                           (font-index (seq-position font-names font-name))
                           (font (elt fonts font-index))
                           (px (fontsloth-font-compute-px font exlybar-height)))
                      (fontsloth-layout-reset
-                      l (fontsloth-layout-settings-create))
+                      l (fontsloth-layout-settings-create :x prev-x))
                      (fontsloth-layout-append
                       l fonts (fontsloth-layout-text-style-create
                                :text txt :px px :font-index font-index))
                      (fontsloth-layout-finalize l)
-                     l))))
-    (let ((output (apply #'fontsloth-layout-concat-layouts layouts)))
+                     l) into ls finally return ls)))
+    (let ((output
+           (cl-loop for l in layouts append (fontsloth-layout-output l))))
       (setf (exlybar-module-width m)
             (+ (exlybar-module-rpad m)
                (round (fontsloth-layout-current-pos (car (last layouts)))))
