@@ -76,7 +76,13 @@ Defaults to the width obtained from `display-pixel-width'"
   :type 'list
   :group 'exlybar)
 
+(defvar exlybar--enabled nil "t if exlybar is enabled.")
+
 (require 'exlybar-layout)
+
+(defsubst exlybar-enabled-p ()
+  "Return t if exlybar is enabled."
+  exlybar--enabled)
 
 (defun exlybar--refresh ()
   "Refresh the bar."
@@ -336,7 +342,8 @@ DATA the event data"
                 #'exlybar--on-KeyPress)
     (xcb:+event exlybar--connection 'xcb:Expose
                 #'exlybar--on-Expose)
-    (exlybar--refresh)))
+    (exlybar--refresh)
+    (setq exlybar--enabled t)))
 
 (defun exlybar-exit ()
   "Exit the exlybar."
@@ -356,7 +363,8 @@ DATA the event data"
                        :gc exlybar--gc))
     (xcb:disconnect exlybar--connection)
     (setq exlybar--connection nil
-          exlybar--window nil)))
+          exlybar--window nil
+          exlybar--enabled nil)))
 
 (provide 'exlybar)
 
