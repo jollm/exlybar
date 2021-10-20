@@ -45,7 +45,7 @@
 (defcustom exlybar-battery-icons
   '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (100 . ?))
   "Icons for exlybar-battery. See `exlybar-choose-icon' for how it is used."
-  :type 'list
+  :type 'alist
   :group 'exlybar-battery)
 
 (cl-defstruct (exlybar-battery
