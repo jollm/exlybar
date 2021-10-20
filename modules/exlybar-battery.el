@@ -36,6 +36,17 @@
 (require 'cl-lib)
 
 (require 'exlybar-module)
+(require 'exlybar-module-helpers)
+
+(defgroup exlybar-battery nil
+  "An Exlybar battery module."
+  :group 'exlybar)
+
+(defcustom exlybar-battery-icons
+  '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (100 . ?))
+  "Icons for exlybar-battery. See `exlybar-choose-icon' for how it is used."
+  :type 'list
+  :group 'exlybar-battery)
 
 (cl-defstruct (exlybar-battery
                (:include exlybar-module (name "battery"))
@@ -43,21 +54,17 @@
                (:copier nil))
   (format "%b %p%% %t %r" :type 'string))
 
-(defun exlybar-battery--choose-icon ()
-  (let ((pct (string-to-number (map-elt (funcall battery-status-function) ?p)))
-        (icons '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (100 . ?))))
-    (cdr (seq-find (pcase-lambda (`(,p . ,i)) (< pct p)) icons))))
-
 (defvar exlybar-battery--update-timer nil
   "A variable to hold the update timer.")
 
 (defun exlybar-battery--do-update (m)
   "Poll the battery status and check whether to update M's text."
-  (let* ((txt+fonts `((,(string (exlybar-battery--choose-icon))
+  (let* ((status (funcall battery-status-function))
+         (pct (string-to-number (map-elt status ?p)))
+         (txt+fonts `((,(string (exlybar-choose-icon pct exlybar-battery-icons))
                        . ,exlybar-icon-font)
                       (,(concat " "
-                         (format-spec (exlybar-battery-format m)
-                                      (funcall battery-status-function)))
+                         (format-spec (exlybar-battery-format m) status))
                        . ,exlybar-text-font))))
     (unless (equal txt+fonts (exlybar-battery-text m))
       (setf (exlybar-module-text m)
@@ -81,7 +88,6 @@
   (when exlybar-battery--update-timer
     (cancel-timer exlybar-battery--update-timer))
   (setq exlybar-battery--update-timer nil))
-
 
 (provide 'exlybar-battery)
 ;;; exlybar-battery.el ends here
