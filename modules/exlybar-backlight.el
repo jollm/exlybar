@@ -36,7 +36,7 @@
 (require 'cl-lib)
 
 (require 'exlybar-module)
-(require 'exlybar-progress-bar)
+(require 'exlybar-module-helpers)
 
 (defgroup exlybar-backlight nil
   "An Exlybar backlight module."
