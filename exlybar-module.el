@@ -61,8 +61,8 @@ and a cache. The xcb ids are stored in the module xcb alist."
                                 :background (exlybar-module-rgb-background-color colors)
                                 :foreground (exlybar-module-rgb-background-color colors)
                                 :graphics-exposures 0)))
-    (message "fill module %s rectangle %s" name
-             (exlybar-render-fill-rectangle c gc pmap width exlybar-height))
+    ;; (message "fill module %s rectangle %s" name
+    ;;          (exlybar-render-fill-rectangle c gc pmap width exlybar-height))
     (push `(pixmap . ,pmap) (exlybar-module-xcb m))
     (push `(gc . ,gc) (exlybar-module-xcb m))
     (push `(gs . ,(exlybar-render-create-glyphset c)) (exlybar-module-xcb m))
@@ -163,7 +163,7 @@ This default primary method uses a result from fontsloth-layout to set
                (layouts (exlybar-module--layout-format format spec lpad)))
     (cl-multiple-value-bind (output current-pos)
         (exlybar-module--collect-layout-output layouts)
-      (message "text layout width is %s" current-pos)
+      ;; (message "text layout width is %s" current-pos)
       (setf (exlybar-module-width m)
             (+ (exlybar-module-rpad m) (round current-pos))
             (exlybar-module-text-layout m)
@@ -171,7 +171,7 @@ This default primary method uses a result from fontsloth-layout to set
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-module))
   "Before init update module M's text-layout."
-  (message "super init before")
+  ;; (message "super init before")
   (exlybar-module-layout-text m))
 
 (cl-defmethod exlybar-module-init :after ((m exlybar-module))
@@ -181,15 +181,15 @@ This default primary method uses a result from fontsloth-layout to set
 (cl-defgeneric exlybar-module-refresh ((m exlybar-module))
   "Refresh module M.
 This default primary method redraws the text if it has changed."
-  (message "module refresh primary %s" (exlybar-module-name m))
+  ;; (message "module refresh primary %s" (exlybar-module-name m))
   (when (exlybar-module-needs-refresh? m)
-    (message "module %s changed, redrawing text, xcb %s"
-             (exlybar-module-name m) (exlybar-module-xcb m))
+    ;; (message "module %s changed, redrawing text, xcb %s"
+    ;;          (exlybar-module-name m) (exlybar-module-xcb m))
     (exlybar-module--draw-text m)))
 
 (cl-defmethod exlybar-module-refresh :before ((m exlybar-module))
   "When refreshing, redo text layout and make a new pixmap."
-  (message "running super before refresh")
+  ;; (message "running super before refresh")
   (when (exlybar-module-needs-refresh? m)
     (exlybar-module-layout-text m)
     (let ((c exlybar--connection)

@@ -154,19 +154,21 @@ COLOR color of text, an `xcb:render:COLOR'"
       (pcase-let* (((cl-struct fontsloth-layout-glyph-position
                                (parent char-code) x width height) pos)
                    (x (truncate x)))
-        (message "trying to compositeglyph32 %s"
-                 (xcb:+request-checked+request-check c
-                     (make-instance 'xcb:render:CompositeGlyphs32
-                                    :op xcb:render:PictOp:Over
-                                    :src pen
-                                    :dst pic
-                                    :mask-format 0
-                                    :glyphset gs
-                                    :src-x 0
-                                    :src-y 0
-                                    :glyphcmds
-                                    (exlybar-render--stream-glyph-cmds
-                                     char-code x 0))))))
+        (xcb:+request-checked+request-check c
+            (make-instance 'xcb:render:CompositeGlyphs32
+                           :op xcb:render:PictOp:Over
+                           :src pen
+                           :dst pic
+                           :mask-format 0
+                           :glyphset gs
+                           :src-x 0
+                           :src-y 0
+                           :glyphcmds
+                           (exlybar-render--stream-glyph-cmds
+                            char-code x 0)))
+        ;; (message "trying to compositeglyph32 %s"
+        ;;          )
+        ))
     (xcb:+request c
         (make-instance 'xcb:render:FreePicture
                        :picture pen))
@@ -193,7 +195,7 @@ W the pixmap width
 H the pixmap height"
   (let* ((stride (logand (lognot 3) (+ 3 w)))
          (sm (make-vector (* stride h) 0)))
-    (message "width %s height %s pm %s stride %s" w h (length pm) stride)
+    ;; (message "width %s height %s pm %s stride %s" w h (length pm) stride)
     (dotimes (y h)
       (dotimes (x w)
         (aset sm (+ x (* y stride))
@@ -221,19 +223,20 @@ GLYPH-POSITION the `fontsloth-layout-glyph-position'"
                (width (cadr pm+wh))
                (height (caddr pm+wh))
                (padding 1))
-    (message "trying to add a glyph %s "
-             (xcb:+request-checked+request-check c
-                 (make-instance 'xcb:render:AddGlyphs
-                                :glyphset gs
-                                :glyphs-len 1
-                                :glyphids `(,char-code)
-                                :glyphs `(,(make-instance
-                                            'xcb:render:GLYPHINFO
-                                            :width width :height height
-                                            :x 0
-                                            :y (+ height y padding)
-                                            :x-off 0 :y-off 0))
-                                :data pixmap)))
+    (xcb:+request-checked+request-check c
+        (make-instance 'xcb:render:AddGlyphs
+                       :glyphset gs
+                       :glyphs-len 1
+                       :glyphids `(,char-code)
+                       :glyphs `(,(make-instance
+                                   'xcb:render:GLYPHINFO
+                                   :width width :height height
+                                   :x 0
+                                   :y (+ height y padding)
+                                   :x-off 0 :y-off 0))
+                       :data pixmap))
+    ;; (message "trying to add a glyph %s "
+    ;;          )
     char-code))
 
 (provide 'exlybar-render)

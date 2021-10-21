@@ -161,21 +161,21 @@ NEW-EXTENTS the new layout extents"
 (defvar exlybar--prev-extents nil "Held by `exlybar-refresh-modules'.")
 (defun exlybar-refresh-modules ()
   "Ask the modules to refresh and see whether the layout has changed."
-  (message "refreshing modules")
+  ;; (message "refreshing modules")
   ;; refresh modules to update to latest dimensions
   (let ((prev-extents
          (exlybar-layout-extents
           (exlybar-layout-coordinate (exlybar-layout exlybar-modules) 0 0))))
-    (message "prev extents %s" prev-extents)
+    ;; (message "prev extents %s" prev-extents)
     (dolist (m exlybar-modules)
       (when (exlybar-module-p m)
         (exlybar-module-refresh m)))
     (let* ((new-layout
             (exlybar-layout-coordinate (exlybar-layout exlybar-modules) 0 0))
            (new-extents (exlybar-layout-extents new-layout)))
-      (message "prev extents %s new extents %s" prev-extents new-extents)
+      ;; (message "prev extents %s new extents %s" prev-extents new-extents)
       (when (not (equal prev-extents new-extents))
-        (message "layout has changed")
+        ;; (message "layout has changed")
         (exlybar--selectively-clear-areas prev-extents new-extents))
       (exlybar--copy-areas new-layout)))
   (xcb:flush exlybar--connection))
@@ -189,7 +189,7 @@ NEW-EXTENTS the new layout extents"
 (defun exlybar--on-Expose (data _synthetic)
   "Can draw things after Expose.
 DATA the event data"
-  (message "received expose %s" data)
+  ;; (message "received expose %s" data)
   (unless exlybar--module-refresh-timer
     (exlybar--start-module-refresh-timer)))
 
