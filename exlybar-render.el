@@ -154,7 +154,8 @@ COLOR color of text, an `xcb:render:COLOR'"
       (pcase-let* (((cl-struct fontsloth-layout-glyph-position
                                (parent char-code) x width height) pos)
                    (x (truncate x)))
-        (xcb:+request-checked+request-check c
+        ;; TODO: allow request check if debugging is enabled
+        (xcb:+request c
             (make-instance 'xcb:render:CompositeGlyphs32
                            :op xcb:render:PictOp:Over
                            :src pen
