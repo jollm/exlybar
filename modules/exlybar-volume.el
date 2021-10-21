@@ -114,7 +114,7 @@ See `exlybar-zone-color'"
 
 (defadvice volume-update
     (after exlybar-volume-after-volume-update activate)
-  "Refresh the module if the brightness is adjusted in Emacs."
+  "Refresh the module if the volume is adjusted in Emacs."
   (when (exlybar-enabled-p)
     (let ((m (seq-find (lambda (m)
                          (equal "volume"
