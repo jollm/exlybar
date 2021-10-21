@@ -190,10 +190,11 @@ This default primary method redraws the text if it has changed."
 (cl-defmethod exlybar-module-refresh :before ((m exlybar-module))
   "When refreshing, redo text layout and make a new pixmap."
   (message "running super before refresh")
-  (pcase-let ((c exlybar--connection)
-              ((cl-struct exlybar-module name width xcb) m))
-    (when (exlybar-module-needs-refresh? m)
-      (exlybar-module-layout-text m)
+  (when (exlybar-module-needs-refresh? m)
+    (exlybar-module-layout-text m)
+    (let ((c exlybar--connection)
+          (xcb (exlybar-module-xcb m))
+          (width (exlybar-module-width m)))
       (xcb:+request c
           (make-instance 'xcb:FreePixmap :pixmap (map-elt xcb 'pixmap)))
       (let ((pmap (xcb:generate-id c)))
