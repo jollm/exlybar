@@ -43,11 +43,6 @@
   "An Exlybar wifi module."
   :group 'exlybar)
 
-(defcustom exlybar-wifi-text-separator "|"
-  "The text separator."
-  :type 'string
-  :group 'exlybar-wifi)
-
 (defun exlybar-wifi-guess-device ()
   "Try to guess the wireless device."
   (seq-some (lambda (p)
@@ -85,29 +80,27 @@ This should be deprecated in favor of something better."
 
 ;;; let's just try a simple display of link quality and ssid
 (cl-defstruct (exlybar-wifi
-               (:include exlybar-module (name "wifi") (icon ?))
+               (:include exlybar-module (name "wifi") (icon ?)
+                         (format "^6^[^f1%i^]^[^2|^]%e^[^2|^]%p"))
                (:constructor exlybar-wifi-create)
                (:copier nil)))
 
-(defsubst exlybar-wifi--icon-string (m)
-  "Return M's icon as a string."
-  (string (exlybar-wifi-icon m)))
+(defun exlybar-wifi--format-spec (icon)
+  "Build the `format-spec' spec used to generate module text given ICON."
+  `((?i . ,(string icon))
+    (?e . ,(exlybar-wifi-iw-essid))
+    (?p . ,(exlybar-wifi-iw-quality))))
 
 (defvar exlybar-wifi--update-timer nil "A variable to hold the update timer.")
 
 (defun exlybar-wifi--do-update (m)
   "Poll the wifi status and check whether to update the M's text."
-  (let ((txt+fonts `((,(exlybar-wifi--icon-string m) . ,exlybar-icon-font)
-                     (,(concat exlybar-wifi-text-separator
-                               (exlybar-wifi-iw-essid)
-                               exlybar-wifi-text-separator
-                               (exlybar-wifi-iw-quality))
-                      . ,exlybar-text-font))))
-    (unless (equal txt+fonts (exlybar-wifi-text m))
-      (setf (exlybar-module-text m)
-            txt+fonts
-            (exlybar-module-needs-refresh? m)
-            t))))
+  (let* ((status (exlybar-wifi--format-spec (exlybar-module-icon m)))
+         (txt (format-spec (exlybar-module-format m) status t)))
+    (unless (equal txt (exlybar-module-text m))
+      (setf (exlybar-module-format-spec m) status
+            (exlybar-module-text m) txt
+            (exlybar-module-needs-refresh? m) t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-wifi))
   "Set the M's icon and update the text."

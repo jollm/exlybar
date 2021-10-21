@@ -46,15 +46,16 @@
   "The percent step increment for the backlight module progress bar."
   :group 'exlybar-backlight)
 
-(defcustom exlybar-backlight-text-font
-  "/usr/share/fonts/TTF/IBMPlexMono-Regular.ttf"
-  "The text font for the backlight module progress bar."
+(defcustom exlybar-backlight-color-zones '(20 40 80)
+  "Backlight percentages indicating progress color changes.
+See `exlybar-zone-color'"
+  :type 'list
   :group 'exlybar-backlight)
 
 (cl-defstruct (exlybar-backlight
                (:include exlybar-module (name "backlight") (icon ?)
-                         (fonts `(,exlybar-icon-font
-                                  ,exlybar-backlight-text-font)))
+                         (format "^8^f2^[^f1%i^]%p")
+                         (format-fn 'exlybar-backlight-format-format))
                (:constructor exlybar-backlight-create)
                (:copier nil)))
 
@@ -62,20 +63,32 @@
   "A variable to hold the update timer.")
 
 (defun exlybar-backlight-current-progress ()
-  (exlybar-progress-bar (backlight--current-percentage)
-                        exlybar-backlight-progress-increment))
+  "Build a progress bar corresponding to the current state."
+  (exlybar-progress-bar
+   (backlight--current-percentage)
+   exlybar-backlight-progress-increment exlybar-backlight-color-zones))
+
+(defun exlybar-backlight--format-fn-spec ()
+  "Build the `format-spec' spec used by the format-fn."
+  `((?p . ,(exlybar-backlight-current-progress))))
+
+(defun exlybar-backlight-format-format (m)
+  "This is the default format-fn that is applied to format."
+  (format-spec (exlybar-module-format m)
+               (exlybar-backlight--format-fn-spec) t))
+
+(defun exlybar-backlight--format-spec (icon)
+  "Build the `format-spec' spec used to generate module text."
+  `((?i . ,(string icon))))
 
 (defun exlybar-backlight--do-update (m)
   "Poll the battery status and check whether to update M's text."
-  (let* ((txt+fonts `((,(string (exlybar-backlight-icon m))
-                       . ,exlybar-icon-font)
-                      (,(concat " " (exlybar-backlight-current-progress))
-                       . ,exlybar-backlight-text-font))))
-    (unless (equal txt+fonts (exlybar-backlight-text m))
-      (setf (exlybar-module-text m)
-            txt+fonts
-            (exlybar-module-needs-refresh? m)
-            t))))
+  (let* ((status (exlybar-backlight--format-spec (exlybar-module-icon m)))
+         (txt (number-to-string (backlight--current-percentage))))
+    (unless (equal txt (exlybar-module-text m))
+      (setf (exlybar-module-format-spec m) status
+            (exlybar-module-text m) txt
+            (exlybar-module-needs-refresh? m) t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-backlight))
   "Set the M's icon and update the text."

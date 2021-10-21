@@ -59,18 +59,6 @@ Defaults to the width obtained from `display-pixel-width'"
   :type 'integer
   :group 'exlybar)
 
-(defcustom exlybar-icon-font
-  "/usr/share/fonts/TTF/fontawesome.ttf"
-  "The TTF font path for an icon font."
-  :type 'string
-  :group 'exlybar)
-
-(defcustom exlybar-text-font
-  "/usr/share/fonts/TTF/IBMPlexSerif-Regular.ttf"
-  "The TTF font path for a text font."
-  :type 'string
-  :group 'exlybar)
-
 (defcustom exlybar-modules nil
   "List of exlybar modules with optional layout instructions."
   :type 'list

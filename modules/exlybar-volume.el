@@ -46,20 +46,21 @@
   "The percent step increment for the volume module progress bar."
   :group 'exlybar-volume)
 
-(defcustom exlybar-volume-text-font
-  "/usr/share/fonts/TTF/IBMPlexMono-Regular.ttf"
-  "The text font for the volume module progress bar."
-  :group 'exlybar-volume)
-
-(defcustom exlybar-volume-icons '((33 . ?) (67 . ?) (100 . ?))
+(defcustom exlybar-volume-icons '((33 . ?) (67 . ?) (110 . ?))
   "Icons for exlybar-volume. See `exlybar-choose-icon' for how it is used."
   :type 'alist
   :group 'exlybar-volume)
 
+(defcustom exlybar-volume-color-zones '(20 50 80)
+  "Volume percentages indicating progress color changes.
+See `exlybar-zone-color'"
+  :type 'list
+  :group 'exlybar-volume)
+
 (cl-defstruct (exlybar-volume
                (:include exlybar-module (name "volume") (icon ?)
-                         (fonts `(,exlybar-icon-font
-                                  ,exlybar-volume-text-font)))
+                         (format "^8^f2^[^f1%i^]%p")
+                         (format-fn 'exlybar-volume-format-format))
                (:constructor exlybar-volume-create)
                (:copier nil)))
 
@@ -67,20 +68,32 @@
   "A variable to hold the update timer.")
 
 (defun exlybar-volume-current-progress (pct)
-  (exlybar-progress-bar pct exlybar-volume-progress-increment))
+  "Build a progress bar corresponding to the current PCT."
+  (exlybar-progress-bar
+   pct exlybar-volume-progress-increment exlybar-volume-color-zones))
+
+(defun exlybar-volume--format-fn-spec (pct)
+  "Build the `format-spec' spec used by the format-fn given PCT."
+  `((?p . ,(exlybar-volume-current-progress pct))))
+
+(defun exlybar-volume-format-format (m)
+  "This is the default format-fn that is applied to format."
+  (format-spec (exlybar-module-format m)
+               (exlybar-volume--format-fn-spec (volume-get)) t))
+
+(defun exlybar-volume--format-spec (pct)
+  "Build the `format-spec' spec used to generate module text given PCT."
+  `((?i . ,(string (exlybar-choose-icon pct exlybar-volume-icons)))))
 
 (defun exlybar-volume--do-update (m)
   "Poll the battery status and check whether to update M's text."
   (let* ((pct (volume-get))
-         (txt+fonts `((,(string (exlybar-choose-icon pct exlybar-volume-icons))
-                       . ,exlybar-icon-font)
-                      (,(concat " " (exlybar-volume-current-progress pct))
-                       . ,exlybar-volume-text-font))))
-    (unless (equal txt+fonts (exlybar-volume-text m))
-      (setf (exlybar-module-text m)
-            txt+fonts
-            (exlybar-module-needs-refresh? m)
-            t))))
+         (status (exlybar-volume--format-spec pct))
+         (txt (number-to-string pct)))
+    (unless (equal txt (exlybar-volume-text m))
+      (setf (exlybar-module-format-spec m) status
+            (exlybar-module-text m) txt
+            (exlybar-module-needs-refresh? m) t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-volume))
   "Set the M's icon and update the text."

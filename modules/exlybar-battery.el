@@ -48,11 +48,38 @@
   :type 'alist
   :group 'exlybar-battery)
 
+(defcustom exlybar-battery-color-zones '(49 29 10 t)
+  "Battery percentages indicating icon color changes.
+See `exlybar-zone-color'"
+  :type 'list
+  :group 'exlybar-battery)
+
 (cl-defstruct (exlybar-battery
-               (:include exlybar-module (name "battery"))
+               (:include exlybar-module (name "battery")
+                         (format "^6^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
+                         (format-fn 'exlybar-battery-format-format))
                (:constructor exlybar-battery-create)
-               (:copier nil))
-  (format "%b %p%% %t %r" :type 'string))
+               (:copier nil)))
+
+(defun exlybar-battery--format-fn-spec (zone-color)
+  "Build the `format-spec' spec used by the format-fn."
+  `((?i . ,(format "%s%%i" zone-color))))
+
+(defun exlybar-battery-format-format (m)
+  "This is the default format-fn that is applied to format."
+  (let* ((status (or (map-elt (exlybar-module-cache m) 'status)
+                     (funcall battery-status-function)))
+         (pct (string-to-number (map-elt status ?p)))
+         (zone-color
+          (apply #'exlybar-zone-color pct exlybar-battery-color-zones)))
+    (format-spec (exlybar-module-format m)
+                 (exlybar-battery--format-fn-spec zone-color) t)))
+
+(defun exlybar-battery--format-spec (status)
+  "Build the `format-spec' spec used to generate module text."
+  (let* ((pct (string-to-number (map-elt status ?p)))
+         (icon (exlybar-choose-icon pct exlybar-battery-icons)))
+    (map-insert status ?i (string icon))))
 
 (defvar exlybar-battery--update-timer nil
   "A variable to hold the update timer.")
@@ -60,17 +87,14 @@
 (defun exlybar-battery--do-update (m)
   "Poll the battery status and check whether to update M's text."
   (let* ((status (funcall battery-status-function))
-         (pct (string-to-number (map-elt status ?p)))
-         (txt+fonts `((,(string (exlybar-choose-icon pct exlybar-battery-icons))
-                       . ,exlybar-icon-font)
-                      (,(concat " "
-                         (format-spec (exlybar-battery-format m) status))
-                       . ,exlybar-text-font))))
-    (unless (equal txt+fonts (exlybar-battery-text m))
-      (setf (exlybar-module-text m)
-            txt+fonts
-            (exlybar-module-needs-refresh? m)
-            t))))
+         (txt (format-spec (exlybar-module-format m) status t)))
+    (when (exlybar-module-cache m)
+      (map-put! (exlybar-module-cache m) 'status status))
+    (unless (equal txt (exlybar-module-text m))
+      (setf (exlybar-module-format-spec m)
+            (exlybar-battery--format-spec status)
+            (exlybar-module-text m) txt
+            (exlybar-module-needs-refresh? m) t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-battery))
   "Set the M's icon and update the text."

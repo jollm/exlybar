@@ -53,8 +53,10 @@
      (:copier nil))
   "This is a base type for exlybar modules."
   (name nil :type 'string)
-  (text nil :type 'list)
-  (fonts `(,exlybar-icon-font ,exlybar-text-font) :type 'list)
+  (text nil :type 'string)
+  (format "" :type 'string)
+  (format-fn nil :type 'symbol)
+  (format-spec nil :type 'string)
   (text-layout nil :type 'list)
   (lpad 14 :type 'fixed)
   (rpad 14 :type 'fixed)

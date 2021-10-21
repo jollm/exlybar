@@ -36,15 +36,9 @@
 (require 'fontsloth-layout)
 (require 'xcb-render)
 
+(require 'exlybar-color)
 (require 'exlybar-module-types)
 (require 'exlybar-render)
-
-(defcustom exlybar-default-module-text-color
-  (exlybar-render-create-color
-   :red #xeeee :green #xffff :blue #xffff :alpha #xffff)
-  "The default text color for modules."
-  :type 'xcb:render:COLOR
-  :group 'exlybar)
 
 (cl-defgeneric exlybar-module-init ((m exlybar-module))
   "Initialize module M.
@@ -74,51 +68,104 @@ and a cache. The xcb ids are stored in the module xcb alist."
     (push `(gs . ,(exlybar-render-create-glyphset c)) (exlybar-module-xcb m))
     (setf (exlybar-module-cache m) (make-hash-table :test 'equal))))
 
-(defun exlybar-module--draw-text (m)
-  "Draw module M's text into its pixmap."
-  (pcase-let* (((cl-struct
-                 exlybar-module name cache text-layout fonts xcb) m)
-               ((map ('pixmap pixmap) ('gs gs)) xcb)
-               (fonts (seq-map #'fontsloth-load-font fonts)))
-    (dolist (pos text-layout)
+(defun exlybar-module--load-glyphs (text-layout gs cache)
+  "Load glyphs from TEXT-LAYOUT into GS unless found in CACHE."
+  (dolist (pos text-layout)
+    (when (fontsloth-layout-glyph-position-p pos)
       (let* ((key (fontsloth-layout-glyph-position-key pos))
              (font-idx
-              (fontsloth-layout-glyph-raster-config-font-index key)))
+              (fontsloth-layout-glyph-position-user-data pos))
+             (font (fontsloth-load-font (exlybar-font-find font-idx))))
         (unless (map-elt cache key)
           (exlybar-render-load-glyph
-           exlybar--connection gs (elt fonts font-idx) pos)
-          (map-put! (exlybar-module-cache m) key t))))
-    (exlybar-render-draw-text exlybar--connection pixmap gs text-layout
-                              exlybar-default-module-text-color)))
+           exlybar--connection gs font pos)
+          (map-put! cache key t))))))
+
+(defun exlybar-module--draw-text (m)
+  "Draw module M's text into its pixmap.
+
+If any color codes are present, the resulting text will be colorized
+accordingly. Currently only commands :push, :pop, and :fg are supported."
+  (pcase-let* (((cl-struct
+                 exlybar-module name cache text-layout xcb) m)
+               ((map ('pixmap pixmap) ('gs gs)) xcb))
+    (exlybar-module--load-glyphs text-layout gs cache)
+    (cl-flet ((draw (layout color)
+                (exlybar-render-draw-text
+                 exlybar--connection pixmap gs layout color)))
+      (cl-loop for pos in text-layout
+               with fgidx = 0 with fg-stack = nil with next = nil do
+               (if (fontsloth-layout-glyph-position-p pos)
+                   (push pos next)
+                 (cl-case (car pos)
+                   (:push (push fgidx fg-stack))
+                   (:pop (draw (nreverse next) (exlybar-color-find fgidx t))
+                         (setq fgidx (pop fg-stack))
+                         (setq next nil))
+                   (:fg (draw (nreverse next) (exlybar-color-find fgidx t))
+                        (setq fgidx (cadr pos))
+                        (setq next nil))))
+               finally (draw (nreverse next) (exlybar-color-find fgidx t))))))
+
+(defun exlybar-module--create-layout (text font fidx px x)
+  "Create a `fontsloth-layout' for TEXT, FONT, at size PX and offset x.
+FIDX is the index into `exlybar-color-map-fg'."
+  (let* ((l (fontsloth-layout-create)))
+    (fontsloth-layout-reset
+     l (fontsloth-layout-settings-create :x x))
+    (fontsloth-layout-append
+     l `(,font) (fontsloth-layout-text-style-create
+                 :text text :px px :font-index 0
+                 :user-data fidx))
+    (fontsloth-layout-finalize l)
+    l))
+
+(defun exlybar-module--layout-format (format spec lpad)
+  "Collect all `fonsloth-layout's necessary to render FORMAT.
+SPEC is a `format-spec' spec for the parts of FORMAT that are not color codes
+LPAD is the module left padding"
+  (cl-loop for part in (exlybar-color-parse-string format)
+           with fidx = 0 with font-stack = nil with ls = nil
+           for prev-x = lpad
+           then (if ls (max prev-x (fontsloth-layout-current-pos (car ls)))
+                  prev-x) collect
+           (if (stringp part)
+               (let* ((txt (format-spec part spec))
+                      (font (fontsloth-load-font (exlybar-font-find fidx)))
+                      (px (aref exlybar-font-px-size fidx))
+                      (l (exlybar-module--create-layout
+                          txt font fidx px prev-x)))
+                 (push l ls) l)
+             (cl-case (car part)
+               (:push (push fidx font-stack) part)
+               (:pop (setq fidx (pop font-stack)) part)
+               (:font (setq fidx (cadr part)) part)
+               (t part)))))
+
+(defsubst exlybar-module--collect-layout-output (layouts)
+  "Collect all layout output from LAYOUTS interspersed with any color codes."
+  (let ((current-pos))
+    `(,(cl-loop for l in layouts
+                if (fontsloth-layout-p l)
+                nconc (progn
+                        (setq current-pos (fontsloth-layout-current-pos l))
+                        (fontsloth-layout-output l))
+                else collect l)
+      ,current-pos)))
 
 (cl-defgeneric exlybar-module-layout-text ((m exlybar-module))
   "Give module M a text layout.
 This default primary method uses a result from fontsloth-layout to set
 `exlybar-module-text-layout' and updates the module width accordingly."
-  (let* ((text (exlybar-module-text m))
-         (font-names (exlybar-module-fonts m))
-         (fonts (seq-map #'fontsloth-load-font font-names))
-         (layouts
-          (cl-loop for txt+font in text
-                   for prev-x = (exlybar-module-lpad m)
-                   then (fontsloth-layout-current-pos (car ls)) collect
-                   (let* ((l (fontsloth-layout-create))
-                          (txt (car txt+font)) (font-name (cdr txt+font))
-                          (font-index (seq-position font-names font-name))
-                          (font (elt fonts font-index))
-                          (px (fontsloth-font-compute-px font exlybar-height)))
-                     (fontsloth-layout-reset
-                      l (fontsloth-layout-settings-create :x prev-x))
-                     (fontsloth-layout-append
-                      l fonts (fontsloth-layout-text-style-create
-                               :text txt :px px :font-index font-index))
-                     (fontsloth-layout-finalize l)
-                     l) into ls finally return ls)))
-    (let ((output
-           (cl-loop for l in layouts nconc (fontsloth-layout-output l))))
+  (pcase-let* (((cl-struct
+                 exlybar-module format format-fn (format-spec spec) lpad) m)
+               (format (if format-fn (funcall format-fn m) format))
+               (layouts (exlybar-module--layout-format format spec lpad)))
+    (cl-multiple-value-bind (output current-pos)
+        (exlybar-module--collect-layout-output layouts)
+      (message "text layout width is %s" current-pos)
       (setf (exlybar-module-width m)
-            (+ (exlybar-module-rpad m)
-               (round (fontsloth-layout-current-pos (car (last layouts)))))
+            (+ (exlybar-module-rpad m) (round current-pos))
             (exlybar-module-text-layout m)
             output))))
 
