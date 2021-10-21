@@ -119,7 +119,9 @@ COLOR the pen color, an `xcb:render:COLOR'"
 As used by xcb CompositeGlyphs32.
 This is a basis for filling in the missing glyph stream functionality in
 xcb-renderutil."
-  `(1 0 0 0 ,x 0 ,y 0
+  `(1 0 0 0
+      ,(logand #x00ff x) ,(ash (logand #xff00 x) -8)
+      ,(logand #x00ff y) ,(ash (logand #xff00 y) -8)
       ,(logand #x000000ff char-code)
       ,(ash (logand #x0000ff00 char-code) -8)
       ,(ash (logand #x00ff0000 char-code) -16)
