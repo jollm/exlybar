@@ -36,6 +36,7 @@
 (defvar exlybar-module-min-width 10
   "Let modules have a min width so an empty module is visible.")
 
+;; TODO: allow changing backgrounds colors using color codes
 (cl-defstruct
     (exlybar-module-rgb
      (:constructor exlybar-module-rgb-create)
