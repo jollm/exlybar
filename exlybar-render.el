@@ -73,7 +73,7 @@ HEIGHT desired height"
        `(,(make-instance 'xcb:RECTANGLE :x 0 :y 0
                           :width width :height height)))))
 
-(cl-defsubst exlybar-render-create-color (&key red green blue alpha)
+(cl-defun exlybar-render-create-color (&key red green blue alpha)
   "Create an xcb rgba color given its components as 16 bit values.
 RED 16 bit red value
 GREEN 16 bit green value
