@@ -43,6 +43,12 @@
   "An Exlybar wifi module."
   :group 'exlybar)
 
+(defcustom exlybar-wifi-qual-color-zones '(-40 -64 -70 t)
+  "Wifi signal qualities indicating color changes.
+See `exlybar-zone-color'"
+  :type 'list
+  :group 'exlybar-wifi)
+
 (defun exlybar-wifi-guess-device ()
   "Try to guess the wireless device."
   (seq-some (lambda (p)
@@ -81,22 +87,42 @@ This should be deprecated in favor of something better."
 ;;; let's just try a simple display of link quality and ssid
 (cl-defstruct (exlybar-wifi
                (:include exlybar-module (name "wifi") (icon ?)
-                         (format "^6^[^f1%i^]^[^2|^]%e^[^2|^]%p"))
+                         (format "^6^[^f1%i^]^[^2|^]%e^[^2|^]%p")
+                         (format-fn 'exlybar-wifi-format-format))
                (:constructor exlybar-wifi-create)
                (:copier nil)))
 
-(defun exlybar-wifi--format-spec (icon)
-  "Build the `format-spec' spec used to generate module text given ICON."
+(defun exlybar-wifi--format-fn-spec (zone-color)
+  "Build the `format-spec' spec used by the format-fn."
+  `((?p . ,(format "^[%s%%p^]" zone-color))))
+
+(defun exlybar-wifi-format-format (m)
+  "This is the default format-fn that is applied to M's format.
+It applies zone colors to %p quality format specifier."
+  (let* ((qual (or (map-elt (exlybar-module-cache m) 'qual)
+                  (exlybar-wifi-iw-quality)))
+         (zone-color
+          (apply #'exlybar-zone-color (string-to-number qual)
+                 exlybar-wifi-qual-color-zones)))
+    (format-spec (exlybar-module-format m)
+                 (exlybar-wifi--format-fn-spec zone-color) t)))
+
+(defun exlybar-wifi--format-spec (icon qual)
+  "Build the `format-spec' spec used to generate module text given ICON.
+QUAL is the wifi signal quality as a string"
   `((?i . ,(string icon))
     (?e . ,(exlybar-wifi-iw-essid))
-    (?p . ,(exlybar-wifi-iw-quality))))
+    (?p . ,qual)))
 
 (defvar exlybar-wifi--update-timer nil "A variable to hold the update timer.")
 
 (defun exlybar-wifi--do-update (m)
   "Poll the wifi status and check whether to update the M's text."
-  (let* ((status (exlybar-wifi--format-spec (exlybar-module-icon m)))
+  (let* ((qual (exlybar-wifi-iw-quality))
+         (status (exlybar-wifi--format-spec (exlybar-module-icon m) qual))
          (txt (format-spec (exlybar-module-format m) status t)))
+    (when (exlybar-module-cache m)
+      (map-put! (exlybar-module-cache m) 'qual qual))
     (unless (equal txt (exlybar-module-text m))
       (setf (exlybar-module-format-spec m) status
             (exlybar-module-text m) txt
