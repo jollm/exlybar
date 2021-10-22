@@ -80,7 +80,7 @@ The color is decided based on battery percentage. See `exlybar-zone-color'."))
   "This is the default format-fn that is applied to format."
   (let* ((status (or (map-elt (exlybar-module-cache m) 'status)
                      (funcall battery-status-function)))
-         (pct (string-to-number (map-elt status ?p)))
+         (pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
          (zone-color
           (apply #'exlybar-zone-color pct exlybar-battery-color-zones)))
     (format-spec (exlybar-module-format m)
@@ -88,7 +88,7 @@ The color is decided based on battery percentage. See `exlybar-zone-color'."))
 
 (defun exlybar-battery--format-spec (status)
   "Build the `format-spec' spec used to generate module text."
-  (let* ((pct (string-to-number (map-elt status ?p)))
+  (let* ((pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
          (icon (exlybar-choose-icon pct exlybar-battery-icons)))
     (map-insert status ?i (string icon))))
 

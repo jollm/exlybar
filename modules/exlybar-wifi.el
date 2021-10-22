@@ -102,8 +102,8 @@ It applies zone colors to %p quality format specifier."
   (let* ((qual (or (map-elt (exlybar-module-cache m) 'qual)
                   (exlybar-wifi-iw-quality)))
          (zone-color
-          (apply #'exlybar-zone-color (string-to-number qual)
-                 exlybar-wifi-qual-color-zones)))
+          (when qual (apply #'exlybar-zone-color (string-to-number qual)
+                            exlybar-wifi-qual-color-zones))))
     (format-spec (exlybar-module-format m)
                  (exlybar-wifi--format-fn-spec zone-color) t)))
 
