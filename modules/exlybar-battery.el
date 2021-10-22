@@ -56,8 +56,19 @@ See `exlybar-zone-color'"
 
 (cl-defstruct (exlybar-battery
                (:include exlybar-module (name "battery")
-                         (format "^6^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
-                         (format-fn 'exlybar-battery-format-format))
+                         (format
+                          "^6^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r"
+                          :documentation
+                          "%i is for the battery icon.
+For the rest, see `battery-status-function'. Note that for %r,
+some versions of battery-status-function include the trailing W
+and some do not. `battery-linux-sysfs' where available appears
+more precise than e.g. `battery-upower'.")
+                         (format-fn
+                          'exlybar-battery-format-format
+                          :documentation
+                          "Pre-format %i in format to use zone colors.
+The color is decided based on battery percentage. See `exlybar-zone-color'."))
                (:constructor exlybar-battery-create)
                (:copier nil)))
 
