@@ -221,8 +221,9 @@ This default primary method redraws the text if it has changed."
       (message "trying to free glyphset %s "
                (xcb:+request-checked+request-check exlybar--connection
                    (make-instance 'xcb:render:FreeGlyphSet :glyphset gs)))))
-  (setf (exlybar-module-cache m) nil)
-  (setf (exlybar-module-xcb m) nil))
+  (setf (exlybar-module-cache m) nil
+        (exlybar-module-text m) nil
+        (exlybar-module-xcb m) nil))
 
 (provide 'exlybar-module)
 
