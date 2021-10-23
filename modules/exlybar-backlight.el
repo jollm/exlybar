@@ -4,7 +4,7 @@
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
 ;; Version: 0.19.1
-;; Package-Requires: ((backlight "20210513.129") (emacs "27.1"))
+;; Package-Requires: ((backlight "1.4") (cl-lib "0.5") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
 ;; This file is NOT part of GNU Emacs.
