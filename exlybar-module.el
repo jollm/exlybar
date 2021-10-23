@@ -61,8 +61,7 @@ and a cache. The xcb ids are stored in the module xcb alist."
                                 :background (exlybar-module-rgb-background-color colors)
                                 :foreground (exlybar-module-rgb-background-color colors)
                                 :graphics-exposures 0)))
-    ;; (message "fill module %s rectangle %s" name
-    ;;          (exlybar-render-fill-rectangle c gc pmap width exlybar-height))
+    (exlybar-render-fill-rectangle c gc pmap width exlybar-height)
     (push `(pixmap . ,pmap) (exlybar-module-xcb m))
     (push `(gc . ,gc) (exlybar-module-xcb m))
     (push `(gs . ,(exlybar-render-create-glyphset c)) (exlybar-module-xcb m))
