@@ -44,11 +44,22 @@
 
 (defcustom exlybar-battery-icons
   '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (100 . ?))
-  "Icons for exlybar-battery. See `exlybar-choose-icon' for how it is used."
+  "Icons for exlybar-battery discharge thresholds.
+See `exlybar-choose-icon' for how it is used."
   :type 'alist
   :group 'exlybar-battery)
 
-(defcustom exlybar-battery-color-zones '(49 29 10 t)
+(defcustom exlybar-battery-charge-icon ?
+  "Icon for when the battery is charging."
+  :type 'character
+  :group 'exlybar-battery)
+
+(defcustom exlybar-battery-charge-color-command "^1~"
+  "Icon and percentage color command for when the battery is charging."
+  :type 'string
+  :group 'exlybar-battery)
+
+(defcustom exlybar-battery-color-zones '(49 29 10 t t)
   "Battery percentages indicating icon color changes.
 See `exlybar-zone-color'"
   :type 'list
@@ -72,24 +83,30 @@ The color is decided based on battery percentage. See `exlybar-zone-color'."))
                (:constructor exlybar-battery-create)
                (:copier nil)))
 
-(defun exlybar-battery--format-fn-spec (zone-color)
+(defun exlybar-battery--format-fn-spec (zone-color charging?)
   "Build the `format-spec' spec used by the format-fn."
-  `((?i . ,(format "%s%%i" zone-color))))
+  (let ((icon-fmt (if charging? "^[^f3%s%%i^]" "%s%%i")))
+    `((?i . ,(format icon-fmt zone-color))
+      (?p . ,(format "%s%%p" zone-color)))))
 
 (defun exlybar-battery-format-format (m)
   "This is the default format-fn that is applied to format."
   (let* ((status (or (map-elt (exlybar-module-cache m) 'status)
                      (funcall battery-status-function)))
          (pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
-         (zone-color
-          (apply #'exlybar-zone-color pct exlybar-battery-color-zones)))
+         (charging? (equal "+" (map-elt status ?b)))
+         (zone-color (if charging? exlybar-battery-charge-color-command
+                       (apply #'exlybar-zone-color
+                              pct exlybar-battery-color-zones))))
     (format-spec (exlybar-module-format m)
-                 (exlybar-battery--format-fn-spec zone-color) t)))
+                 (exlybar-battery--format-fn-spec zone-color charging?) t)))
 
 (defun exlybar-battery--format-spec (status)
   "Build the `format-spec' spec used to generate module text."
   (let* ((pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
-         (icon (exlybar-choose-icon pct exlybar-battery-icons)))
+         (charging? (equal "+" (map-elt status ?b)))
+         (icon (if charging? exlybar-battery-charge-icon
+                 (exlybar-choose-icon pct exlybar-battery-icons))))
     (map-insert status ?i (string icon))))
 
 (defvar exlybar-battery--update-timer nil

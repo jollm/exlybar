@@ -32,17 +32,20 @@
 
 (require 'exlybar-color)
 
+;; TODO change these to keyword params
 (cl-defun exlybar-zone-color
-    (amount &optional (med 20) (hi 50) (crit 90) reverse)
+    (amount &optional (med 20) (hi 50) (crit 90) reverse local?)
   "Return a color command based on the magnitude of the argument. If
 the limits for the levels aren't specified, they default to sensible
 values for a percentage. With reverse, lower numbers are more
-critical."
+critical. With local? t, the color code is made local."
   (cl-flet ((past (n) (funcall (if reverse #'<= #'>=) amount n)))
-    (cond ((past crit) exlybar-color-zone-crit)
-          ((past hi) exlybar-color-zone-hi)
-          ((past med) exlybar-color-zone-med)
-          (t ""))))
+    (let ((zone (cond ((past crit) exlybar-color-zone-crit)
+                      ((past hi) exlybar-color-zone-hi)
+                      ((past med) exlybar-color-zone-med)
+                      (t ""))))
+      (if (and (not (seq-empty-p zone)) local?) (s-append "~" zone)
+        zone))))
 
 (cl-defun exlybar-progress-bar
     (percent increment colorize
