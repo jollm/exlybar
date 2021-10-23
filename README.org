@@ -1,0 +1,245 @@
+#+TITLE: exlybar
+
+Exlybar is an “Emacs Polybar like thing”.
+
+It aims to act as an X window manager agnostic status bar and system tray that
+is written completely in elisp and fully configurable in Emacs.
+
+The most apparent usage scenario at present is to pair it with [[https://github.com/ch11ng/exwm][Exwm]].
+
+It is currently pre version 1.0 and the API is not yet stable.
+
+Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
+
+Current version: *0.19.1*
+
+* Synopsis of work in progress
+** Now supported
++ Display at the top of the screen as window a dock window
+
++ Configurable horizontal module layout support left, center, right align
+
++ [[https://stumpwm.github.io/][Stumpwm]] like format/color code syntax for arranging module text, icon, and
+  widget display
+
++ Rendering of TTF vector text and icon fonts via [[https://github.com/jollm/fontsloth][fontsloth]]
+
++ Mix fonts and conditionally change fonts within modules
+
++ Configurable zone colors to change icon or color text based on status
+
++ Module development API exists but is not yet finalized or particularly well
+  documented
+
+* Not currently supported (but planned)
++ Configuration for multiple screens/randr (this is the first priority at
+  present)
++ Dock somewhere other than the screen top (this should be trivial to implement
+  but is as yet untested)
++ Optionally act as the system tray (this is the second highest priority)
++ Multiple bars and gaps like in Polybar
++ Configurable transparency
++ Animations
+
+* Project organization
+Exlybar consists of five primary components:
++ Status bar xcb lifecycle, refresh, and event handling
+  Entry point: file:exlybar.el
+
+  This delegates to file:exlybar-layout.el to decide which window areas to
+  copy/clear during a refresh cycle.
+
+  This provides two autoloaded interactive functions:
+  + ~(exlybar)~: display the status bar
+
+  + ~(exlybar-exit)~: exit the status bar
+
++ Logical layout helpers
+  Entry point: file:exlybar-layout.el
+
+  Currently this produces horizontal layouts supporting combination of left,
+  right, and center alignments of modules. It supports x and y coordinate
+  offsets.
+
+  The extents fns ~exlybar-layout-extents~ and
+  ~exlybar-layout-subtract-extents~ allow for selective display update when the
+  layout changes.
+
++ Port of Stumpwm like color command syntax
+  Entry point: file:exlybar-color.el
+
+  These are stumpwm style color/font codes meaning that each module can have a
+  format string to arrange its text/icon and allow control of fonts and colors
+  for individual parts or segments.
+
+  Not yet all the stumpwm commands have been implemented.
+
+  Currently the following color code commands are supported:
+  - :font, shorthand ^f[0-9]
+    ~exlybar-font-map~ is customizable and maps 0-9 to font paths
+  - :fg, shorthand ^[0-9]~?  ~exlybar-color-map-fg~ is customizable and maps
+    0-9 to xcb colors The optional ~ suffix (not in stumpwm) indicates to apply
+    the color locally, meaning only to non color commands preceding the next
+    color command if any. This is implemented as an implicit :push :pop around
+    applicable segments.
+  - :push, shorthand ^[
+    push the current fg and font onto the stack
+  - :pop, shorthand ^]
+    pop the stack and restore the previous fg and font
+  - ^; (not in stumpwm) acts as a noop to separate non color command
+    segments. it’s mostly useful in combination with ~ operator described above
+
++ Base module API
+
+  *not yet finalized*
+
+  Entry points:
+  + file:exlybar-module-types.el
+  + file:exlybar-module.el
+
+  At present it consists of a based cl-struct type ~exlybar-module~ and a set
+  of generic functions and default primary methods for dispatch on objects of
+  that type.
+
+  Generic functions (default primary method descriptions):
+  + ~(exlybar-module-init (m exlybar-module))~: gives an xcb pixmap, graphics
+    context, a glyphset, a cache, and fills a rectangle with the background
+    color.
+
+  + ~(exlybar-module-layout-text (m exlybar-module))~: relies on
+    ~fontsloth-layout~ and ~exlybar-color~ to produce a sequence of color
+    commands and glyph positions
+
+  + ~(exlybar-module-refresh (m exlybar-module))~: if the module requests a
+    refresh, draw the text using glyph positions and color commands
+
+  + ~(exlybar-module-exit (m exlybar-module))~: free xcb assets and clear
+    module state
+
+  Module implementations can provide specific :before and/or :after methods of
+  the above as well as overrides to hook into the module
+  init/layout/refresh/exit cycle. These should also allow module devs to
+  provide module specific Emacs hooks.
+
++ Glyph rendering, loading, and compositing
+  Entry point: file:exlybar-render.el
+
+  This is used by exlybar-module.el to draw text. It relies on [[https://github.com/jollm/fontsloth][fontsloth]] for
+  glyph rasterization and provides an implementation of glyph stream like
+  functionality that is normally in xcb-render-util but is not included in xelb
+  in order to support CompositeGlyphs32 requests for loaded glyphs.
+
+* Usage caveats
+Since it depends on fontsloth which is another project in very early stages,
+some of the current limitations are due to limitations in fontsloth. The
+primary ones are lack of support for composite glyphs and OTF font
+outlining. See the fontsloth README linked above for a list of tested
+fonts. The current set of modules are not that much impacted by the above
+mentioned limitations but it will be important to more develop fontsloth in
+order to support all the desired goals for this project.
+
+*The module and layout APIs are not yet finalized as such configuration
+procedures and customization options may change prior to a 1.0 release.*
+
+* Installation
+Pending upload to MELPA, add this directory and file:modules/ to your emacs
+load path and ~(require ’exlybar)~. Also require any desired module features
+from modules/.
+
+* Usage
+** Layout and display with modules
+#+begin_src emacs-lisp
+  ;;; this demonstrates display for all modules provided so far
+  (require 'exlybar)
+
+  (require 'exlybar-backlight)
+  (require 'exlybar-battery)
+  (require 'exlybar-volume)
+  (require 'exlybar-wifi)
+
+  ;;; layout everything to the right
+
+  (defvar my/battery (exlybar-battery-create))
+  (push my/battery exlybar-modules)
+
+  (defvar my/backlight (exlybar-backlight-create))
+  (push my/backlight exlybar-modules)
+
+  (defvar my/volume (exlybar-volume-create))
+  (push my/volume exlybar-volume-create)
+
+  (defvar my/wifi (exlybar-wifi-create))
+  (push my/wifi exlybar-wifi-create)
+
+  (exlybar)
+
+  ;;; re-layout everything current displayed to the left
+
+  (push :left exlybar-modules)
+
+  ;;; re-layout everything in the center
+
+  (setq exlybar-modules (cdr exlybar-modules))
+  (push :center exlybar-modules)
+
+  ;;; layout wifi and battery to the left and volume and backlight to the right
+
+  (setq exlybar-modules
+        (:left my/wifi my/battery :right my/volume my/backlight))
+
+  ;;; exit (exit doesn’t modify layout for next time)
+
+  (exlybar-exit)
+
+#+end_src
+
+** Configure
+#+begin_src emacs-lisp
+  ;;; please note this is in an early phase and subject to change
+
+  (require 'exlybar)
+
+  (require 'exlybar-backlight)
+  (require 'exlybar-battery)
+  (require 'exlybar-volume)
+  (require 'exlybar-wifi)
+
+  ;;; assume one of the layouts demonstrated above
+
+  ;;; display the bar
+  (exlybar)
+
+  ;;; make it taller
+  (setq exlybar-height 25)
+
+  ;;; make it shorter
+  (setq exlybar-height 16)
+
+  ;;; swap wifi signal quality and essid
+  (exlybar-module-format my/wifi) ;; show the current format
+  ;; it is "^6^[^f1%i^]^[^2|^]%e^[^2|^]%p"
+  (setf (exlybar-module-format my/wifi) "^6^[^f1%i^]^[^2|^]%p^[^2|^]%e")
+
+  ;;; change battery default color to default
+  (exlybar-module-format my/battery) ;; show the current format
+  ;; it is "^6^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r"
+  (setf (exlybar-module-format my/wifi) "^0^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
+
+  ;;; change battery percentage thresholds for icon and percent color change
+  (setq exlybar-battery-color-zones ’(40 20 7 t t))
+  ;; see ~exlybar-zone-color~ for an explanation of the list elements
+
+  ;;; see custom group ~exlybar~ and subgroups for current options
+
+#+end_src
+
+* Attribution
+This project is heavily inspired by daviwil’s [[https://systemcrafters.cc/][System Crafters]] presentations on
+Emacs and Exwm as well as [[https://github.com/ch11ng/exwm][Exwm]] itself along with numerous others whom I will
+attempt to list as the project develops further.  See also attributions for
+fontsloth.
+
+* Contact
+I’m currently poselyqualityles on librera chat. Feel free to interact as I’d
+like this to be as broadly useful and fun as possible given the current scope
+and limitations.
