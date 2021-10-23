@@ -215,6 +215,40 @@ the fonts change.")
 (add-variable-watcher 'exlybar-height #'exlybar-font--watch-px-size)
 (add-variable-watcher 'exlybar-font-map #'exlybar-font--watch-px-size)
 
+(defcustom exlybar-font-px-delta
+  [0.0
+   0.0
+   0.0
+   6.0
+   0.0
+   0.0
+   0.0
+   0.0
+   0.0
+   0.0]
+  "These deltas adjust computed px sizes.
+This could be helpful for in the same display area swapping between two fonts
+with different metrics.")
+
+(defun exlybar-font--compute-y-delta (px-delta)
+  "Given a vector of PX-DELTA, compute corresponding Y-DELTA."
+  (apply #'vector (cl-loop for pd across px-delta collect (/ pd 3))))
+
+(defvar exlybar-font-y-delta
+  (exlybar-font--compute-y-delta exlybar-font-px-delta)
+  "These deltas to adjust font y offsets.
+This is a companion to `exlybar-font-px-delta'. Note that
+changing this setting does not invalidate existing glyph position
+caches. This is automatically recomputed when
+`exlybar-font-px-delta' changes.")
+
+(defun exlybar-font--watch-px-delta (sym nval oper where)
+  "Update `exlybar-font-y-delta' when `exlybar-font-px-delta' is modified."
+  (when (and (not where) (eq 'set oper))
+    (setq exlybar-font-y-delta (exlybar-font--compute-y-delta nval))))
+
+(add-variable-watcher 'exlybar-font-px-delta #'exlybar-font--watch-px-delta)
+
 (defsubst exlybar-color-find (color-index fg)
   "Find a color given COLOR-INDEX.
 FG t if a foreground color, nil if a background color"

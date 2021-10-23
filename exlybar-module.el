@@ -112,7 +112,8 @@ accordingly. Currently only commands :push, :pop, and :fg are supported."
 FIDX is the index into `exlybar-color-map-fg'."
   (let* ((l (fontsloth-layout-create)))
     (fontsloth-layout-reset
-     l (fontsloth-layout-settings-create :x x))
+     l (fontsloth-layout-settings-create :x x
+                                         :y (aref exlybar-font-y-delta fidx)))
     (fontsloth-layout-append
      l `(,font) (fontsloth-layout-text-style-create
                  :text text :px px :font-index 0
@@ -132,7 +133,8 @@ LPAD is the module left padding"
            (if (stringp part)
                (let* ((txt (format-spec part spec))
                       (font (fontsloth-load-font (exlybar-font-find fidx)))
-                      (px (aref exlybar-font-px-size fidx))
+                      (px (+ (aref exlybar-font-px-size fidx)
+                             (aref exlybar-font-px-delta fidx)))
                       (l (exlybar-module--create-layout
                           txt font fidx px prev-x)))
                  (push l ls) l)
