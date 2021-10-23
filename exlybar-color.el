@@ -226,7 +226,7 @@ FG t if a foreground color, nil if a background color"
   (aref exlybar-font-map font-index))
 
 (defvar exlybar--color-pattern
-  "\\^[][nrRbB>^]\\|\\^[0-9*]\\{1,2\\}\\|\\^f[0-9]\\|\\^(.*?)"
+  "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^(.*?)"
   "This is the same color code pattern used in stumpwm.
 Note that not yet all of these options are supported for exlybar.")
 
@@ -238,7 +238,12 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
       (let ((foreground (elt color 1))
             (background (if (> (length color) 2)
                             (elt color 2)
-                          :reset)))
+                          :reset))
+            (till-next (if (> (length color) 3)
+                           (elt color 3)
+                         (when (and (> (length color) 2)
+                                    (= (elt color 2) ?~))
+                           (elt color 2)))))
         (cl-case foreground
           ;; Normalize colors
           (?n '((:bg :reset)
@@ -253,9 +258,11 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
           (?> '((:>)))
           (?f `((:font ,(string-to-number (string background)))))
           (?^ '("^"))
+          (?\; nil)
           (?\( (list (car (read-from-string color 1))))
           ((?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?*)
-           `((:bg ,(if (characterp background)
+           `(,@(when till-next '((:~)))
+             (:bg ,(if (characterp background)
                        (string-to-number (string background))
                      :reset))
              (:fg ,(string-to-number (string foreground)))
@@ -291,8 +298,15 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
                            finally return (nreverse res)))))
     (let ((substrings
            (split-retain string exlybar--color-pattern)))
-      (cl-loop for substring in substrings append
-               (exlybar-color-parse substring)))))
+      (cl-loop for substring in substrings
+               with resolve~? = nil append
+               (let ((p (exlybar-color-parse substring)))
+                 (if (stringp (car p)) p
+                   (if (eq :~ (caar p))
+                       (progn (setq resolve~? t) (cons '(:push) (cdr p)))
+                     (if resolve~?
+                         (progn (setq resolve~? nil) (cons '(:pop) p))
+                       p))))))))
 
 (provide 'exlybar-color)
 ;;; exlybar-color.el ends here
