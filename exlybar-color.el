@@ -166,12 +166,18 @@ See `exlybar-zone-color'"
   :type 'string
   :group 'exlybar)
 
+(defcustom exlybar-font-all-the-icons
+  "/usr/share/fonts/TTF/all-the-icons.ttf"
+  "The TTF font path for all the icons font to add extra icons."
+  :type 'string
+  :group 'exlybar)
+
 (defcustom exlybar-font-map
   (vector
    exlybar-font-variable
    exlybar-font-icon
    exlybar-font-mono
-   exlybar-font-variable
+   exlybar-font-all-the-icons
    exlybar-font-variable
    exlybar-font-variable
    exlybar-font-variable
