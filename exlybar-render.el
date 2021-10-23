@@ -213,7 +213,7 @@ GLYPH-POSITION the `fontsloth-layout-glyph-position'"
                            key x y (parent char-code)
                            (width glyph-width) (height glyph-height))
                 glyph-position)
-               (x (truncate x)) (y (round y))
+               (x (round x)) (y (round y))
                ((cl-struct fontsloth-layout-glyph-raster-config glyph-id px)
                 key)
                ((cl-struct fontsloth-metrics+pixmap metrics pixmap)
