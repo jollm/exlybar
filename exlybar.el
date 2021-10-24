@@ -347,15 +347,18 @@ DATA the event data"
     (when (exlybar-module-p m)
       (exlybar-module-exit m)))
   (when exlybar--connection
-    (xcb:+request exlybar--connection
-        (make-instance 'xcb:UnmapWindow
-                       :window exlybar--window))
-    (xcb:+request exlybar--connection
-        (make-instance 'xcb:FreeGC
-                       :gc exlybar--gc))
+    (when exlybar--window
+      (xcb:+request exlybar--connection
+          (make-instance 'xcb:UnmapWindow
+                         :window exlybar--window)))
+    (when exlybar--gc
+      (xcb:+request exlybar--connection
+          (make-instance 'xcb:FreeGC
+                         :gc exlybar--gc)))
     (xcb:disconnect exlybar--connection)
     (setq exlybar--connection nil
           exlybar--window nil
+          exlybar--gc nil
           exlybar--enabled nil)))
 
 (provide 'exlybar)
