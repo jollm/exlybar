@@ -245,11 +245,10 @@ DATA the event data"
   (let ((id (xcb:generate-id exlybar--connection))
         (background-pixel (exlybar--color->pixel
                            (exlybar--find-background-color)))
-        frame parent depth y)
+        (y 0)
+        parent depth)
     (setq exlybar--window id)
     (message "Exlybar window: %s" exlybar--window)
-    (setq frame (selected-frame)
-          y 0)
     (setq parent (exlybar--find-root-window-id)
           depth (slot-value (xcb:+request-unchecked+reply
                                 exlybar--connection
