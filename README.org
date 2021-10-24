@@ -136,13 +136,8 @@ Exlybar consists of five primary components:
 have a laptop and no extra monitors. I plan to get a multiscreen setup for
 testing soon.
 
-Since it depends on fontsloth which is another project in very early stages,
-some of the current limitations are due to limitations in fontsloth. The
-primary ones are lack of support for composite glyphs and OTF font
-outlining. See the fontsloth README linked above for a list of tested
-fonts. The current set of modules are not that much impacted by the above
-mentioned limitations but it will be important to more develop fontsloth in
-order to support all the desired goals for this project.
+It depends on fontsloth which is another project in very early stages; see the
+fontsloth README linked above for a list of tested fonts.
 
 *The module and layout APIs are not yet finalized as such configuration
 procedures and customization options may change prior to a 1.0 release.*
