@@ -11,7 +11,7 @@ It is currently pre version 1.0 and the API is not yet stable.
 
 Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
-Current version: *0.20.1*
+Current version: *0.20.2*
 
 Note: *This probably doesn’t work well with multiple screens at the moment.*
 

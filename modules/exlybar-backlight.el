@@ -3,7 +3,7 @@
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.20.1
+;; Version: 0.20.2
 ;; Package-Requires: ((backlight "1.4") (cl-lib "0.5") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
