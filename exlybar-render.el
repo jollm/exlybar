@@ -139,20 +139,20 @@ COLOR color of text, an `xcb:render:COLOR'"
                (fmt (xcb:renderutil:find-standard
                      fmts xcb:renderutil:PICT_STANDARD:RGB_24))
                (pic (xcb:generate-id c))
-               (cookie (xcb:+request-checked+request-check c
-                           (make-instance
-                            'xcb:render:CreatePicture
-                            :pid pic
-                            :drawable pmap
-                            :format fmt
-                            :value-mask (logior xcb:render:CP:PolyMode
-                                                xcb:render:CP:PolyEdge)
-                            :polymode xcb:render:PolyMode:Imprecise
-                            :polyedge xcb:render:PolyEdge:Smooth)))
                (pen (exlybar-render--create-pen c color)))
+    (xcb:+request c
+        (make-instance
+         'xcb:render:CreatePicture
+         :pid pic
+         :drawable pmap
+         :format fmt
+         :value-mask (logior xcb:render:CP:PolyMode
+                             xcb:render:CP:PolyEdge)
+         :polymode xcb:render:PolyMode:Imprecise
+         :polyedge xcb:render:PolyEdge:Smooth))
     (dolist (pos glyph-positions)
       (pcase-let* (((cl-struct fontsloth-layout-glyph-position
-                               (parent char-code) x width height) pos)
+                               (parent char-code) x) pos)
                    (x (truncate x)))
         ;; TODO: allow request check if debugging is enabled
         (xcb:+request c
@@ -210,10 +210,9 @@ GS the glyphset
 FONT the `fontsloth-font'
 GLYPH-POSITION the `fontsloth-layout-glyph-position'"
   (pcase-let* (((cl-struct fontsloth-layout-glyph-position
-                           key x y (parent char-code)
-                           (width glyph-width) (height glyph-height))
+                           key y (parent char-code))
                 glyph-position)
-               (x (round x)) (y (round y))
+               (y (round y))
                ((cl-struct fontsloth-layout-glyph-raster-config glyph-id px)
                 key)
                ((cl-struct fontsloth-metrics+pixmap metrics pixmap)

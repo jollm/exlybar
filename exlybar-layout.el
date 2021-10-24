@@ -106,7 +106,7 @@ assuming m1 width is 30, m2 is 25, and m3 is 100.
 LAYOUT as per per `exlybar-layout-coordinate'"
   (let ((extents))
     (dolist (m layout)
-      (pcase-let ((`((,x ,y) ,m) m))
+      (pcase-let ((`((,x ,_) ,m) m))
         (let* ((width (exlybar-module-width m))
                (extent (+ x width)))
           (if (and extents (= x (cadar extents)))

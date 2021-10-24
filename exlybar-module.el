@@ -86,7 +86,7 @@ and a cache. The xcb ids are stored in the module xcb alist."
 If any color codes are present, the resulting text will be colorized
 accordingly. Currently only commands :push, :pop, and :fg are supported."
   (pcase-let* (((cl-struct
-                 exlybar-module name cache text-layout xcb) m)
+                 exlybar-module cache text-layout xcb) m)
                ((map ('pixmap pixmap) ('gs gs)) xcb))
     (exlybar-module--load-glyphs text-layout gs cache)
     (cl-flet ((draw (layout color)

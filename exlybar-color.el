@@ -240,6 +240,7 @@ caches. This is automatically recomputed when
 
 (defun exlybar-font--watch-px-delta (sym nval oper where)
   "Update `exlybar-font-y-delta' when `exlybar-font-px-delta' is modified."
+  (ignore sym)
   (when (and (not where) (eq 'set oper))
     (setq exlybar-font-y-delta (exlybar-font--compute-y-delta nval))))
 

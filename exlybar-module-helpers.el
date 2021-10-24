@@ -81,7 +81,7 @@ COLORIZE t to use default zone color codes, nil for no color codes, or a list of
   "Return first (cdr icon) for which (< VAL (car icon)) is t.
 ICONS is an alist of the form ((ival1 . icon1) ... (ivaln . iconn)). ivals are
 expected to be in ascending order."
-  (cdr (seq-find (pcase-lambda (`(,p . ,i)) (< val p)) icons)))
+  (cdr (seq-find (pcase-lambda (`(,p . ,_)) (< val p)) icons)))
 
 (provide 'exlybar-module-helpers)
 ;;; exlybar-module-helpers.el ends here
