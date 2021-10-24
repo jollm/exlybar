@@ -82,9 +82,34 @@ Defaults to the width obtained from `display-pixel-width'"
                (make-instance 'xcb:ConfigureWindow
                               :window exlybar--window
                               :value-mask (logior xcb:ConfigWindow:X
-                                                  xcb:ConfigWindow:Width)
+                                                  xcb:ConfigWindow:Width
+                                                  xcb:ConfigWindow:Height)
                               :x 0
-                              :width exlybar-width)))
+                              :width exlybar-width
+                              :height exlybar-height)))
+  ;; configure struts
+  (xcb:+request exlybar--connection
+      (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
+                     :window exlybar--window
+                     :left 0
+                     :right 0
+                     :top exlybar-height
+                     :bottom 0))
+  (xcb:+request exlybar--connection
+      (make-instance 'xcb:ewmh:set-_NET_WM_STRUT_PARTIAL
+                     :window exlybar--window
+                     :left 0
+                     :right 0
+                     :top exlybar-height
+                     :bottom 0
+                     :left-start-y 0
+                     :left-end-y 0
+                     :right-start-y 0
+                     :right-end-y 0
+                     :top-start-x 0
+                     :top-end-x exlybar-width
+                     :bottom-start-x 0
+                     :bottom-end-x 0))
   (xcb:+request exlybar--connection
       (make-instance 'xcb:MapWindow
                      :window exlybar--window))
@@ -204,7 +229,6 @@ DATA the event data"
   (set-process-query-on-exit-flag (slot-value exlybar--connection
                                               'process)
                                   nil)
-
   ;; initialize the bar window
   (let ((id (xcb:generate-id exlybar--connection))
         (background-pixel (exlybar--color->pixel
@@ -266,37 +290,6 @@ DATA the event data"
                        :window id
                        :data `(,xcb:Atom:_NET_WM_STATE_STICKY
                                ,xcb:Atom:_NET_WM_STATE_ABOVE)))
-    ;; configure geometry
-    (xcb:+request exlybar--connection
-        (make-instance 'xcb:ConfigureWindow
-                       :window id
-                       :value-mask (logior xcb:ConfigWindow:Width
-                                           xcb:ConfigWindow:Height)
-                       :width (* 8 exlybar-width)
-                       :height exlybar-height))
-    ;; configure struts
-    (xcb:+request exlybar--connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
-                       :window id
-                       :left 0
-                       :right 0
-                       :top exlybar-height
-                       :bottom 0))
-    (xcb:+request exlybar--connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_STRUT_PARTIAL
-                       :window id
-                       :left 0
-                       :right 0
-                       :top exlybar-height
-                       :bottom 0
-                       :left-start-y 0
-                       :left-end-y 0
-                       :right-start-y 0
-                       :right-end-y 0
-                       :top-start-x 0
-                       :top-end-x exlybar-width
-                       :bottom-start-x 0
-                       :bottom-end-x 0))
     ;; create gc
     (setq exlybar--gc (xcb:generate-id exlybar--connection))
     (message "create gc errors: %s"
