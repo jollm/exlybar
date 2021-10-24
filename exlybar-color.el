@@ -29,7 +29,6 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'f)
 (require 's)
 
 (require 'exlybar-common)
