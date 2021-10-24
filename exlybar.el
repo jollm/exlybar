@@ -71,7 +71,6 @@ Defaults to the width obtained from `display-pixel-width'"
 (defsubst exlybar-enabled-p ()
   "Return t if exlybar is enabled."
   exlybar--enabled)
-
 (defun exlybar--refresh ()
   "Refresh the bar."
   (xcb:+request exlybar--connection
