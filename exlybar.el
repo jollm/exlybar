@@ -186,6 +186,12 @@ NEW-EXTENTS the new layout extents"
 (defvar exlybar--prev-extents nil "Held by `exlybar-refresh-modules'.")
 (defun exlybar-refresh-modules ()
   "Ask the modules to refresh and see whether the layout has changed."
+  (when exlybar--geometry-changed?
+    (dolist (m exlybar-modules)
+      (when (exlybar-module-p m)
+        (setf (exlybar-module-needs-refresh? m) t
+              (exlybar-module-cache m) (make-hash-table :test 'equal))))
+    (exlybar--refresh))
   ;; (message "refreshing modules")
   ;; refresh modules to update to latest dimensions
   (let ((prev-extents
@@ -211,12 +217,24 @@ NEW-EXTENTS the new layout extents"
   (setq exlybar--module-refresh-timer
         (run-at-time nil 10 #'exlybar-refresh-modules)))
 
+(defvar exlybar--geometry-changed? nil "Held by `exlybar--on-Expose'.")
 (defun exlybar--on-Expose (data _synthetic)
   "Can draw things after Expose.
 DATA the event data"
   ;; (message "received expose %s" data)
   (unless exlybar--module-refresh-timer
-    (exlybar--start-module-refresh-timer)))
+    (exlybar--start-module-refresh-timer))
+  (when exlybar--geometry-changed?
+    (setq exlybar--geometry-changed? nil)
+    (run-at-time 0 nil #'exlybar-refresh-modules)))
+
+(defun exlybar--watch-height (sym nval oper where)
+  (ignore sym)
+  (when (and (not where) (eq 'set oper))
+    (setq exlybar--geometry-changed? t)
+    (run-at-time 0 nil #'exlybar-refresh-modules)))
+
+(add-variable-watcher 'exlybar-height #'exlybar--watch-height)
 
 (defun exlybar ()
   "Initialize the connection, window, graphics context, and modules."
