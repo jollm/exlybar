@@ -37,95 +37,86 @@
 ;;; foreground colors
 
 (defcustom exlybar-color-fg
-  (exlybar-render-create-color
-   :red #xeeee :green #xffff :blue #xffff :alpha #xeeee)
+  '(:red #xeeee :green #xffff :blue #xffff :alpha #xeeee)
   "The default text color."
-  :type 'xcb:render:COLOR
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-notice
-  (exlybar-render-create-color
-   :red #xc3c3 :green #xe8e8 :blue #x8d8d :alpha #xeeee)
+  '(:red #xc3c3 :green #xe8e8 :blue #x8d8d :alpha #xeeee)
   "The default notice color."
-  :type 'xcb:render:COLOR
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-diminish
-  (exlybar-render-create-color
-   :red #x6767 :green #x6e6e :blue #x9595 :alpha #xeeee)
+  '(:red #x6767 :green #x6e6e :blue #x9595 :alpha #xeeee)
   "The default diminish color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-warning
-  (exlybar-render-create-color
-   :red #xffff :green #xcbcb :blue #x6b6b :alpha #xeeee)
+  '(:red #xffff :green #xcbcb :blue #x6b6b :alpha #xeeee)
   "The default warning color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-critical
-  (exlybar-render-create-color
-   :red #xffff :green #x5353 :blue #x7070 :alpha #xeeee)
+  '(:red #xffff :green #x5353 :blue #x7070 :alpha #xeeee)
   "The default critical color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-blueish
-  (exlybar-render-create-color
-   :red #x8282 :green #xaaaa :blue #xffff :alpha #xeeee)
+  '(:red #x8282 :green #xaaaa :blue #xffff :alpha #xeeee)
   "A blueish color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-amaranthish
-  (exlybar-render-create-color
-   :red #xc7c7 :green #x9292 :blue #xeaea :alpha #xeeee)
+  '(:red #xc7c7 :green #x9292 :blue #xeaea :alpha #xeeee)
   "A purplish color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-pinkish
-  (exlybar-render-create-color
-   :red #xffff :green #x6e6e :blue #xb4b4 :alpha #xeeee)
+  '(:red #xffff :green #x6e6e :blue #xb4b4 :alpha #xeeee)
   "A pinkish color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 (defcustom exlybar-color-orangeish
-  (exlybar-render-create-color
-   :red #xf7f7 :green #x8c8c :blue #x6c6c :alpha #xeeee)
+  '(:red #xf7f7 :green #x8c8c :blue #x6c6c :alpha #xeeee)
   "An orangeish color."
-  :type 'xcb:render:COLOR'
+  :type '(list symbol natnum symbol natnum symbol natnum symbol natnum)
   :group 'exlybar)
 
 ;;; background colors
 
 ;; TODO: use this
-(defcustom exlybar-color-bg
-  (exlybar--color->pixel
-   (exlybar--find-background-color))
-  "The default background color.
-Currently unused."
-  :type 'natnum
-  :group 'exlybar)
+;; (defcustom exlybar-color-bg
+;;   (exlybar--color->pixel
+;;    (exlybar--find-background-color))
+;;   "The default background color.
+;; Currently unused."
+;;   :type 'natnum
+;;   :group 'exlybar)
 
 ;;; color maps
 
 (defcustom exlybar-color-map-fg
   (vector
-   exlybar-color-fg
-   exlybar-color-notice
-   exlybar-color-diminish
-   exlybar-color-warning
-   exlybar-color-critical
-   exlybar-color-blueish
-   exlybar-color-amaranthish
-   exlybar-color-pinkish
-   exlybar-color-orangeish
-   exlybar-color-fg)
+   (apply #'exlybar-render-create-color exlybar-color-fg)
+   (apply #'exlybar-render-create-color exlybar-color-notice)
+   (apply #'exlybar-render-create-color exlybar-color-diminish)
+   (apply #'exlybar-render-create-color exlybar-color-warning)
+   (apply #'exlybar-render-create-color exlybar-color-critical)
+   (apply #'exlybar-render-create-color exlybar-color-blueish)
+   (apply #'exlybar-render-create-color exlybar-color-amaranthish)
+   (apply #'exlybar-render-create-color exlybar-color-pinkish)
+   (apply #'exlybar-render-create-color exlybar-color-orangeish)
+   (apply #'exlybar-render-create-color exlybar-color-fg))
   "The color map corresponding to color codes ^0-^9."
-  :type 'vector
+  :type '(vector sexp sexp sexp sexp sexp sexp sexp sexp sexp sexp)
   :group 'exlybar)
 
 (defcustom exlybar-color-zone-crit "^4"
