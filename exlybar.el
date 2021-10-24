@@ -230,7 +230,8 @@ DATA the event data"
 
 (add-variable-watcher 'exlybar-height #'exlybar--watch-height)
 
-(defun exlybar ()
+;;;###autoload
+(defun exlybar () (interactive)
   "Initialize the connection, window, graphics context, and modules."
   (cl-assert (not exlybar--connection))
   (cl-assert (not exlybar--window))
@@ -337,7 +338,8 @@ DATA the event data"
     (exlybar--refresh)
     (setq exlybar--enabled t)))
 
-(defun exlybar-exit ()
+;;;###autoload
+(defun exlybar-exit () (interactive)
   "Exit the exlybar."
   ;; exit modules
   (when exlybar--module-refresh-timer
