@@ -232,7 +232,7 @@ from modules/. Also see the use-package example below.
   ;;; change battery default color to default
   (exlybar-module-format my/battery) ;; show the current format
   ;; it is "^6^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r"
-  (setf (exlybar-module-format my/wifi) "^0^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
+  (setf (exlybar-module-format my/battery) "^0^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
 
   ;;; change battery percentage thresholds for icon and percent color change
   (setq exlybar-battery-color-zones ’(40 20 7 t t))
