@@ -233,6 +233,27 @@ from modules/.
 
 #+end_src
 
+** With use-package
+#+begin_src emacs-lisp
+  (use-package exlybar
+    :defer t
+    :config
+    (require 'exlybar-wifi)
+    (require 'exlybar-backlight)
+    (require 'exlybar-volume)
+    (require 'exlybar-battery)
+    (setq my/exly-wifi (exlybar-wifi-create)
+          my/exly-volume (exlybar-volume-create)
+          my/exly-backlight (exlybar-backlight-create)
+          my/exly-battery (exlybar-battery-create))
+    (setq exlybar-modules (list my/exly-wifi my/exly-volume
+                                my/exly-backlight my/exly-battery)))
+
+  ;;; then M-x: exlybar
+  ;;; To exit:
+  ;;; M-x: exlybar-exit
+#+end_src
+
 * Attribution
 This project is heavily inspired by daviwil’s [[https://systemcrafters.cc/][System Crafters]] presentations on
 Emacs and Exwm as well as [[https://github.com/ch11ng/exwm][Exwm]] itself along with numerous others whom I will
