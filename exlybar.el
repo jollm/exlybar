@@ -238,6 +238,7 @@ DATA the event data"
     (run-at-time 0 nil #'exlybar-refresh-modules)))
 
 (defun exlybar--watch-height (sym nval oper where)
+  "Watcher for `exlybar-height' to refresh modules when height changes."
   (ignore sym)
   (when (and (not where) (eq 'set oper))
     (setq exlybar--geometry-changed? t)
