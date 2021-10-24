@@ -176,7 +176,8 @@ See `exlybar-zone-color'"
    exlybar-font-variable
    exlybar-font-variable)
   "The font map corresponding to color codes ^f0-^f9."
-  :type 'vector
+  :type '(vector string string string string string
+                 string string string string string)
   :group 'exlybar)
 
 (defun exlybar-font--precompute-px-sizes (height)
@@ -219,7 +220,9 @@ the fonts change.")
    0.0]
   "These deltas adjust computed px sizes.
 This could be helpful for in the same display area swapping between two fonts
-with different metrics.")
+with different metrics."
+  :type '(vector float float float float float float float float float float)
+  :group 'exlybar)
 
 (defun exlybar-font--compute-y-delta (px-delta)
   "Given a vector of PX-DELTA, compute corresponding Y-DELTA."
