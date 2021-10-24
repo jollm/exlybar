@@ -52,7 +52,9 @@ critical. With local? t, the color code is made local."
              &key (fill ?—) (blank ? ) (right ?\]) (left ?\[))
   "Given PERCENT and INCREMENT return a string of RIGHT FILL* BLANK* LEFT.
 If RIGHT or LEFT are nil, they are respectively excluded.
-COLORIZE t to use default zone color codes, nil for no color codes, or a list of arguments excluding amount to pass to `exlybar-zone-color'"
+COLORIZE t to use default zone color codes, nil for no color
+codes, or a list of arguments excluding amount to pass to
+`exlybar-zone-color'"
   (let* ((progress (/ percent increment))
          (steps (/ 100 increment))
          (bar (when left `(,left)))
