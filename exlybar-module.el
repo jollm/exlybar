@@ -40,6 +40,9 @@
 (require 'exlybar-module-types)
 (require 'exlybar-render)
 
+(defvar exlybar--connection)
+(defvar exlybar--window)
+
 (cl-defgeneric exlybar-module-init ((m exlybar-module))
   "Initialize module M.
 This default primary method gives M a graphics context, a pixmap, a glyphset,
