@@ -44,6 +44,7 @@
 
 (defcustom exlybar-volume-progress-increment 10
   "The percent step increment for the volume module progress bar."
+  :type 'integer
   :group 'exlybar-volume)
 
 (defcustom exlybar-volume-icons '((33 . ?) (67 . ?) (110 . ?))

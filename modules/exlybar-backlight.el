@@ -44,6 +44,7 @@
 
 (defcustom exlybar-backlight-progress-increment 10
   "The percent step increment for the backlight module progress bar."
+  :type 'integer
   :group 'exlybar-backlight)
 
 (defcustom exlybar-backlight-color-zones '(20 40 80)
