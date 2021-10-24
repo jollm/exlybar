@@ -3,7 +3,7 @@
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.19.1
+;; Version: 0.19.4
 ;; Package-Requires: ((xelb "0.18") (fontsloth "0.13.0") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
