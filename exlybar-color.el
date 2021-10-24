@@ -250,7 +250,8 @@ caches. This is automatically recomputed when
   "Find a color given COLOR-INDEX.
 FG t if a foreground color, nil if a background color"
   (if fg (aref exlybar-color-map-fg color-index)
-    exlybar-color-bg))
+    (exlybar--color->pixel
+     (exlybar--find-background-color))))
 
 (defsubst exlybar-font-find (font-index)
   "Find a font in `exlybar-font-map' given FONT-INDEX."
