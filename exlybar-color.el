@@ -29,8 +29,10 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'f)
 (require 's)
 
+(require 'exlybar-common)
 ;; FIXME: store colors without relying on an xcb type
 (require 'exlybar-render)
 

@@ -38,6 +38,7 @@
 (require 's)
 
 (require 'exlybar-module)
+(require 'exlybar-module-helpers)
 
 (defgroup exlybar-wifi nil
   "An Exlybar wifi module."
