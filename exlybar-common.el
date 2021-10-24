@@ -1,4 +1,4 @@
-;;; exlybar-common.el --- Exlybar common fns -*- lexical-binding: t -*-
+;;; exlybar-common.el --- Exlybar common vars and fns -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
@@ -31,6 +31,25 @@
 ;;; Code:
 
 (require 'xcb)
+
+(defcustom exlybar-width (display-pixel-width)
+  "Exlybar width.
+
+Defaults to the width obtained from `display-pixel-width'"
+  :type 'integer
+  :group 'exlybar)
+
+(defcustom exlybar-height 20
+  "Exlybar height."
+  :type 'integer
+  :group 'exlybar)
+
+(defcustom exlybar-modules nil
+  "List of exlybar modules with optional layout instructions."
+  :type 'list
+  :group 'exlybar)
+
+(defvar exlybar--connection)
 
 (defun exlybar--color->pixel (color)
   "Convert COLOR to PIXEL (index in TrueColor colormap)."

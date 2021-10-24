@@ -47,23 +47,6 @@
 (defvar exlybar--window nil "The parent window.")
 (defvar exlybar--gc nil "The graphics context.")
 
-(defcustom exlybar-width (display-pixel-width)
-  "Exlybar width.
-
-Defaults to the width obtained from `display-pixel-width'"
-  :type 'integer
-  :group 'exlybar)
-
-(defcustom exlybar-height 20
-  "Exlybar height."
-  :type 'integer
-  :group 'exlybar)
-
-(defcustom exlybar-modules nil
-  "List of exlybar modules with optional layout instructions."
-  :type 'list
-  :group 'exlybar)
-
 (defvar exlybar--enabled nil "t if exlybar is enabled.")
 
 (require 'exlybar-layout)
