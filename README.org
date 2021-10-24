@@ -263,6 +263,12 @@ from modules/. Also see the use-package example below.
   ;;; M-x: exlybar-exit
 #+end_src
 
+* Screen(s)
+I only have one so far (mostly because there’s not much else to show at the
+moment):
+#+CAPTION: a screenshot of current work in progress
+[[./screen.png]]
+
 * Attribution
 This project is heavily inspired by daviwil’s [[https://systemcrafters.cc/][System Crafters]] presentations on
 Emacs and Exwm as well as [[https://github.com/ch11ng/exwm][Exwm]] itself along with numerous others whom I will
