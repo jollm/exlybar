@@ -13,6 +13,8 @@ Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
 Current version: *0.20.1*
 
+Note: *This probably doesn’t work well with multiple screens at the moment.*
+
 * Synopsis of work in progress
 ** Now supported
 + Display at the top of the screen as window a dock window
@@ -130,6 +132,10 @@ Exlybar consists of five primary components:
   in order to support CompositeGlyphs32 requests for loaded glyphs.
 
 * Usage caveats
+*This probably doesn’t work well with multiple screens at the moment.* I only
+have a laptop and no extra monitors. I plan to get a multiscreen setup for
+testing soon.
+
 Since it depends on fontsloth which is another project in very early stages,
 some of the current limitations are due to limitations in fontsloth. The
 primary ones are lack of support for composite glyphs and OTF font
