@@ -148,9 +148,12 @@ order to support all the desired goals for this project.
 procedures and customization options may change prior to a 1.0 release.*
 
 * Installation
+This project depends on [[https://github.com/jollm/fontsloth][fontsloth]], which is also not yet in MELPA, so you’ll
+have to install that first if you want to try this.
+
 Pending upload to MELPA, add this directory and file:modules/ to your emacs
 load path and ~(require ’exlybar)~. Also require any desired module features
-from modules/.
+from modules/. Also see the use-package example below.
 
 * Usage
 ** Layout and display with modules
