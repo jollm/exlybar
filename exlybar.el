@@ -198,7 +198,7 @@ MODULES optional modules to refresh and compare with prev-extents"
 (defun exlybar--watch-modules (sym nval oper where)
   "Watcher for `exlybar-modules' to refresh modules with NVAL."
   (ignore sym)
-  (when (and (not where) (eq 'set oper))
+  (when (and exlybar--enabled (not where) (eq 'set oper))
     (exlybar-refresh-modules nval)))
 
 (add-variable-watcher 'exlybar-modules #'exlybar--watch-modules)
@@ -223,7 +223,8 @@ DATA the event data"
 (defun exlybar--watch-height (sym nval oper where)
   "Watcher for `exlybar-height' to refresh modules when height changes."
   (ignore sym)
-  (when (and (not where) (eq 'set oper))
+  (ignore nval)
+  (when (and exlybar--enabled (not where) (eq 'set oper))
     (setq exlybar--geometry-changed? t)
     (run-at-time 0 nil #'exlybar-refresh-modules)))
 
