@@ -183,8 +183,9 @@ NEW-EXTENTS the new layout extents"
                           :width width :height exlybar-height)))))
 
 (defvar exlybar--prev-extents nil "Held by `exlybar-refresh-modules'.")
-(defun exlybar-refresh-modules ()
-  "Ask the modules to refresh and see whether the layout has changed."
+(cl-defun exlybar-refresh-modules (&optional modules)
+  "Ask the modules to refresh and see whether the layout has changed.
+MODULES optional modules to refresh and compare with prev-extents"
   (when exlybar--geometry-changed?
     (dolist (m exlybar-modules)
       (when (exlybar-module-p m)
@@ -195,7 +196,8 @@ NEW-EXTENTS the new layout extents"
   ;; refresh modules to update to latest dimensions
   (let ((prev-extents
          (exlybar-layout-extents
-          (exlybar-layout-coordinate (exlybar-layout exlybar-modules) 0 0))))
+          (exlybar-layout-coordinate (exlybar-layout exlybar-modules) 0 0)))
+        (exlybar-modules (or modules exlybar-modules)))
     ;; (message "prev extents %s" prev-extents)
     (dolist (m exlybar-modules)
       (when (exlybar-module-p m)
@@ -209,6 +211,14 @@ NEW-EXTENTS the new layout extents"
         (exlybar--selectively-clear-areas prev-extents new-extents))
       (exlybar--copy-areas new-layout)))
   (xcb:flush exlybar--connection))
+
+(defun exlybar--watch-modules (sym nval oper where)
+  "Watcher for `exlybar-modules' to refresh modules with NVAL."
+  (ignore sym)
+  (when (and (not where) (eq 'set oper))
+    (exlybar-refresh-modules nval)))
+
+(add-variable-watcher 'exlybar-modules #'exlybar--watch-modules)
 
 (defvar exlybar--module-refresh-timer nil)
 (defun exlybar--start-module-refresh-timer ()
