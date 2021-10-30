@@ -268,10 +268,23 @@ from modules/. Also see the use-package example below.
 #+end_src
 
 * Screen(s)
-I only have one so far (mostly because there’s not much else to show at the
-moment):
-#+CAPTION: a screenshot of current work in progress
-[[./screen.png]]
+These are using Bookerly-Regular for variable text, IBMPlexMono for monospace,
+and Font Awesome 5 (the one that comes with all-the-icons) for icons:
+
+#+CAPTION: a screenshot of the backlight module
+[[./screen-backlight.png]]
+
+#+CAPTION: a screenshot of the battery module
+[[./screen-battery.png]]
+
+#+CAPTION: a screenshot of the date module
+[[./screen-date.png]]
+
+#+CAPTION: a screenshot of the volume module
+[[./screen-volume.png]]
+
+#+CAPTION: a screenshot of the wifi module
+[[./screen-wifi.png]]
 
 * Attribution
 This project is heavily inspired by daviwil’s [[https://systemcrafters.cc/][System Crafters]] presentations on
