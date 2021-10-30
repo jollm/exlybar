@@ -199,6 +199,11 @@ MODULES optional modules to refresh and compare with prev-extents"
   "Watcher for `exlybar-modules' to refresh modules with NVAL."
   (ignore sym)
   (when (and exlybar--enabled (not where) (eq 'set oper))
+    ;; exit modules that have been removed
+    (dolist (m exlybar-modules)
+      (when (exlybar-module-p m)
+        (unless (seq-contains nval m #'eq)
+          (exlybar-module-exit m))))
     ;; check for uninitialized modules
     (dolist (m nval)
       (when (exlybar-module-p m)
