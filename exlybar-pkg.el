@@ -1,11 +1,11 @@
-(define-package "exlybar" "0.20.2"
+(define-package "exlybar" "0.21.3"
   "Emacs polybar-like thing."
   '((backlight "1.4")
     (cl-lib "0.5")
     (dash "2.1.0")
     (emacs "27.1")
     (f "0.20.0")
-    (fontsloth "0.15.0")
+    (fontsloth "0.15.1")
     (s "1.12.0")
     (volume "20201002.1022")
     (xelb "0.18"))

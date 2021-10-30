@@ -3,8 +3,8 @@
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.20.2
-;; Package-Requires: ((xelb "0.18") (fontsloth "0.15.0") (emacs "27.1"))
+;; Version: 0.21.3
+;; Package-Requires: ((xelb "0.18") (fontsloth "0.15.1") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
 ;; This file is NOT part of GNU Emacs.

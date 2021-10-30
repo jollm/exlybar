@@ -11,7 +11,7 @@ It is currently pre version 1.0 and the API is not yet stable.
 
 Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
-Current version: *0.20.2*
+Current version: *0.21.3*
 
 Note: *This probably doesn’t work well with multiple screens at the moment.*
 
@@ -158,10 +158,14 @@ from modules/. Also see the use-package example below.
 
   (require 'exlybar-backlight)
   (require 'exlybar-battery)
+  (require 'exlybar-date)
   (require 'exlybar-volume)
   (require 'exlybar-wifi)
 
   ;;; layout everything to the right
+
+  (defvar my/date (exlybar-date-create))
+  (push my/date exlybar-modules)
 
   (defvar my/battery (exlybar-battery-create))
   (push my/battery exlybar-modules)
@@ -186,10 +190,11 @@ from modules/. Also see the use-package example below.
   (setq exlybar-modules (cdr exlybar-modules))
   (push :center exlybar-modules)
 
-  ;;; layout wifi and battery to the left and volume and backlight to the right
+  ;;; layout wifi and battery to the left and volume, backlight, and date
+  ;;; to the right
 
   (setq exlybar-modules
-        (:left my/wifi my/battery :right my/volume my/backlight))
+        (:left my/wifi my/battery :right my/volume my/backlight my/date))
 
   ;;; exit (exit doesn’t modify layout for next time)
 
@@ -205,6 +210,7 @@ from modules/. Also see the use-package example below.
 
   (require 'exlybar-backlight)
   (require 'exlybar-battery)
+  (require 'exlybar-date)
   (require 'exlybar-volume)
   (require 'exlybar-wifi)
 
@@ -242,15 +248,18 @@ from modules/. Also see the use-package example below.
   (use-package exlybar
     :defer t
     :config
+    (require 'exlybar-date)
     (require 'exlybar-wifi)
     (require 'exlybar-backlight)
     (require 'exlybar-volume)
     (require 'exlybar-battery)
-    (setq my/exly-wifi (exlybar-wifi-create)
+    (setq my/exly-date (exlybar-date-create)
+          my/exly-wifi (exlybar-wifi-create)
           my/exly-volume (exlybar-volume-create)
           my/exly-backlight (exlybar-backlight-create)
           my/exly-battery (exlybar-battery-create))
-    (setq exlybar-modules (list my/exly-wifi my/exly-volume
+    (setq exlybar-modules (list :left my/exly-date
+                                :right my/exly-wifi my/exly-volume
                                 my/exly-backlight my/exly-battery)))
 
   ;;; then M-x: exlybar
