@@ -122,13 +122,13 @@ See `exlybar-zone-color'"
   (let* ((date (format-time-string (exlybar-module-format m))))
     (unless (equal date (exlybar-module-text m))
       (setf
+       (exlybar-module-format-spec m)
+       (exlybar-date--format-spec (exlybar-module-icon m))
        (exlybar-module-text m) date
        (exlybar-module-needs-refresh? m) t))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-date))
   "Set the M's icon and update the text."
-  (setf (exlybar-module-format-spec m)
-        (exlybar-date--format-spec (exlybar-module-icon m)))
   (exlybar-date--do-update m))
 
 (cl-defmethod exlybar-module-init :after ((m exlybar-date))
