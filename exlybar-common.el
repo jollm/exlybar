@@ -49,6 +49,26 @@ Defaults to the width obtained from `display-pixel-width'"
   :type 'list
   :group 'exlybar)
 
+(defcustom exlybar-before-init-hook nil
+  "Functions to run when before exlybar is initialized."
+  :type 'hook
+  :group 'exlybar)
+
+(defcustom exlybar-after-init-hook nil
+  "Functions to run when after exlybar is initialized."
+  :type 'hook
+  :group 'exlybar)
+
+(defcustom exlybar-before-exit-hook nil
+  "Functions to run when before exlybar exits."
+  :type 'hook
+  :group 'exlybar)
+
+(defcustom exlybar-after-exit-hook nil
+  "Functions to run when after exlybar exits."
+  :type 'hook
+  :group 'exlybar)
+
 (defvar exlybar--connection)
 
 (defun exlybar--color->pixel (color)

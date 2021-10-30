@@ -236,8 +236,11 @@ DATA the event data"
 (add-variable-watcher 'exlybar-height #'exlybar--watch-height)
 
 ;;;###autoload
-(defun exlybar () (interactive)
-  "Initialize the connection, window, graphics context, and modules."
+(defun exlybar ()
+  "Start exlybar.
+Initialize the connection, window, graphics context, and modules."
+  (interactive)
+  (run-hook-with-args 'exlybar-before-init-hook)
   (cl-assert (not exlybar--connection))
   (cl-assert (not exlybar--window))
   (setq exlybar--connection (xcb:connect))
@@ -341,11 +344,14 @@ DATA the event data"
     (xcb:+event exlybar--connection 'xcb:Expose
                 #'exlybar--on-Expose)
     (exlybar--refresh)
-    (setq exlybar--enabled t)))
+    (setq exlybar--enabled t)
+    (run-hook-with-args 'exlybar-after-init-hook)))
 
 ;;;###autoload
-(defun exlybar-exit () (interactive)
-  "Exit the exlybar."
+(defun exlybar-exit ()
+  "Exit exlybar."
+  (interactive)
+  (run-hook-with-args 'exlybar-before-exit-hook)
   ;; exit modules
   (when exlybar--module-refresh-timer
     (cancel-timer exlybar--module-refresh-timer)
@@ -366,7 +372,8 @@ DATA the event data"
     (setq exlybar--connection nil
           exlybar--window nil
           exlybar--gc nil
-          exlybar--enabled nil)))
+          exlybar--enabled nil)
+    (run-hook-with-args 'exlybar-after-exit-hook)))
 
 (provide 'exlybar)
 
