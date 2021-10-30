@@ -39,6 +39,7 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 + Dock somewhere other than the screen top (this should be trivial to implement
   but is as yet untested)
 + Optionally act as the system tray (this is the second highest priority)
++ Help to locate/suggest/select compatible fonts to try
 + Multiple bars and gaps like in Polybar
 + Configurable transparency
 + Animations
@@ -135,6 +136,12 @@ Exlybar consists of five primary components:
 *This probably doesn’t work well with multiple screens at the moment.* I only
 have a laptop and no extra monitors. I plan to get a multiscreen setup for
 testing soon.
+
+*It’s not great at helping to find fonts.* I’m planning to add a font-find
+helper that delegates to fc-match. This would be helpful if you don’t happen to
+have the default fonts.
+
+*Check [[./exlybar-color.el]] for the default font paths.*
 
 It depends on fontsloth which is another project in very early stages; see the
 fontsloth README linked above for a list of tested fonts.
