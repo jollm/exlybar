@@ -100,7 +100,7 @@ Exlybar consists of five primary components:
   + file:exlybar-module-types.el
   + file:exlybar-module.el
 
-  At present it consists of a based cl-struct type ~exlybar-module~ and a set
+  At present it consists of a cl-struct base type ~exlybar-module~ and a set
   of generic functions and default primary methods for dispatch on objects of
   that type.
 
