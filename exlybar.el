@@ -199,6 +199,11 @@ MODULES optional modules to refresh and compare with prev-extents"
   "Watcher for `exlybar-modules' to refresh modules with NVAL."
   (ignore sym)
   (when (and exlybar--enabled (not where) (eq 'set oper))
+    ;; check for uninitialized modules
+    (dolist (m nval)
+      (when (exlybar-module-p m)
+        (unless (exlybar-module-xcb m)
+          (exlybar-module-init m))))
     (exlybar-refresh-modules nval)))
 
 (add-variable-watcher 'exlybar-modules #'exlybar--watch-modules)
