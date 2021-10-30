@@ -147,7 +147,7 @@ This project depends on [[https://github.com/jollm/fontsloth][fontsloth]], which
 have to install that first if you want to try this.
 
 Pending upload to MELPA, add this directory and file:modules/ to your emacs
-load path and ~(require ’exlybar)~. Also require any desired module features
+load path and ~(require 'exlybar)~. Also require any desired module features
 from modules/. Also see the use-package example below.
 
 * Usage
@@ -230,7 +230,7 @@ from modules/. Also see the use-package example below.
   (setf (exlybar-module-format my/battery) "^0^[^f1%i^] %b%p%% ^[^2|^] %t ^[^2|^] %r")
 
   ;;; change battery percentage thresholds for icon and percent color change
-  (setq exlybar-battery-color-zones ’(40 20 7 t t))
+  (setq exlybar-battery-color-zones '(40 20 7 t t))
   ;; see ~exlybar-zone-color~ for an explanation of the list elements
 
   ;;; see custom group ~exlybar~ and subgroups for current options
