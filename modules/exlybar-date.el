@@ -55,8 +55,6 @@ See `solar-equinoxes/solstices'"
     (+ d (cl-loop for m from (1- m) downto 1
                   sum (date-days-in-month year m)))))
 
-(exlybar-date--equinox/solistice-day 0)
-
 (defcustom exlybar-date-color-zones
   `(,(exlybar-date--equinox/solstice-day 0)
     ,(exlybar-date--equinox/solstice-day 1)
