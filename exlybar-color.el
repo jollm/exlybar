@@ -181,12 +181,12 @@ See `exlybar-zone-color'"
                  string string string string string)
   :group 'exlybar)
 
-(defun exlybar-font--precompute-px-sizes (height)
+(cl-defun exlybar-font--precompute-px-sizes (height &optional font-map)
   "Given a HEIGHT, compute pixel sizes for all fonts in the font map."
   (apply
    #'vector
-     (cl-loop for f across exlybar-font-map collect
-              (fontsloth-font-compute-px (fontsloth-load-font f) height))))
+   (cl-loop for f across (or font-map exlybar-font-map) collect
+            (fontsloth-font-compute-px (fontsloth-load-font f) height))))
 
 (defvar exlybar-font-px-size (exlybar-font--precompute-px-sizes exlybar-height)
   "Precomputed font px size map.
@@ -200,10 +200,15 @@ the fonts change.")
   (when (and (not where) (eq 'set oper))
     (let ((height (cl-case sym
                     (exlybar-height (when (/= (symbol-value sym) nval) nval))
-                    (exlybar-font-map exlybar-height))))
-      (when height
+                    (exlybar-font-map nil)))
+          (font-map (cl-case sym
+                      (exlybar-height nil)
+                      (exlybar-font-map (unless (equal (symbol-value sym) nval)
+                                          nval)))))
+      (when (or height font-map)
         (setq exlybar-font-px-size
-              (exlybar-font--precompute-px-sizes height))))))
+              (exlybar-font--precompute-px-sizes
+               (or height exlybar-height) (or font-map exlybar-font-map)))))))
 
 (add-variable-watcher 'exlybar-height #'exlybar-font--watch-px-size)
 (add-variable-watcher 'exlybar-font-map #'exlybar-font--watch-px-size)
