@@ -226,9 +226,9 @@ MODULES optional modules to refresh and compare with prev-extents"
 DATA the event data"
   ;; (message "received expose %s" data)
   (ignore data)
-  (unless exlybar--module-refresh-timer
+  (unless (or (not exlybar--enabled) exlybar--module-refresh-timer)
     (exlybar--start-module-refresh-timer))
-  (when exlybar--geometry-changed?
+  (when (and exlybar--enabled exlybar--geometry-changed?)
     (setq exlybar--geometry-changed? nil)
     (run-at-time 0 nil #'exlybar-refresh-modules)))
 
@@ -363,6 +363,7 @@ Initialize the connection, window, graphics context, and modules."
   (when exlybar--module-refresh-timer
     (cancel-timer exlybar--module-refresh-timer)
     (setq exlybar--module-refresh-timer nil))
+  (setq exlybar--enabled nil)
   (dolist (m exlybar-modules)
     (when (exlybar-module-p m)
       (exlybar-module-exit m)))
@@ -378,8 +379,7 @@ Initialize the connection, window, graphics context, and modules."
     (xcb:disconnect exlybar--connection)
     (setq exlybar--connection nil
           exlybar--window nil
-          exlybar--gc nil
-          exlybar--enabled nil)
+          exlybar--gc nil)
     (run-hook-with-args 'exlybar-after-exit-hook)))
 
 (provide 'exlybar)
