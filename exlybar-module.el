@@ -213,6 +213,10 @@ This default primary method redraws the text if it has changed."
   "After refresh update M's needs-refresh?."
   (setf (exlybar-module-needs-refresh? m) nil))
 
+(cl-defgeneric exlybar-module-reposition ((m exlybar-module) x y)
+  "Tell module M about its layout X and Y."
+  (ignore m) (ignore x) (ignore y))
+
 (cl-defgeneric exlybar-module-exit ((m exlybar-module))
   "Tear down module M."
   (message "exiting module %s" (exlybar-module-name m))

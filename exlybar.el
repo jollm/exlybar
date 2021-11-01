@@ -157,13 +157,15 @@ NEW-EXTENTS the new layout extents"
   "Copy a LAYOUT's modules' pixmaps into their respective areas."
   (dolist (m layout)
     (pcase-let ((`((,x ,y) ,(cl-struct exlybar-module width xcb)) m))
-      (xcb:+request exlybar--connection
-          (make-instance 'xcb:CopyArea
-                          :src-drawable (alist-get 'pixmap xcb)
-                          :dst-drawable exlybar--window
-                          :gc (alist-get 'gc xcb)
-                          :src-x 0 :src-y 0 :dst-x x :dst-y y
-                          :width width :height exlybar-height)))))
+      (when (alist-get 'pixmap xcb)
+        (xcb:+request exlybar--connection
+            (make-instance 'xcb:CopyArea
+                           :src-drawable (alist-get 'pixmap xcb)
+                           :dst-drawable exlybar--window
+                           :gc (alist-get 'gc xcb)
+                           :src-x 0 :src-y 0 :dst-x x :dst-y y
+                           :width width :height exlybar-height)))
+      (exlybar-module-reposition (cadr m) x y))))
 
 (defvar exlybar--geometry-changed? nil "Held by `exlybar--on-Expose'.")
 (cl-defun exlybar-refresh-modules (&optional modules)
