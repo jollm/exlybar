@@ -4,7 +4,8 @@
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
 ;; Version: 0.21.3
-;; Package-Requires: ((cl-lib "0.5") (xelb "0.18") (emacs "27.1"))
+;; Homepage: https://github.com/jollm/exlybar
+;; Package-Requires: ((log4e "0.3.3") (xelb "0.18") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
 ;; This file is NOT part of GNU Emacs.
