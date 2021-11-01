@@ -3,7 +3,7 @@
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.21.3
+;; Version: 0.22.0
 ;; Homepage: https://github.com/jollm/exlybar
 ;; Package-Requires: ((xelb "0.18") (emacs "27.1"))
 ;; Keywords: multimedia, window-manager, status-bar, exwm

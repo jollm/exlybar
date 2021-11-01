@@ -11,7 +11,7 @@ It is currently pre version 1.0 and the API is not yet stable.
 
 Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
-Current version: *0.21.3*
+Current version: *0.22.0*
 
 Note: *This probably doesn’t work well with multiple screens at the moment.*
 
@@ -33,12 +33,13 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 + Module development API exists but is not yet finalized or particularly well
   documented
 
++ Act as the system tray (as of version 0.22.0)
+
 * Not currently supported (but planned)
 + Configuration for multiple screens/randr (this is the first priority at
   present)
 + Dock somewhere other than the screen top (this should be trivial to implement
   but is as yet untested)
-+ Optionally act as the system tray (this is the second highest priority)
 + Help to locate/suggest/select compatible fonts to try
 + Multiple bars and gaps like in Polybar
 + Configurable transparency

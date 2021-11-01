@@ -1,4 +1,4 @@
-(define-package "exlybar" "0.21.3"
+(define-package "exlybar" "0.22.0"
   "Emacs polybar-like thing."
   '((backlight "1.4")
     (cl-lib "0.5")
