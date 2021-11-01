@@ -157,8 +157,8 @@ LPAD is the module left padding"
                 else collect l)
       ,current-pos)))
 
-(cl-defgeneric exlybar-module-layout-text ((m exlybar-module))
-  "Give module M a text layout.
+(cl-defgeneric exlybar-module-layout ((m exlybar-module))
+  "Give module M a layout.
 This default primary method uses a result from fontsloth-layout to set
 `exlybar-module-text-layout' and updates the module width accordingly."
   (pcase-let* (((cl-struct
@@ -174,13 +174,14 @@ This default primary method uses a result from fontsloth-layout to set
             output))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-module))
-  "Before init update module M's text-layout."
+  "Before init update module M's layout."
   ;; (message "super init before")
-  (exlybar-module-layout-text m))
+  (exlybar-module-layout m))
 
 (cl-defmethod exlybar-module-init :after ((m exlybar-module))
   "After init draw module M's text."
-  (exlybar-module--draw-text m))
+  (when (exlybar-module-format m)
+    (exlybar-module--draw-text m)))
 
 (cl-defgeneric exlybar-module-refresh ((m exlybar-module))
   "Refresh module M.
@@ -192,20 +193,21 @@ This default primary method redraws the text if it has changed."
     (exlybar-module--draw-text m)))
 
 (cl-defmethod exlybar-module-refresh :before ((m exlybar-module))
-  "When refreshing, redo text layout and make a new pixmap."
+  "When refreshing, redo layout and make a new pixmap."
   ;; (message "running super before refresh")
   (when (exlybar-module-needs-refresh? m)
-    (exlybar-module-layout-text m)
+    (exlybar-module-layout m)
     (let ((c exlybar--connection)
           (xcb (exlybar-module-xcb m))
           (width (exlybar-module-width m)))
-      (xcb:+request c
-          (make-instance 'xcb:FreePixmap :pixmap (map-elt xcb 'pixmap)))
-      (let ((pmap (xcb:generate-id c)))
-        (exlybar-render-create-pixmap c pmap width exlybar-height)
-        (map-put! (exlybar-module-xcb m) 'pixmap pmap)
-        (exlybar-render-fill-rectangle
-         c (map-elt xcb 'gc) pmap width exlybar-height)))))
+      (when (map-elt xcb 'pixmap)
+        (xcb:+request c
+            (make-instance 'xcb:FreePixmap :pixmap (map-elt xcb 'pixmap)))
+        (let ((pmap (xcb:generate-id c)))
+          (exlybar-render-create-pixmap c pmap width exlybar-height)
+          (map-put! (exlybar-module-xcb m) 'pixmap pmap)
+          (exlybar-render-fill-rectangle
+           c (map-elt xcb 'gc) pmap width exlybar-height))))))
 
 (cl-defmethod exlybar-module-refresh :after ((m exlybar-module))
   "After refresh update M's needs-refresh?."
