@@ -37,6 +37,8 @@
 (require 'xcb-renderutil)
 (require 'fontsloth-layout)
 
+(require 'exlybar-log)
+
 (defun exlybar-render-create-pixmap (c id width height &optional depth)
   "Sent a request to create an `xcb:Pixmap'.
 C the xcb connection
@@ -196,7 +198,8 @@ W the pixmap width
 H the pixmap height"
   (let* ((stride (logand (lognot 3) (+ 3 w)))
          (sm (make-vector (* stride h) 0)))
-    ;; (message "width %s height %s pm %s stride %s" w h (length pm) stride)
+    (exlybar--log-trace*
+     "stride-pixmap width %s height %s pm %s stride %s" w h (length pm) stride)
     (dotimes (y h)
       (dotimes (x w)
         (aset sm (+ x (* y stride))
@@ -209,6 +212,8 @@ C the connection
 GS the glyphset
 FONT the `fontsloth-font'
 GLYPH-POSITION the `fontsloth-layout-glyph-position'"
+  (exlybar--log-trace*
+   "start render-load-glyph font[%s] glyph-position[%s]" font glyph-position)
   (pcase-let* (((cl-struct fontsloth-layout-glyph-position
                            key y (parent char-code))
                 glyph-position)

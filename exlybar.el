@@ -39,6 +39,7 @@
 (require 'xcb-ewmh)
 
 (require 'exlybar-common)
+(require 'exlybar-log)
 
 (defgroup exlybar nil
   "Exlybar is a status bar that displays as a dock window in X."
@@ -60,16 +61,17 @@
   (xcb:+request exlybar--connection
       (make-instance 'xcb:UnmapWindow
                      :window exlybar--window))
-  (message "configure window errors: %s"
-           (xcb:+request-checked+request-check exlybar--connection
-               (make-instance 'xcb:ConfigureWindow
-                              :window exlybar--window
-                              :value-mask (logior xcb:ConfigWindow:X
-                                                  xcb:ConfigWindow:Width
-                                                  xcb:ConfigWindow:Height)
-                              :x 0
-                              :width exlybar-width
-                              :height exlybar-height)))
+  (exlybar--log-debug*
+   "exlybar-refresh: configure window errors: %s"
+   (xcb:+request-checked+request-check exlybar--connection
+       (make-instance 'xcb:ConfigureWindow
+                      :window exlybar--window
+                      :value-mask (logior xcb:ConfigWindow:X
+                                          xcb:ConfigWindow:Width
+                                          xcb:ConfigWindow:Height)
+                      :x 0
+                      :width exlybar-width
+                      :height exlybar-height)))
   ;; configure struts
   (xcb:+request exlybar--connection
       (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
@@ -101,27 +103,27 @@
 (defun exlybar--on-DestroyNotify (data _synthetic)
   "DestroyNotify.
 DATA the event data"
-  (message "received destroynotify %s" data))
+  (exlybar--log-trace* "received destroynotify %s" data))
 
 (defun exlybar--on-ReparentNotify (data _synthetic)
   "ReparentNotify.
 DATA the event data"
-  (message "received reparentnotify %s" data))
+  (exlybar--log-trace* "received reparentnotify %s" data))
 
 (defun exlybar--on-ResizeRequest (data _synthetic)
   "ResizeRequest.
 DATA the event data"
-  (message "received resizerequest %s" data))
+  (exlybar--log-trace* "received resizerequest %s" data))
 
 (defun exlybar--on-PropertyNotify (data _synthetic)
   "PropertyNotify.
 DATA the event data"
-  (message "received propertynotify %s" data))
+  (exlybar--log-trace* "received propertynotify %s" data))
 
 (defun exlybar--on-ClientMessage (data _synthetic)
   "Handle client messages.
 DATA the event data"
-  (message "received clientmessage %s" data))
+  (exlybar--log-trace* "received clientmessage %s" data))
 
 (defun exlybar--on-KeyPress (data _synthetic)
   "Forward all KeyPress events to Emacs frame.
@@ -138,7 +140,7 @@ DATA the event data"
                        :destination dest
                        :event-mask xcb:EventMask:NoEvent
                        :event (xcb:marshal obj exlybar--connection)))
-    (message "key press %s" obj))
+    (exlybar--log-trace* "key press %s" obj))
   (xcb:flush exlybar--connection))
 
 (defun exlybar--selectively-clear-areas (prev-extents new-extents)
@@ -225,7 +227,7 @@ MODULES optional modules to refresh and compare with prev-extents"
 (defun exlybar--on-Expose (data _synthetic)
   "Can draw things after Expose.
 DATA the event data"
-  ;; (message "received expose %s" data)
+  (exlybar--log-debug* "exlybar received expose %s" data)
   (ignore data)
   (unless (or (not exlybar--enabled) exlybar--module-refresh-timer)
     (exlybar--start-module-refresh-timer))
@@ -265,7 +267,7 @@ Initialize the connection, window, graphics context, and modules."
         (y 0)
         parent depth)
     (setq exlybar--window id)
-    (message "Exlybar window: %s" exlybar--window)
+    (exlybar--log-debug* "Exlybar window id: %s" exlybar--window)
     (setq parent (exlybar--find-root-window-id)
           depth (slot-value (xcb:+request-unchecked+reply
                                 exlybar--connection
@@ -320,17 +322,18 @@ Initialize the connection, window, graphics context, and modules."
                                ,xcb:Atom:_NET_WM_STATE_ABOVE)))
     ;; create gc
     (setq exlybar--gc (xcb:generate-id exlybar--connection))
-    (message "create gc errors: %s"
-             (xcb:+request-checked+request-check exlybar--connection
-                 (make-instance 'xcb:CreateGC
-                                :cid exlybar--gc
-                                :drawable exlybar--window
-                                :value-mask (logior xcb:GC:Background
-                                                    xcb:GC:Foreground)
-                                :background (exlybar--color->pixel
-                                             (exlybar--find-background-color))
-                                :foreground (exlybar--color->pixel
-                                             (exlybar--find-foreground-color)))))
+    (exlybar--log-debug*
+     "exlybar init create gc errors: %s"
+     (xcb:+request-checked+request-check exlybar--connection
+         (make-instance 'xcb:CreateGC
+                        :cid exlybar--gc
+                        :drawable exlybar--window
+                        :value-mask (logior xcb:GC:Background
+                                            xcb:GC:Foreground)
+                        :background (exlybar--color->pixel
+                                     (exlybar--find-background-color))
+                        :foreground (exlybar--color->pixel
+                                     (exlybar--find-foreground-color)))))
     ;; initialize modules
     (dolist (m exlybar-modules)
       (when (exlybar-module-p m)

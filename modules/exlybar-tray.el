@@ -38,6 +38,8 @@
 (require 'xcb-xembed)
 (require 'xcb-systemtray)
 
+(require 'exlybar-log)
+
 (cl-defstruct (exlybar-tray--icon
                (:constructor exlybar-tray--icon-create))
   "Attributes of a system tray icon."
@@ -124,13 +126,13 @@ This should be a color, or nil for transparent background."
 
 (defun exlybar-tray--embed (icon)
   "Embed ICON."
-  (message "Try to embed #x%x" icon)
+  (exlybar--log-debug* "tray try to embed #x%x" icon)
   (let ((info (xcb:+request-unchecked+reply exlybar-tray--connection
                   (make-instance 'xcb:xembed:get-_XEMBED_INFO
                                  :window icon)))
         width* height* visible)
     (when info
-      (message "Embed #x%x" icon)
+      (exlybar--log-debug* "Embedding #x%x" icon)
       (with-slots (width height)
           (xcb:+request-unchecked+reply exlybar-tray--connection
               (make-instance 'xcb:GetGeometry :drawable icon))
@@ -139,8 +141,8 @@ This should be a color, or nil for transparent background."
         (when (< width* exlybar-tray--icon-min-size)
           (setq width* exlybar-tray--icon-min-size
                 height* (round (* height (/ (float width*) width)))))
-        (message "Resize from %dx%d to %dx%d"
-                 width height width* height*))
+        (exlybar--log-debug*
+         "Resize icon from %dx%d to %dx%d" width height width* height*))
       ;; Add this icon to save-set.
       (xcb:+request exlybar-tray--connection
           (make-instance 'xcb:ChangeSaveSet
@@ -173,7 +175,7 @@ This should be a color, or nil for transparent background."
                                              xcb:EventMask:KeyPress
                                              xcb:EventMask:PropertyChange)))
       (setq visible (slot-value info 'flags))
-      (message "embed has flags %s" (slot-value info 'flags))
+      (exlybar--log-debug* "embed has flags %s" (slot-value info 'flags))
       ;; TODO: should we check for the MAPPED flag at this point?
       (if ;visible
           nil
@@ -182,7 +184,7 @@ This should be a color, or nil for transparent background."
         ;; Default to visible.
         (setq visible t))
       (when visible
-        (message "Map the window")
+        (exlybar--log-debug* "Mapping the icon window")
         (xcb:+request exlybar-tray--connection
             (make-instance 'xcb:MapWindow :window icon)))
       (xcb:+request exlybar-tray--connection
@@ -208,7 +210,7 @@ This should be a color, or nil for transparent background."
 (cl-defun exlybar-tray--unembed (icon &optional (should-refresh? t))
   "Unembed ICON.
 SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
-  (message "Unembed #x%x" icon)
+  (exlybar--log-debug* "Unembed #x%x" icon)
   (xcb:+request exlybar-tray--connection
       (make-instance 'xcb:UnmapWindow :window icon))
   (xcb:+request exlybar-tray--connection
@@ -225,18 +227,18 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
 
 (defun exlybar-tray--on-DestroyNotify (data _synthetic)
   "Unembed icons on DestroyNotify given DATA."
-  (message "received destroy notify for tray")
   (let ((obj (make-instance 'xcb:DestroyNotify)))
     (xcb:unmarshal obj data)
+    (exlybar--log-debug* "received destroynotify for tray icon %s" obj)
     (with-slots (window) obj
       (when (assoc window exlybar-tray--list)
         (exlybar-tray--unembed window)))))
 
 (defun exlybar-tray--on-ReparentNotify (data _synthetic)
   "Unembed icons on ReparentNotify given DATA."
-  (message "tray received reparentnotify")
   (let ((obj (make-instance 'xcb:ReparentNotify)))
     (xcb:unmarshal obj data)
+    (exlybar--log-debug* "received reparentnotify for tray icon %s" obj)
     (with-slots (window parent) obj
       (when (and (/= parent exlybar-tray--embedder-window)
                  (assoc window exlybar-tray--list))
@@ -271,7 +273,7 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
   (let ((obj (make-instance 'xcb:ResizeRequest))
         attr)
     (xcb:unmarshal obj data)
-    (message "tray received resize request for icon %s" obj)
+    (exlybar--log-debug* "received resize request for tray icon %s" obj)
     (with-slots (window width height) obj
       (exlybar-tray--resize-icon window width height))
     (setf (exlybar-module-needs-refresh? exlybar-tray--module) t)
@@ -279,10 +281,10 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
 
 (defun exlybar-tray--on-PropertyNotify (data _synthetic)
   "Map/Unmap the tray icon on PropertyNotify given DATA."
-  (message "tray received propertynotify")
   (let ((obj (make-instance 'xcb:PropertyNotify))
         attr info visible)
     (xcb:unmarshal obj data)
+    (exlybar--log-debug* "received propertynotify for tray icon %s" obj)
     (with-slots (window atom state) obj
       (when (and (eq state xcb:Property:NewValue)
                  (eq atom xcb:Atom:_XEMBED_INFO)
@@ -311,7 +313,7 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
       (when (eq type xcb:Atom:_NET_SYSTEM_TRAY_OPCODE)
         (setq data32 (slot-value data 'data32)
               opcode (elt data32 1))
-        (message "opcode: %s" opcode)
+        (exlybar--log-debug* "tray icon clientmessage opcode: %s" opcode)
         (cond ((= opcode xcb:systemtray:opcode:REQUEST-DOCK)
                (unless (assoc (elt data32 2) exlybar-tray--list)
                  (exlybar-tray--embed (elt data32 2))))
@@ -319,14 +321,14 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
               ((or (= opcode xcb:systemtray:opcode:BEGIN-MESSAGE)
                    (= opcode xcb:systemtray:opcode:CANCEL-MESSAGE)))
               (t
-               (message "Unknown opcode message: %s" obj)))))))
+               (exlybar--log-error "Unknown icon opcode message: %s" obj)))))))
 
 ;;; module lifecycle
 
 (cl-defmethod exlybar-module-init ((m exlybar-tray))
   "Initialize `exlybar-tray' module M.
 This overrides the default module init because system tray is special."
-  (message "initializing tray %s" m)
+  (exlybar--log-debug* "initializing tray %s" m)
   (cl-assert (not exlybar-tray--connection))
   (cl-assert (not exlybar-tray--list))
   (cl-assert (not exlybar-tray--selection-owner-window))
@@ -455,7 +457,7 @@ This overrides the default module init because system tray is special."
 (cl-defmethod exlybar-module-layout ((m exlybar-tray))
   "Layout `exlybar-tray' module M.
 This overrides the default module layout because system tray is special."
-  (message "doing layout for tray")
+  (exlybar--log-debug* "doing layout for tray %s" m)
   (when exlybar-tray--embedder-window
     (xcb:+request exlybar-tray--connection
         (make-instance 'xcb:UnmapWindow
@@ -464,8 +466,8 @@ This overrides the default module layout because system tray is special."
     (dolist (pair exlybar-tray--list)
       (unless (eq exlybar-height
                   (gethash 'prev-height (exlybar-module-cache m)))
-        (message "tray new height %s, resizing icon %s"
-                 exlybar-height (cdr pair))
+        (exlybar--log-debug*
+         "tray new height %s, resizing icon %s" exlybar-height (cdr pair))
         (exlybar-tray--resize-icon
          (car pair)
          (exlybar-tray--icon-width (cdr pair))
@@ -474,7 +476,7 @@ This overrides the default module layout because system tray is special."
         (setq x (+ x (exlybar-tray--icon-width (cdr pair))
                    exlybar-tray-icon-gap))))
     (puthash 'prev-height exlybar-height (exlybar-module-cache m))
-    (message "setting new width to %s" x)
+    (exlybar--log-debug* "setting tray new width to %s" x)
     (setf (exlybar-module-width m) (+ (- (exlybar-module-rpad m)
                                          exlybar-tray-icon-gap) x))
     (unless (eq x (gethash 'prev-width (exlybar-module-cache m)))
@@ -501,7 +503,7 @@ This overrides the default module refresh because system tray is special."
 
 (cl-defmethod exlybar-module-reposition ((m exlybar-tray) x y)
   "Reposition `exlybar-tray' M to X,Y."
-  (message "tray reposition %s,%s %s" x y (exlybar-module-width m))
+  (exlybar--log-debug* "tray reposition %s,%s %s" x y (exlybar-module-width m))
   (xcb:+request exlybar-tray--connection
       (make-instance 'xcb:ConfigureWindow
                      :window exlybar-tray--embedder-window

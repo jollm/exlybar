@@ -32,6 +32,7 @@
 (require 's)
 
 (require 'exlybar-common)
+(require 'exlybar-log)
 ;; FIXME: store colors without relying on an xcb type
 (require 'exlybar-render)
 
@@ -196,7 +197,7 @@ the fonts change.")
 
 (defun exlybar-font--watch-px-size (sym nval oper where)
   "Update `exlybar-font-px-size' when a relevant change occurs."
-  (message "watch px size called %s %s %s %s" sym nval oper where)
+  (exlybar--log-trace* "watch-px-size called %s %s %s %s" sym nval oper where)
   (when (and (not where) (eq 'set oper))
     (let ((height (cl-case sym
                     (exlybar-height (when (/= (symbol-value sym) nval) nval))

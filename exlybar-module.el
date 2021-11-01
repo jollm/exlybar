@@ -37,6 +37,7 @@
 (require 'xcb-render)
 
 (require 'exlybar-color)
+(require 'exlybar-log)
 (require 'exlybar-module-types)
 (require 'exlybar-render)
 
@@ -51,19 +52,22 @@ and a cache. The xcb ids are stored in the module xcb alist."
                (pmap (xcb:generate-id c))
                (gc (xcb:generate-id c))
                ((cl-struct exlybar-module name width colors) m))
-    (message "create module %s pixmap %s" name
-             (exlybar-render-create-pixmap c pmap width exlybar-height))
-    (message "create module %s gc %s" name
-             (xcb:+request-checked+request-check c
-                 (make-instance 'xcb:CreateGC
-                                :cid gc
-                                :drawable exlybar--window
-                                :value-mask (logior xcb:GC:Background
-                                                    xcb:GC:Foreground
-                                                    xcb:GC:GraphicsExposures)
-                                :background (exlybar-module-rgb-background-color colors)
-                                :foreground (exlybar-module-rgb-background-color colors)
-                                :graphics-exposures 0)))
+    (exlybar--log-debug* "exlybar-module-init %s" name)
+    (exlybar--log-debug*
+     "create %s pixmap, errors %s" name
+     (exlybar-render-create-pixmap c pmap width exlybar-height))
+    (exlybar--log-debug*
+     "create %s gc, errors %s" name
+     (xcb:+request-checked+request-check c
+         (make-instance 'xcb:CreateGC
+                        :cid gc
+                        :drawable exlybar--window
+                        :value-mask (logior xcb:GC:Background
+                                            xcb:GC:Foreground
+                                            xcb:GC:GraphicsExposures)
+                        :background (exlybar-module-rgb-background-color colors)
+                        :foreground (exlybar-module-rgb-background-color colors)
+                        :graphics-exposures 0)))
     (exlybar-render-fill-rectangle c gc pmap width exlybar-height)
     (push `(pixmap . ,pmap) (exlybar-module-xcb m))
     (push `(gc . ,gc) (exlybar-module-xcb m))
@@ -219,7 +223,7 @@ This default primary method redraws the text if it has changed."
 
 (cl-defgeneric exlybar-module-exit ((m exlybar-module))
   "Tear down module M."
-  (message "exiting module %s" (exlybar-module-name m))
+  (exlybar--log-debug* "exlybar-module-exit %s" (exlybar-module-name m))
   (pcase-let (((map ('pixmap pmap) ('gc gc) ('gs gs)) (exlybar-module-xcb m)))
     (when pmap
       (xcb:+request exlybar--connection
@@ -228,9 +232,10 @@ This default primary method redraws the text if it has changed."
       (xcb:+request exlybar--connection
           (make-instance 'xcb:FreeGC :gc gc)))
     (when gs
-      (message "trying to free glyphset %s "
-               (xcb:+request-checked+request-check exlybar--connection
-                   (make-instance 'xcb:render:FreeGlyphSet :glyphset gs)))))
+      (exlybar--log-debug*
+       "trying to free glyphset, errors %s"
+       (xcb:+request-checked+request-check exlybar--connection
+           (make-instance 'xcb:render:FreeGlyphSet :glyphset gs)))))
   (setf (exlybar-module-cache m) nil
         (exlybar-module-text m) nil
         (exlybar-module-xcb m) nil))
