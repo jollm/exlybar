@@ -213,7 +213,7 @@ GS the glyphset
 FONT the `fontsloth-font'
 GLYPH-POSITION the `fontsloth-layout-glyph-position'"
   (exlybar--log-trace*
-   "start render-load-glyph font[%s] glyph-position[%s]" font glyph-position)
+   "start render-load-glyph glyph-position[%s]" glyph-position)
   (pcase-let* (((cl-struct fontsloth-layout-glyph-position
                            key y (parent char-code))
                 glyph-position)
