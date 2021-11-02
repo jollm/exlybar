@@ -253,6 +253,7 @@ Initialize the connection, window, graphics context, and modules."
   (run-hook-with-args 'exlybar-before-init-hook)
   (cl-assert (not exlybar--connection))
   (cl-assert (not exlybar--window))
+  (exlybar--log-enable-logging)
   (setq exlybar--connection (xcb:connect))
   ;; apparently ewmh initializes icccm automatically
   (xcb:ewmh:init exlybar--connection)
