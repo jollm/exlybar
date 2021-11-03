@@ -192,6 +192,7 @@ see [[*Usage][Usage]] below.
 
   ;; note this uses a MELPA recipe, so the usual MELPA options also apply
   (quelpa '(exlybar :fetcher github :repo "jollm/exlybar"
+                    :branch "focal"
                     :files (:defaults "modules/*.el")))
 #+END_SRC
 
@@ -202,11 +203,13 @@ First install [[https://github.com/quelpa/quelpa-use-package][quelpa-use-package
   ;; if quelpa use-package is installed, this should install exlybar
   (use-package exlybar
     :quelpa ((exlybar :fetcher github :repo "jollm/exlybar"
+                      :branch "focal"
                       :files (:defaults "modules/*.el"))))
 
   ;; if you want to auto-check for upgrades
   (use-package exlybar
     :quelpa ((exlybar :fetcher github :repo "jollm/exlybar"
+                      :branch "focal"
                       :files (:defaults "modules/*.el")) :upgrade t))
 #+END_SRC
 
