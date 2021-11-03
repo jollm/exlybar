@@ -41,6 +41,7 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 + Dock somewhere other than the screen top (this should be trivial to implement
   but is as yet untested)
 + Help to locate/suggest/select compatible fonts to try
++ Easy and meaningful integration with screen readers
 + Multiple bars and gaps like in Polybar
 + Configurable transparency
 + Animations
