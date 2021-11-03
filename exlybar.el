@@ -26,7 +26,9 @@
 ;;; Commentary:
 
 ;; This module uses xelb to build polybar like modules for displaying status
-;; information
+;; information.
+
+;; *Please see the website for a detailed README.*
 
 ;; To use this module, load and enable it as follows:
 ;;   (use-package exlybar
