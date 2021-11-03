@@ -152,12 +152,46 @@ fontsloth README linked above for a list of tested fonts.
 procedures and customization options may change prior to a 1.0 release.*
 
 * Installation
-This project depends on [[https://github.com/jollm/fontsloth][fontsloth]], which is also not yet in MELPA, so you’ll
-have to install that first if you want to try this.
+First follow the instructions to install [[https://github.com/jollm/fontsloth][fontsloth]].
 
-Pending upload to MELPA, add this directory and file:modules/ to your emacs
-load path and ~(require 'exlybar)~. Also require any desired module features
-from modules/. Also see the use-package example below.
+Pending upload to MELPA, install using [[https://github.com/quelpa/quelpa][quelpa]].
+
+Quelpa allows an installation directly from this repo that is then managed the
+usual way via package.el. Quelpa can be installed from MELPA or bootstrapped
+directly from source if desired.
+
+After a successful installation on Emacs 28, ~M-x: exlybar~ should display an
+empty status bar docked at the top of the screen. If it does not, please open
+an issue. To configure the bar to display one or more of the available modules,
+see [[*Usage][Usage]] below.
+
+** Install directly
+#+BEGIN_SRC emacs-lisp
+  ;;; after installing quelpa
+
+  ;; note this uses a MELPA recipe, so the usual MELPA options also apply
+  (quelpa '(exlybar :fetcher github :repo "jollm/exlybar"
+                    :files (:defaults "modules/*.el")))
+#+END_SRC
+
+** Install with use-package
+First install [[https://github.com/quelpa/quelpa-use-package][quelpa-use-package]] (either with quelpa or from MELPA).
+
+#+BEGIN_SRC emacs-lisp
+  ;; if quelpa use-package is installed, this should install exlybar
+  (use-package exlybar
+    :quelpa ((exlybar :fetcher github :repo "jollm/exlybar"
+                      :files (:defaults "modules/*.el"))))
+
+  ;; if you want to auto-check for upgrades
+  (use-package exlybar
+    :quelpa ((exlybar :fetcher github :repo "jollm/exlybar"
+                      :files (:defaults "modules/*.el")) :upgrade t))
+#+END_SRC
+
+** Update to latest git commit
+After installation:
+~M-x: quelpa-upgrade~
 
 * Usage
 ** Layout and display with modules
