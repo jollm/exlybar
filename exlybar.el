@@ -61,17 +61,16 @@
   (xcb:+request exlybar--connection
       (make-instance 'xcb:UnmapWindow
                      :window exlybar--window))
-  (exlybar--log-debug*
-   "exlybar-refresh: configure window errors: %s"
-   (xcb:+request-checked+request-check exlybar--connection
-       (make-instance 'xcb:ConfigureWindow
-                      :window exlybar--window
-                      :value-mask (logior xcb:ConfigWindow:X
-                                          xcb:ConfigWindow:Width
-                                          xcb:ConfigWindow:Height)
-                      :x 0
-                      :width exlybar-width
-                      :height exlybar-height)))
+  (let ((ecw (xcb:+request-checked+request-check exlybar--connection
+                 (make-instance 'xcb:ConfigureWindow
+                                :window exlybar--window
+                                :value-mask (logior xcb:ConfigWindow:X
+                                                    xcb:ConfigWindow:Width
+                                                    xcb:ConfigWindow:Height)
+                                :x 0
+                                :width exlybar-width
+                                :height exlybar-height))))
+    (exlybar--log-debug* "exlybar-refresh: configure window errors: %s" ecw))
   ;; configure struts
   (xcb:+request exlybar--connection
       (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
@@ -323,18 +322,18 @@ Initialize the connection, window, graphics context, and modules."
                                ,xcb:Atom:_NET_WM_STATE_ABOVE)))
     ;; create gc
     (setq exlybar--gc (xcb:generate-id exlybar--connection))
-    (exlybar--log-debug*
-     "exlybar init create gc errors: %s"
-     (xcb:+request-checked+request-check exlybar--connection
-         (make-instance 'xcb:CreateGC
-                        :cid exlybar--gc
-                        :drawable exlybar--window
-                        :value-mask (logior xcb:GC:Background
-                                            xcb:GC:Foreground)
-                        :background (exlybar--color->pixel
-                                     (exlybar--find-background-color))
-                        :foreground (exlybar--color->pixel
-                                     (exlybar--find-foreground-color)))))
+    (let ((egc
+           (xcb:+request-checked+request-check exlybar--connection
+               (make-instance 'xcb:CreateGC
+                              :cid exlybar--gc
+                              :drawable exlybar--window
+                              :value-mask (logior xcb:GC:Background
+                                                  xcb:GC:Foreground)
+                              :background (exlybar--color->pixel
+                                           (exlybar--find-background-color))
+                              :foreground (exlybar--color->pixel
+                                           (exlybar--find-foreground-color))))))
+      (exlybar--log-debug* "exlybar init create gc errors: %s" egc))
     ;; initialize modules
     (dolist (m exlybar-modules)
       (when (exlybar-module-p m)

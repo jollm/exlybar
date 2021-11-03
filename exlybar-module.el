@@ -53,21 +53,22 @@ and a cache. The xcb ids are stored in the module xcb alist."
                (gc (xcb:generate-id c))
                ((cl-struct exlybar-module name width colors) m))
     (exlybar--log-debug* "exlybar-module-init %s" name)
-    (exlybar--log-debug*
-     "create %s pixmap, errors %s" name
-     (exlybar-render-create-pixmap c pmap width exlybar-height))
-    (exlybar--log-debug*
-     "create %s gc, errors %s" name
-     (xcb:+request-checked+request-check c
-         (make-instance 'xcb:CreateGC
-                        :cid gc
-                        :drawable exlybar--window
-                        :value-mask (logior xcb:GC:Background
-                                            xcb:GC:Foreground
-                                            xcb:GC:GraphicsExposures)
-                        :background (exlybar-module-rgb-background-color colors)
-                        :foreground (exlybar-module-rgb-background-color colors)
-                        :graphics-exposures 0)))
+    (let ((epixmap (exlybar-render-create-pixmap c pmap width exlybar-height))
+          (egc
+           (xcb:+request-checked+request-check c
+               (make-instance 'xcb:CreateGC
+                              :cid gc
+                              :drawable exlybar--window
+                              :value-mask (logior xcb:GC:Background
+                                                  xcb:GC:Foreground
+                                                  xcb:GC:GraphicsExposures)
+                              :background (exlybar-module-rgb-background-color
+                                           colors)
+                              :foreground (exlybar-module-rgb-background-color
+                                           colors)
+                              :graphics-exposures 0))))
+      (exlybar--log-debug* "create %s pixmap, errors %s" name epixmap)
+      (exlybar--log-debug* "create %s gc, errors %s" name egc))
     (exlybar-render-fill-rectangle c gc pmap width exlybar-height)
     (push `(pixmap . ,pmap) (exlybar-module-xcb m))
     (push `(gc . ,gc) (exlybar-module-xcb m))
@@ -232,10 +233,9 @@ This default primary method redraws the text if it has changed."
       (xcb:+request exlybar--connection
           (make-instance 'xcb:FreeGC :gc gc)))
     (when gs
-      (exlybar--log-debug*
-       "trying to free glyphset, errors %s"
-       (xcb:+request-checked+request-check exlybar--connection
-           (make-instance 'xcb:render:FreeGlyphSet :glyphset gs)))))
+      (let ((egs (xcb:+request-checked+request-check exlybar--connection
+                     (make-instance 'xcb:render:FreeGlyphSet :glyphset gs))))
+        (exlybar--log-debug* "trying to free glyphset, errors %s" egs))))
   (setf (exlybar-module-cache m) nil
         (exlybar-module-text m) nil
         (exlybar-module-xcb m) nil))
