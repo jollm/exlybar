@@ -202,6 +202,7 @@ After installation:
   (require 'exlybar-backlight)
   (require 'exlybar-battery)
   (require 'exlybar-date)
+  (require 'exlybar-tray)
   (require 'exlybar-volume)
   (require 'exlybar-wifi)
 
@@ -216,11 +217,14 @@ After installation:
   (defvar my/backlight (exlybar-backlight-create))
   (push my/backlight exlybar-modules)
 
+  (defvar my/tray (exlybar-tray-create))
+  (push my/tray exlybar-modules)
+
   (defvar my/volume (exlybar-volume-create))
-  (push my/volume exlybar-volume-create)
+  (push my/volume exlybar-modules)
 
   (defvar my/wifi (exlybar-wifi-create))
-  (push my/wifi exlybar-wifi-create)
+  (push my/wifi exlybar-modules)
 
   (exlybar)
 
@@ -233,11 +237,11 @@ After installation:
   (setq exlybar-modules (cdr exlybar-modules))
   (push :center exlybar-modules)
 
-  ;;; layout wifi and battery to the left and volume, backlight, and date
+  ;;; layout tray, wifi, and battery to the left and volume, backlight, and date
   ;;; to the right
 
   (setq exlybar-modules
-        (:left my/wifi my/battery :right my/volume my/backlight my/date))
+        (:left my/tray my/wifi my/battery :right my/volume my/backlight my/date))
 
   ;;; exit (exit doesn’t modify layout for next time)
 
@@ -291,17 +295,19 @@ After installation:
   (use-package exlybar
     :defer t
     :config
+    (require 'exlybar-tray)
     (require 'exlybar-date)
     (require 'exlybar-wifi)
     (require 'exlybar-backlight)
     (require 'exlybar-volume)
     (require 'exlybar-battery)
-    (setq my/exly-date (exlybar-date-create)
+    (setq my/exly-tray (exlybar-tray-create)
+          my/exly-date (exlybar-date-create)
           my/exly-wifi (exlybar-wifi-create)
           my/exly-volume (exlybar-volume-create)
           my/exly-backlight (exlybar-backlight-create)
           my/exly-battery (exlybar-battery-create))
-    (setq exlybar-modules (list :left my/exly-date
+    (setq exlybar-modules (list :left my/exly-tray my/exly-date
                                 :right my/exly-wifi my/exly-volume
                                 my/exly-backlight my/exly-battery)))
 
