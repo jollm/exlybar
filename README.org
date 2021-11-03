@@ -13,7 +13,28 @@ Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
 Current version: *0.22.0*
 
+Note: *At present this requires Emacs 28.1*
+If you would like it to work on Emacs 27, please let me know.
+
 Note: *This probably doesn’t work well with multiple screens at the moment.*
+
+* Contents                                                              :TOC:
+- [[#synopsis-of-work-in-progress][Synopsis of work in progress]]
+  - [[#now-supported][Now supported]]
+- [[#not-currently-supported-but-planned][Not currently supported (but planned)]]
+- [[#project-organization][Project organization]]
+- [[#usage-caveats][Usage caveats]]
+- [[#installation][Installation]]
+  - [[#install-directly][Install directly]]
+  - [[#install-with-use-package][Install with use-package]]
+  - [[#update-to-latest-git-commit][Update to latest git commit]]
+- [[#usage][Usage]]
+  - [[#layout-and-display-with-modules][Layout and display with modules]]
+  - [[#configure][Configure]]
+  - [[#with-use-package][With use-package]]
+- [[#screens][Screen(s)]]
+- [[#attribution][Attribution]]
+- [[#contact][Contact]]
 
 * Synopsis of work in progress
 ** Now supported
