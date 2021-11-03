@@ -33,6 +33,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'time-date)
 (require 'solar)
 
 (require 'exlybar-module)
