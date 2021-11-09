@@ -65,6 +65,12 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 + Easy and meaningful integration with screen readers
 + Multiple bars and gaps like in Polybar
 + Configurable transparency
++ Investigate adding a render backend that uses a posframe-like window with a
+  nil parent configured as a dock
+
+  This would provide an easier path to eventually decoupling from X and allow
+  for display in an actual Emacs frame (if desired). It would also allow for
+  built-in font capabilities.
 + Animations
 
 * Project organization
