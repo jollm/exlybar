@@ -35,6 +35,7 @@
 (require 'battery)
 (require 'cl-lib)
 
+(require 'exlybar-log)
 (require 'exlybar-module)
 (require 'exlybar-module-helpers)
 
@@ -116,13 +117,17 @@ The color is decided based on battery percentage. See `exlybar-zone-color'."))
   "Poll the battery status and check whether to update M's text."
   (let* ((status (funcall battery-status-function))
          (txt (format-spec (exlybar-module-format m) status t)))
-    (when (exlybar-module-cache m)
-      (map-put! (exlybar-module-cache m) 'status status))
-    (unless (equal txt (exlybar-module-text m))
-      (setf (exlybar-module-format-spec m)
-            (exlybar-battery--format-spec status)
-            (exlybar-module-text m) txt
-            (exlybar-module-needs-refresh? m) t))))
+    (if status
+        (progn
+          (when (exlybar-module-cache m)
+            (map-put! (exlybar-module-cache m) 'status status))
+          (unless (equal txt (exlybar-module-text m))
+            (setf (exlybar-module-format-spec m)
+                  (exlybar-battery--format-spec status)
+                  (exlybar-module-text m) txt
+                  (exlybar-module-needs-refresh? m) t)))
+      (exlybar--log-info "exlybar-battery: nil status from %s"
+                         battery-status-function))))
 
 (cl-defmethod exlybar-module-init :before ((m exlybar-battery))
   "Set the M's icon and update the text."
