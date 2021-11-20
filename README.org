@@ -375,3 +375,12 @@ fontsloth.
 I’m currently poselyqualityles on librera chat. Feel free to interact as I’d
 like this to be as broadly useful and fun as possible given the current scope
 and limitations.
+
+
+#+ATTR_HTML: :rel license
+[[https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png]]
+[[http://creativecommons.org/licenses/by-nc-sa/4.0/][This documentation is
+licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+International License.]]
+
+Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
