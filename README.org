@@ -179,7 +179,8 @@ fontsloth README linked above for a list of tested fonts.
 procedures and customization options may change prior to a 1.0 release.*
 
 * Installation
-First follow the instructions to install [[https://github.com/jollm/fontsloth][fontsloth]].
+First follow the instructions to install
+[[https://github.com/jollm/fontsloth][fontsloth]] (from MELPA).
 
 Pending upload to MELPA, install using [[https://github.com/quelpa/quelpa][quelpa]].
 
