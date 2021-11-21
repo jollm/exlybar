@@ -45,7 +45,7 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 + [[https://stumpwm.github.io/][Stumpwm]] like format/color code syntax for arranging module text, icon, and
   widget display
 
-+ Rendering of TTF vector text and icon fonts via [[https://github.com/jollm/fontsloth][fontsloth]]
++ Rendering of OTF/TTF vector text and icon fonts via [[https://github.com/jollm/fontsloth][fontsloth]]
 
 + Mix fonts and conditionally change fonts within modules
 
