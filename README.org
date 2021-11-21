@@ -13,7 +13,7 @@ Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
 
 Current version: *0.22.0*
 
-Note: *At present this requires Emacs 28.1*
+Note: *At present this requires Emacs 28.0*
 If you would like it to work on Emacs 27, please let me know.
 
 Note: *This probably doesn’t work well with multiple screens at the moment.*
