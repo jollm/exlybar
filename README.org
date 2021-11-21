@@ -76,9 +76,9 @@ Note: *This probably doesn’t work well with multiple screens at the moment.*
 * Project organization
 Exlybar consists of five primary components:
 + Status bar xcb lifecycle, refresh, and event handling
-  Entry point: file:exlybar.el
+  Entry point: [[./exlybar.el]]
 
-  This delegates to file:exlybar-layout.el to decide which window areas to
+  This delegates to [[./exlybar-layout.el]] to decide which window areas to
   copy/clear during a refresh cycle.
 
   This provides two autoloaded interactive functions:
@@ -87,7 +87,7 @@ Exlybar consists of five primary components:
   + ~(exlybar-exit)~: exit the status bar
 
 + Logical layout helpers
-  Entry point: file:exlybar-layout.el
+  Entry point: [[./exlybar-layout.el]]
 
   Currently this produces horizontal layouts supporting combination of left,
   right, and center alignments of modules. It supports x and y coordinate
@@ -98,7 +98,7 @@ Exlybar consists of five primary components:
   layout changes.
 
 + Port of Stumpwm like color command syntax
-  Entry point: file:exlybar-color.el
+  Entry point: [[./exlybar-color.el]]
 
   These are stumpwm style color/font codes meaning that each module can have a
   format string to arrange its text/icon and allow control of fonts and colors
@@ -126,8 +126,8 @@ Exlybar consists of five primary components:
   *not yet finalized*
 
   Entry points:
-  + file:exlybar-module-types.el
-  + file:exlybar-module.el
+  + [[./exlybar-module-types.el]]
+  + [[./exlybar-module.el]]
 
   At present it consists of a cl-struct base type ~exlybar-module~ and a set
   of generic functions and default primary methods for dispatch on objects of
@@ -154,7 +154,7 @@ Exlybar consists of five primary components:
   provide module specific Emacs hooks.
 
 + Glyph rendering, loading, and compositing
-  Entry point: file:exlybar-render.el
+  Entry point: [[./exlybar-render.el]]
 
   This is used by exlybar-module.el to draw text. It relies on [[https://github.com/jollm/fontsloth][fontsloth]] for
   glyph rasterization and provides an implementation of glyph stream like
