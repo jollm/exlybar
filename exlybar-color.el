@@ -139,55 +139,113 @@ See `exlybar-zone-color'"
   :type 'string
   :group 'exlybar)
 
-;;; fonts
+;;; Try to use safe fallback font lists where possible
+
+(defvar exlybar--font-variable-fallback-list
+  '("IBM Plex Serif"
+    "Deja Vu Serif"
+    "Cantarell")
+  "Default fonts to try for variable pitch.")
+
+(declare-function font-info nil (name))
+
+(cl-defsubst exlybar--font-list-filename-search (font-name-list)
+  "Given FONT-NAME-LIST, return a file path to the first font found,
+  or nil or none are found."
+  (seq-some #'(lambda (v) (when v v))
+	    (cl-mapcar #'(lambda (name)
+			   (when-let ((fuck (font-info name)))
+			     (elt fuck 12)))
+		       font-name-list)))
+
+(cl-defsubst exlybar--make-font-init-fn (sym val font-name-list)
+  (lambda ()
+    (unless val
+      (set sym
+	   (exlybar--font-list-filename-search font-name-list)))))
 
 (defcustom exlybar-font-variable
-  "/usr/share/fonts/TTF/IBMPlexSerif-Regular.ttf"
+  nil
   "The TTF font path for a text font."
   :type 'string
   :group 'exlybar)
 
+(with-eval-after-load "exlybar"
+  (add-hook 'exlybar-before-init-hook
+	    (exlybar--make-font-init-fn
+	     'exlybar-font-variable exlybar-font-variable
+	     exlybar--font-variable-fallback-list)))
+
+(defvar exlybar--font-icon-fallback-list
+  '("Font Awesome")
+  "Default fonts to try for icons.")
+
 (defcustom exlybar-font-icon
-  "/usr/share/fonts/TTF/fontawesome.ttf"
+  nil
   "The TTF font path for an icon font."
   :type 'string
   :group 'exlybar)
 
+(with-eval-after-load "exlybar"
+  (add-hook 'exlybar-before-init-hook
+	    (exlybar--make-font-init-fn
+	     'exlybar-font-icon exlybar-font-icon
+	     exlybar--font-icon-fallback-list)))
+
+(defvar exlybar--font-mono-fallback-list
+  '("IBM Plex Mono"
+    "DejaVu Sans Mono:style=Book")
+  "Default fonts to try for monospace.")
+
 (defcustom exlybar-font-mono
-  "/usr/share/fonts/TTF/IBMPlexMono-Regular.ttf"
+  nil
   "The TTF font path for a text font."
   :type 'string
   :group 'exlybar)
 
+(with-eval-after-load "exlybar"
+  (add-hook 'exlybar-before-init-hook
+	    (exlybar--make-font-init-fn
+	     'exlybar-font-mono exlybar-font-mono
+	     exlybar--font-mono-fallback-list)))
+
 (defcustom exlybar-font-all-the-icons
-  "/usr/share/fonts/TTF/all-the-icons.ttf"
+  nil
   "The TTF font path for all the icons font to add extra icons."
   :type 'string
   :group 'exlybar)
 
+(with-eval-after-load "exlybar"
+  (add-hook 'exlybar-before-init-hook
+	    (exlybar--make-font-init-fn
+	     'exlybar-font-all-the-icons exlybar-font-all-the-icons
+	     '("all-the-icons"))))
+
 (defcustom exlybar-font-map
   (vector
-   exlybar-font-variable
-   exlybar-font-icon
-   exlybar-font-mono
-   exlybar-font-all-the-icons
-   exlybar-font-variable
-   exlybar-font-variable
-   exlybar-font-variable
-   exlybar-font-variable
-   exlybar-font-variable
-   exlybar-font-variable)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-icon)
+   #'(lambda () exlybar-font-mono)
+   #'(lambda () exlybar-font-all-the-icons)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-variable)
+   #'(lambda () exlybar-font-variable))
   "The font map corresponding to color codes ^f0-^f9."
-  :type '(vector string string string string string
-                 string string string string string)
+  :type '(vector function function function function function
+                 function function function function function)
   :group 'exlybar)
 
 (cl-defun exlybar-font--precompute-px-sizes (height &optional font-map)
   "Given a HEIGHT, compute pixel sizes for all fonts in the font map."
+  (exlybar--log-trace* "precompute-px-size called %s %s" height (mapcar #'funcall font-map))
   (apply
    #'vector
    (cl-loop for f across (or font-map exlybar-font-map) collect
-            (fontsloth-font-compute-px (fontsloth-load-font f) height))))
+            (when-let ((font-path (funcall f)))
+	      (fontsloth-font-compute-px (fontsloth-load-font font-path) height)))))
 
 (defvar exlybar-font-px-size (exlybar-font--precompute-px-sizes exlybar-height)
   "Precomputed font px size map.
@@ -204,15 +262,18 @@ the fonts change.")
                     (exlybar-font-map nil)))
           (font-map (cl-case sym
                       (exlybar-height nil)
-                      (exlybar-font-map (unless (equal (symbol-value sym) nval)
+                      (exlybar-font-map (unless (equal (mapcar #'funcall (symbol-value sym))
+						       (mapcar #'funcall nval))
                                           nval)))))
-      (when (or height font-map)
+      (when (or height font-map exlybar-height)
         (setq exlybar-font-px-size
               (exlybar-font--precompute-px-sizes
                (or height exlybar-height) (or font-map exlybar-font-map)))))))
 
 (add-variable-watcher 'exlybar-height #'exlybar-font--watch-px-size)
 (add-variable-watcher 'exlybar-font-map #'exlybar-font--watch-px-size)
+(dolist (var '(exlybar-font-variable exlybar-font-icon exlybar-font-mono exlybar-font-all-the-icons))
+  (add-variable-watcher var #'exlybar-font--watch-px-size))
 
 (defcustom exlybar-font-px-delta
   [0.0
@@ -260,7 +321,7 @@ FG t if a foreground color, nil if a background color"
 
 (defsubst exlybar-font-find (font-index)
   "Find a font in `exlybar-font-map' given FONT-INDEX."
-  (aref exlybar-font-map font-index))
+  (funcall (aref exlybar-font-map font-index)))
 
 (defvar exlybar--color-pattern
   "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^(.*?)"
