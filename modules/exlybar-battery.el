@@ -1,9 +1,10 @@
 ;;; exlybar-battery.el --- An exlybar battery module  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
+;; Copyright (C) 2023 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.22.0
+;;      Fran Ley <fran.ley@mailfence.com>
+;; Version: 0.22.2
 ;; Package-Requires: ((cl-lib "0.5") (emacs "27.1"))
 ;; Keywords: window-manager, status-bar, exwm
 
@@ -44,7 +45,7 @@
   :group 'exlybar)
 
 (defcustom exlybar-battery-icons
-  '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (100 . ?))
+  '((10 . ?) (35 . ?) (60 . ?) (85 . ?) (101 . ?))
   "Icons for exlybar-battery discharge thresholds.
 See `exlybar-choose-icon' for how it is used."
   :type 'alist
