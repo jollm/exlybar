@@ -210,6 +210,9 @@ see [[*Usage][Usage]] below.
 ** Install with use-package
 First install [[https://github.com/quelpa/quelpa-use-package][quelpa-use-package]] (either with quelpa or from MELPA).
 
+Note: [[https://github.com/radian-software/straight.el][straight.el]] is another option, either standalone or with
+use-package.
+
 #+BEGIN_SRC emacs-lisp
   ;; if quelpa use-package is installed, this should install exlybar
   (use-package exlybar
@@ -227,6 +230,23 @@ First install [[https://github.com/quelpa/quelpa-use-package][quelpa-use-package
 ** Update to latest git commit
 After installation:
 ~M-x: quelpa-upgrade~
+
+* Guix Installation
+
+When using guix system/guix package manager to manage Emacs packages,
+the below linked package definitions should work from a local channel:
+
+[[./exlybar.scm.org][./exlybar.scm.org]]
+
+Update commit references/tags to the desired revisions/tag names.
+
+To compute the base32 hash, use a command like =guix hash -S nar .=
+after checking out the desired revision.
+
+Once the channel definition is updated, run =guix pull=.
+
+Then, =guix install emacs-exlybar= should suffice to complete
+installation.
 
 * Usage
 ** Layout and display with modules
@@ -276,7 +296,7 @@ After installation:
   ;;; to the right
 
   (setq exlybar-modules
-        (:left my/tray my/wifi my/battery :right my/volume my/backlight my/date))
+	`(:left ,my/tray ,my/wifi ,my/battery :right ,my/volume ,my/backlight ,my/date))
 
   ;;; exit (exit doesn’t modify layout for next time)
 
@@ -376,6 +396,8 @@ Emacs and Exwm as well as [[https://github.com/ch11ng/exwm][Exwm]] itself along 
 attempt to list as the project develops further.  See also attributions for
 fontsloth.
 
+Thanks to Fran Ley for helping to maintain this project.
+
 * Contact
 I’m currently poselyqualityles on librera chat. Feel free to interact as I’d
 like this to be as broadly useful and fun as possible given the current scope
@@ -388,4 +410,4 @@ and limitations.
 licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0
 International License.]]
 
-Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
+Copyright (C) 2023 Jo Gay <jo.gay@mailfence.com>
