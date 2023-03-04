@@ -32,6 +32,7 @@ unemployed.
   - [[#install-directly][Install directly]]
   - [[#install-with-use-package][Install with use-package]]
   - [[#update-to-latest-git-commit][Update to latest git commit]]
+- [[#guix-installation][Guix Installation]]
 - [[#usage][Usage]]
   - [[#layout-and-display-with-modules][Layout and display with modules]]
   - [[#configure][Configure]]
