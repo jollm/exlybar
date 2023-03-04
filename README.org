@@ -18,10 +18,6 @@ If you would like it to work on Emacs 27, please let me know.
 
 Note: *This probably doesn’t work well with multiple screens at the moment.*
 
-If you would like to help me afford hardware for testing, please donate to
-$j09y in cash app. Any help is greatly appreciated as I am presently
-unemployed.
-
 * Contents                                                              :TOC:
 - [[#synopsis-of-work-in-progress][Synopsis of work in progress]]
   - [[#now-supported][Now supported]]
