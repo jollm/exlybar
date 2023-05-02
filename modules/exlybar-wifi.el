@@ -62,28 +62,32 @@ See `exlybar-zone-color'"
 Doing this even though iw says 'Do NOT screenscrape this tool, we don't
 consider its output stable.' :(
 This should be deprecated in favor of something better."
-  (when-let ((dev (exlybar-wifi-guess-device)))
-    (->> (concat "iw " dev " info")
-        (shell-command-to-string)
-        (s-lines)
-        (s-join ";")
-        (s-match ".*?[[:blank:]]*ssid[[:blank:]]*\\(.*?\\);")
-        (cadr))))
+  (let ((default-directory (f-full "~")) ; ensure status checks don't remote
+        )
+    (when-let ((dev (exlybar-wifi-guess-device)))
+      (->> (concat "iw " dev " info")
+          (shell-command-to-string)
+          (s-lines)
+          (s-join ";")
+          (s-match ".*?[[:blank:]]*ssid[[:blank:]]*\\(.*?\\);")
+          (cadr)))))
 
 (defun exlybar-wifi-iw-quality ()
   "For now scrape iw <dev> link output.
 Doing this even though iw says 'Do NOT screenscrape this tool, we don't
 consider its output stable.' :(
 This should be deprecated in favor of something better."
-  (when-let* ((dev (exlybar-wifi-guess-device))
-              (qual (->> (concat "iw " dev " link")
-                         (shell-command-to-string)
-                         (s-lines)
-                         (s-join ";")
-                         (s-match (concat ".*?[[:blank:]]*signal:[[:blank:]]*"
-                                          "\\(-?[[:digit:]]+?\\) dBm;"))
-                         (cadr))))
-    qual))
+  (let ((default-directory (f-full "~")) ; ensure status checks don't remote
+        )
+    (when-let* ((dev (exlybar-wifi-guess-device))
+                (qual (->> (concat "iw " dev " link")
+                           (shell-command-to-string)
+                           (s-lines)
+                           (s-join ";")
+                           (s-match (concat ".*?[[:blank:]]*signal:[[:blank:]]*"
+                                            "\\(-?[[:digit:]]+?\\) dBm;"))
+                           (cadr))))
+      qual)))
 
 ;;; let's just try a simple display of link quality and ssid
 (cl-defstruct (exlybar-wifi
