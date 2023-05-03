@@ -162,12 +162,12 @@ sending the code to me, so I can integrate it into this file.")
 (define-public emacs-exlybar
   (package
    (name "emacs-exlybar")
-   (version "0.22.2")
+   (version "0.22.3")
    (source (origin
             (method git-fetch)
             (uri (git-reference
                   (url "https://github.com/jollm/exlybar.git")
-                  (commit "v0.22.2")))
+                  (commit "v0.22.3")))
             (sha256
              (base32
               "<base 32 hash>"))))
