@@ -50,12 +50,21 @@ See `exlybar-zone-color'"
   :type 'list
   :group 'exlybar-wifi)
 
+(defcustom exlybar-wifi-preferred-interface nil
+  "Preferred wifi interface name as listed by command `iw dev'.
+
+Default nil means to choose automatically"
+  :type '(choice (const :tag "Auto" nil)
+		 (string))
+  :group 'exlybar-wifi)
+
 (defun exlybar-wifi-guess-device ()
   "Try to guess the wireless device."
-  (seq-some (lambda (p)
-              (when (f-exists? (f-join p "wireless"))
-                (f-filename p)))
-            (f-entries "/sys/class/net/")))
+  (or exlybar-wifi-preferred-interface
+      (seq-some (lambda (p)
+		  (when (f-exists? (f-join p "wireless"))
+                    (f-filename p)))
+		(f-entries "/sys/class/net/"))))
 
 (defun exlybar-wifi-iw-essid ()
   "For now scrape iw <dev> info output.
@@ -117,8 +126,8 @@ It applies zone colors to %p quality format specifier."
   "Build the `format-spec' spec used to generate module text given ICON.
 QUAL is the wifi signal quality as a string"
   `((?i . ,(string icon))
-    (?e . ,(exlybar-wifi-iw-essid))
-    (?p . ,qual)))
+    (?e . ,(or (exlybar-wifi-iw-essid) "nil"))
+    (?p . ,(or qual "nil"))))
 
 (defvar exlybar-wifi--update-timer nil "A variable to hold the update timer.")
 
