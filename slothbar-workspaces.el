@@ -86,7 +86,7 @@ the head of the list."
 
 (cl-defstruct (slothbar-workspaces
                (:include slothbar-module (name "workspaces") (icon ?󰯉)
-                         (format "^f2^2^[^5^f4%i^]%w")
+                         (format "^2^[^5^f4%i^]%w")
                          (format-fn #'slothbar-workspaces-format-format))
                (:constructor slothbar-workspaces-create)
                (:copier nil)))
