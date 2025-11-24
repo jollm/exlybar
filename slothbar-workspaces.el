@@ -47,6 +47,7 @@
 
 (require 'cl-lib)
 (require 'compat)
+(require 'mule-util)
 (require 'rx)
 (require 'xcb)
 (require 'xcb-ewmh)
@@ -96,14 +97,22 @@ the head of the list."
   :type 'boolean
   :group 'slothbar-workspaces)
 
+(defcustom slothbar-workspaces-truncate-to-width 16
+  "A positive integer indicating a limit at which to truncate workspace names."
+  :type 'natnum
+  :group 'slothbar-workspaces)
+
 (defun slothbar-workspaces--format-fn-spec (ws-list)
   "Generate a spec suitable for `format-spec' from data in WS-LIST.
 
 See `slothbar-workspaces-generate-list-fn' for the expected structure of
 WS-LIST."
   (cl-flet ((sanitize (s)
-              (string-replace " " "-"
-               (replace-regexp-in-string "[\\^]" "^^" (string-trim s)))))
+              (truncate-string-to-width
+               (string-replace " " "-"
+                               (replace-regexp-in-string "[\\^]" "^^" (string-trim s)))
+               slothbar-workspaces-truncate-to-width
+               nil nil t)))
     `((?w . ,(cl-loop for (ws status) in ws-list
                       for ws-safe = (sanitize ws)
                       concat
