@@ -149,7 +149,7 @@ WS-LIST."
 
 ;;; Begin slothbar-workspaces-generate-list-fn implementations
 
-(declare-function shorten-strings "shorten" (lst &optional tail-count))
+(declare-function shorten-strings "shorten" (lst))
 
 ;;; ewmh (extended window manager hints)
 
