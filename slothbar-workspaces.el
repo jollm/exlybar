@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 Jo Gay <jo.gay@mailfence.com>
 
 ;; Author: Jo Gay <jo.gay@mailfence.com>
-;; Version: 0.30.1
+;; Version: 0.30.2
 ;; Homepage: https://codeberg.org/agnes-li/slothbar
 ;; Keywords: frames, hardware
 

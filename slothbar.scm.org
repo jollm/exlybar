@@ -163,12 +163,12 @@
   (define-public emacs-slothbar
     (package
      (name "emacs-slothbar")
-     (version "0.30.1")
+     (version "0.30.2")
      (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://codeberg.org/agnes-li/slothbar.git")
-                    (commit "v0.30.1")))
+                    (commit "v0.30.2")))
               (sha256
                (base32
                 "<base 32 hash>"))))
