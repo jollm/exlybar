@@ -37,6 +37,8 @@
 (require 'ert)
 (require 'fontsloth-layout)
 
+(require 'slothbar)
+(require 'slothbar-backend)
 (require 'slothbar-layout)
 (require 'slothbar-module)
 (require 'slothbar-draw-op)
@@ -147,6 +149,30 @@
     (should (= (length ops) 1))
     (should (eq (slothbar-draw-op-color (car ops))
                 (slothbar-color-find 2 t)))))
+
+(cl-defstruct (slothbar-unit-backend (:include slothbar-backend))
+  "A test backend."
+  features)
+
+(cl-defstruct (slothbar-unit-unsupported
+               (:include slothbar-module)
+               (:constructor slothbar-unit-unsupported-create))
+  "A module that is unsupported on the test backend.")
+
+(cl-defmethod slothbar-module-supported-p
+  ((_m slothbar-unit-unsupported) (_backend slothbar-unit-backend))
+  "Pretend this module needs X-only facilities."
+  nil)
+
+(ert-deftest slothbar-unit-module-gating ()
+  "Unsupported modules are dropped during module construction."
+  (let ((slothbar--backend (make-slothbar-unit-backend :kind 'test))
+        (slothbar-modules
+         (list (slothbar-module-create :name "plain")
+               (slothbar-unit-unsupported-create :name "x-only"))))
+    (slothbar--construct-modules)
+    (should (equal (mapcar #'slothbar-module-name slothbar--modules)
+                   '("plain")))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

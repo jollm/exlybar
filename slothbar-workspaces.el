@@ -92,6 +92,11 @@ the head of the list."
                (:constructor slothbar-workspaces-create)
                (:copier nil)))
 
+(cl-defmethod slothbar-module-supported-p
+  ((_m slothbar-workspaces) (backend slothbar-backend))
+  "Workspaces read EWMH root-window properties."
+  (slothbar-backend-supports-p backend 'ewmh))
+
 (defcustom slothbar-workspaces-ensure-ewmh nil
   "Non-nil to ensure ewmh mode if it is not already enabled."
   :type 'boolean

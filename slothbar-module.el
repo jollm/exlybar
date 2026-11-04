@@ -44,6 +44,7 @@
 
 (require 'cl-lib)
 
+(require 'slothbar-backend)
 (require 'slothbar-color)
 (require 'slothbar-util)
 
@@ -101,6 +102,16 @@
   "Refresh any backend status information required by module M.")
 
 (cl-defgeneric slothbar-module-exit (m) "Tear down module M.")
+
+(cl-defgeneric slothbar-module-supported-p (m backend)
+  "Return non-nil when module M can run on display BACKEND.
+Modules that depend on X-only facilities override this to consult
+`slothbar-backend-supports-p'.")
+
+(cl-defmethod slothbar-module-supported-p
+  ((_m slothbar-module) (_backend slothbar-backend))
+  "By default every module supports every backend."
+  t)
 
 (provide 'slothbar-module)
 

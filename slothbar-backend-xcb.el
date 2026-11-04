@@ -90,6 +90,11 @@
   "Create an unopened xcb backend."
   (slothbar-backend-xcb--make :kind 'xcb))
 
+(cl-defmethod slothbar-backend-supports-p
+  ((_backend slothbar-backend-xcb) _feature)
+  "The xcb backend supports every slothbar feature."
+  t)
+
 ;;; Accessors for X-only modules
 
 (defun slothbar-xcb-connection ()

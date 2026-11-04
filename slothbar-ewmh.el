@@ -283,8 +283,16 @@ DATA is the marshalled event data"
     ;; of the child, however, not all window managers set that
     (and (= window child-check))))
 
-(defun slothbar-ewmh--init ()
+(cl-defun slothbar-ewmh--init ()
   "Initialize the global mode `slothbar-ewmh-mode'."
+  (unless (and slothbar--backend
+               (slothbar-backend-supports-p slothbar--backend 'ewmh))
+    (message "slothbar-ewmh-mode is not supported on the %s backend"
+             (if slothbar--backend
+                 (slothbar-backend-kind slothbar--backend)
+               "current"))
+    (when slothbar-ewmh-mode (slothbar-ewmh-mode -1))
+    (cl-return-from slothbar-ewmh--init nil))
   (if (not (or (slothbar-ewmh--check-conforming)
                (y-or-n-p (format "WM %s may not support ewmh, try anyway? "
                                  (getenv "DESKTOP_SESSION")))))
@@ -319,8 +327,11 @@ DATA is the marshalled event data"
       (xcb:+event (slothbar-xcb-connection) 'xcb:PropertyNotify
                   #'slothbar-ewmh--on-PropertyNotify))))
 
-(defun slothbar-ewmh--exit ()
+(cl-defun slothbar-ewmh--exit ()
   "Exit the global mode `slothbar-ewmh-mode'."
+  (unless (and slothbar--backend
+               (slothbar-backend-supports-p slothbar--backend 'ewmh))
+    (cl-return-from slothbar-ewmh--exit nil))
   (when (slothbar-enabled-p)
     (cl-loop for client across slothbar-ewmh--client-list
              do (slothbar-backend-xcb--clear-event-mask client))

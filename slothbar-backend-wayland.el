@@ -102,6 +102,11 @@
   "Create an unopened Wayland backend."
   (slothbar-backend-wayland--make :kind 'wayland))
 
+(cl-defmethod slothbar-backend-supports-p
+  ((_backend slothbar-backend-wayland) feature)
+  "The Wayland backend has no X-only facilities."
+  (memq feature '(surface exclusive-zone layer-shell buffer-scale)))
+
 ;;; Colors and pixels
 
 (defun slothbar-backend-wayland--color-vector (color)

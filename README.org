@@ -41,8 +41,8 @@ color will match the current Emacs background color.
 The Wayland backend is an independent Wayland client, so Emacs may itself be
 running under XWayland or a pgtk/Wayland frame.  It requires [[../elwl][elwl]] and the
 =fd-fairy= dynamic module on =load-path=.  X-only modules such as the system
-tray, EWMH workspaces, and RandR do not work on Wayland; omit them from
-=slothbar-modules=.
+tray and EWMH workspaces are skipped automatically; =slothbar-randr-mode= and
+=slothbar-ewmh-mode= report that they are unsupported and disable themselves.
 
 ** Displaying modules
 

@@ -107,6 +107,15 @@ Return VALUE."
                                  (slothbar-xcb-window))
           (slothbar-smoke--check "created a background pixmap"
                                  (slothbar-backend-xcb-pixmap backend))
+          (slothbar-smoke--check "xcb supports the system tray"
+                                 (slothbar-backend-supports-p
+                                  backend 'system-tray))
+          (slothbar-smoke--check "xcb supports ewmh"
+                                 (slothbar-backend-supports-p
+                                  backend 'ewmh))
+          (slothbar-smoke--check "xcb supports randr"
+                                 (slothbar-backend-supports-p
+                                  backend 'randr))
           (slothbar-module-init module)
           (slothbar-smoke--check "module initialized with backend resources"
                                  (slothbar-module-initialized module))

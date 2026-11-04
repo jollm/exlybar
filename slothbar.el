@@ -374,16 +374,28 @@ NVAL is check against the existing value for any changes."
 (defun slothbar--construct-modules ()
   "Construct modules from layout given in `slothbar-modules'."
     (setq slothbar--modules
-          (mapcar (lambda (val)
-                    (cond
-                     ((or (keywordp val) (slothbar-module-p val))
-                      val)
-                     ((functionp val)
-                      (funcall val))
-                     ((and (listp val) (functionp (car val)))
-                      (apply (car val) (cdr val)))
-                     (t (error "Unsupported type in slothbar-modules: %s" val))))
-                  slothbar-modules)))
+          (seq-filter
+           (lambda (m)
+             (or (not (slothbar-module-p m))
+                 (null slothbar--backend)
+                 (if (slothbar-module-supported-p m slothbar--backend)
+                     t
+                   (message
+                    "Slothbar: skipping %s; not supported on the %s backend"
+                    (slothbar-module-name m)
+                    (slothbar-backend-kind slothbar--backend))
+                   nil)))
+           (mapcar (lambda (val)
+                     (cond
+                      ((or (keywordp val) (slothbar-module-p val))
+                       val)
+                      ((functionp val)
+                       (funcall val))
+                      ((and (listp val) (functionp (car val)))
+                       (apply (car val) (cdr val)))
+                      (t (error "Unsupported type in slothbar-modules: %s"
+                                val))))
+                   slothbar-modules))))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
   "(Re)construct modules when `slothbar-modules' is modified.

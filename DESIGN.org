@@ -405,8 +405,8 @@ Each stage leaves the X bar working.
    struct.  No behavior change. Verify by running the bar under Xorg.
 3. *Explicit geometry and draw ops.*  Layout takes width/height arguments,
    add =slothbar-draw-op= and the pure color-run function.
-4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling, and
-   backend selection are implemented.  X-only module feature gating remains.
+4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling,
+   backend selection, and X-only module feature gating are implemented.
 5. *Optional unification.*  Move X onto the shared rasterizer and delete the
    XRender glyphset/pen path, if output matches.
 

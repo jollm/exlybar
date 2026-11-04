@@ -90,6 +90,11 @@ that must be repainted, or nil if nothing is known to be stale.")
 (cl-defgeneric slothbar-backend-reset-module-cache (backend module)
   "Discard BACKEND's render cache for MODULE.")
 
+(cl-defgeneric slothbar-backend-supports-p (backend feature)
+  "Return non-nil when BACKEND supports FEATURE.
+Known features include `system-tray', `ewmh', `randr', `layer-shell', and
+`buffer-scale'.")
+
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
 (declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())
 

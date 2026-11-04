@@ -109,6 +109,35 @@
           (slothbar-wayland-check
            "layer configure was acknowledged"
            (slothbar-backend-wayland-configured-serial backend))
+          (slothbar-wayland-check
+           "Wayland has no system tray support"
+           (not (slothbar-backend-supports-p backend 'system-tray)))
+          (slothbar-wayland-check
+           "Wayland has no ewmh support"
+           (not (slothbar-backend-supports-p backend 'ewmh)))
+          (slothbar-wayland-check
+           "Wayland has no randr support"
+           (not (slothbar-backend-supports-p backend 'randr)))
+          ;; X-only modules are filtered out during construction.
+          (require 'slothbar-tray)
+          (require 'slothbar-workspaces)
+          (let ((slothbar-modules
+                 (list #'slothbar-tray-create
+                       #'slothbar-workspaces-create)))
+            (slothbar--construct-modules)
+            (slothbar-wayland-check
+             "X-only modules are gated on Wayland"
+             (null slothbar--modules)))
+          (require 'slothbar-ewmh)
+          (require 'slothbar-randr)
+          (slothbar-ewmh-mode 1)
+          (slothbar-wayland-check
+           "ewmh mode disables itself on Wayland"
+           (not slothbar-ewmh-mode))
+          (slothbar-randr-mode 1)
+          (slothbar-wayland-check
+           "randr mode disables itself on Wayland"
+           (not slothbar-randr-mode))
           (let* ((scale (slothbar-backend-wayland-scale backend))
                  (width (slothbar-backend-wayland-logical-width backend))
                  (height (slothbar-backend-wayland-logical-height backend)))

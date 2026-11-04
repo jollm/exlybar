@@ -73,6 +73,11 @@
                (:copier nil))
   "A system tray module.")
 
+(cl-defmethod slothbar-module-supported-p
+  ((_m slothbar-tray) (backend slothbar-backend))
+  "System tray requires the XEmbed system tray protocol."
+  (slothbar-backend-supports-p backend 'system-tray))
+
 ;;; We need this extension to handle client message
 (defclass slothbar-tray--ClientMessage
   (xcb:icccm:--ClientMessage xcb:ClientMessage)

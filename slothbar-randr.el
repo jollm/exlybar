@@ -108,10 +108,18 @@ Refresh when any RandR 1.5 monitor changes."
       (when (eq window (slothbar-xcb-window))
         (slothbar-refresh)))))
 
-(defun slothbar-randr--init ()
+(cl-defun slothbar-randr--init ()
   "Initialize RandR extension and slothbar RandR module.
 
 This is adapted from the EXWM RandR module."
+  (unless (and slothbar--backend
+               (slothbar-backend-supports-p slothbar--backend 'randr))
+    (message "slothbar-randr-mode is not supported on the %s backend"
+             (if slothbar--backend
+                 (slothbar-backend-kind slothbar--backend)
+               "current"))
+    (when slothbar-randr-mode (slothbar-randr-mode -1))
+    (cl-return-from slothbar-randr--init nil))
   (when (= 0 (slot-value (xcb:get-extension-data
                           (slothbar-xcb-connection) 'xcb:randr)
                          'present))
