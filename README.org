@@ -29,6 +29,21 @@ for future reference.
 At first there is an empty bar without any modules. The background
 color will match the current Emacs background color.
 
+** Display backend
+
+=slothbar-backend= selects the display backend:
+
+- =auto= (default) uses Wayland when =WAYLAND_DISPLAY= names an existing
+  socket and elwl is loadable; otherwise it uses =xcb=.
+- =xcb= forces the X11 backend.
+- =wayland= forces the wlr-layer-shell backend.
+
+The Wayland backend is an independent Wayland client, so Emacs may itself be
+running under XWayland or a pgtk/Wayland frame.  It requires [[../elwl][elwl]] and the
+=fd-fairy= dynamic module on =load-path=.  X-only modules such as the system
+tray, EWMH workspaces, and RandR do not work on Wayland; omit them from
+=slothbar-modules=.
+
 ** Displaying modules
 
 The customizable variable =slothbar-modules= is a list of either
@@ -193,25 +208,27 @@ installation.
 + Easy and meaningful integration with screen readers
 + Multiple bars and gaps like in Polybar
 + Configurable transparency
-+ Investigate adding a render backend that uses a posframe-like window with a
-  nil parent configured as a dock
-
-  This would provide an easier path to eventually decoupling from X and allow
-  for display in an actual Emacs frame (if desired). It would also allow for
-  built-in font capabilities.
++ Investigate rendering the bar inside an actual Emacs frame, if desired
 + Animations
 
 * Project organization
-Slothbar consists of five primary components:
-+ Status bar xcb lifecycle, refresh, and event handling
+Slothbar consists of the following primary components:
++ Status bar lifecycle and backend dispatch
   Entry point: [[./slothbar.el][./slothbar.el]]
 
   This delegates to [[./slothbar-layout.el][./slothbar-layout.el]] to decide which window areas to
-  copy/clear during a refresh cycle.
+  copy/clear during a refresh cycle, and to a display backend for
+  presentation.
 
   This provides a minor mode, =slothbar-mode=
   + =M-x: slothbar-mode=: display/exit the status bar
 
+
++ Display backends
+  Entry points:
+  + [[./slothbar-backend.el][./slothbar-backend.el]]: backend protocol and selection
+  + [[./slothbar-backend-xcb.el][./slothbar-backend-xcb.el]]: X11 dock window, struts, and events
+  + [[./slothbar-backend-wayland.el][./slothbar-backend-wayland.el]]: wlr-layer-shell, shm buffers, and rasterizer
 
 + Logical layout helpers
   Entry point: [[./slothbar-layout.el][./slothbar-layout.el]]
@@ -237,7 +254,8 @@ Slothbar consists of five primary components:
   - :font, shorthand ^f[0-9]
     ~slothbar-font-candidates~ is customizable and maps 0-9 to font paths
   - :fg, shorthand ^[0-9]~?  ~slothbar-color-map-fg~ is customizable and maps
-    0-9 to xcb colors The optional ~ suffix (not in stumpwm) indicates to apply
+    0-9 to colors stored as ~slothbar-color-rgb~ values. The optional ~ suffix
+    (not in stumpwm) indicates to apply
     the color locally, meaning only to non color commands preceding the next
     color command if any. This is implemented as an implicit :push :pop around
     applicable segments.

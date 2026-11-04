@@ -91,14 +91,36 @@ that must be repainted, or nil if nothing is known to be stale.")
   "Discard BACKEND's render cache for MODULE.")
 
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
+(declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())
+
+(defun slothbar-backend--wayland-available-p ()
+  "Return non-nil when a Wayland socket and the elwl client are available."
+  (let* ((display (getenv "WAYLAND_DISPLAY"))
+         (runtime (getenv "XDG_RUNTIME_DIR"))
+         (socket (and display
+                      (if (string-prefix-p "/" display)
+                          display
+                        (and runtime (expand-file-name display runtime))))))
+    (and socket
+         (file-exists-p socket)
+         (condition-case nil
+             (progn (require 'elwl) t)
+           (error nil)))))
 
 (defun slothbar-backend-create (&optional kind)
-  "Create a backend of KIND, defaulting to xcb.
-The concrete backend module is loaded on demand."
-  (pcase (or kind 'xcb)
+  "Create a backend of KIND, defaulting to `auto'.
+KIND is `auto', `xcb', or `wayland'.  The concrete backend module is loaded on
+demand."
+  (pcase (or kind 'auto)
+    ('auto (if (slothbar-backend--wayland-available-p)
+               (slothbar-backend-create 'wayland)
+             (slothbar-backend-create 'xcb)))
     ('xcb
      (require 'slothbar-backend-xcb)
      (slothbar-backend-xcb-create))
+    ('wayland
+     (require 'slothbar-backend-wayland)
+     (slothbar-backend-wayland-create))
     (_ (error "Unsupported slothbar backend: %s" kind))))
 
 (provide 'slothbar-backend)

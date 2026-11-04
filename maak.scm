@@ -18,6 +18,11 @@
   "Run the xcb backend smoke test under headless sway and Xwayland."
   ($ '("bash test/slothbar-xwayland-smoke.sh")))
 
+;; Run the live Wayland backend smoke test under headless sway.
+(define (test-wayland)
+  "Run the Wayland backend smoke test under headless sway."
+  ($ '("bash test/slothbar-wayland-smoke.sh")))
+
 ;; Run the pure layout/damage/draw-op tests.
 (define (test-unit)
   "Run the pure unit tests."
@@ -27,6 +32,7 @@
 
 ;; Run the pure tests and the live X backend smoke test.
 (define (test)
-  "Run the unit tests and the Xwayland smoke test."
+  "Run the unit tests, the Wayland smoke test, and the Xwayland smoke test."
   (test-unit)
+  (test-wayland)
   (test-xwayland))

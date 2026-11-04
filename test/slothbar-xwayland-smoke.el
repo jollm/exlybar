@@ -84,7 +84,8 @@ Return VALUE."
         slothbar-height 20
         slothbar-offset-x 0
         slothbar-offset-y 0
-        slothbar-is-bottom nil)
+        slothbar-is-bottom nil
+        slothbar-backend 'xcb)
   (setq slothbar-font--color-code-map (slothbar-font-map-candidates))
   (slothbar-smoke--check "system font found for ^f0"
                          (slothbar-font-find 0))

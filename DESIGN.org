@@ -405,8 +405,8 @@ Each stage leaves the X bar working.
    struct.  No behavior change. Verify by running the bar under Xorg.
 3. *Explicit geometry and draw ops.*  Layout takes width/height arguments,
    add =slothbar-draw-op= and the pure color-run function.
-4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling,
-   feature gating, backend selection.
+4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling, and
+   backend selection are implemented.  X-only module feature gating remains.
 5. *Optional unification.*  Move X onto the shared rasterizer and delete the
    XRender glyphset/pen path, if output matches.
 
@@ -417,7 +417,11 @@ Each stage leaves the X bar working.
   =slothbar-text-draw-ops=.  Run it with =maak test-unit=.
 - Live X backend: =test/slothbar-xwayland-smoke.sh= boots headless sway and
   Xwayland and exercises the xcb backend and the core start/exit lifecycle.
-  Run it with =maak test-xwayland=; =maak test= runs both.
+  Run it with =maak test-xwayland=.
+- Live Wayland backend: =test/slothbar-wayland-smoke.sh= boots headless sway
+  and runs the Wayland backend at scale 2, including configure, frame
+  composition, glyph pixels, presentation, and core start/exit.  Run it with
+  =maak test-wayland=; =maak test= runs the unit, Wayland, and Xwayland tests.
 - Rasterizer: golden-image tests over a fixed font and text; compare tiles
   against committed pixel fixtures or hashes, no compositor required.
 - Wayland protocol: elwl's fixture server covers registry, shm,
