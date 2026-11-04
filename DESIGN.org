@@ -1,0 +1,459 @@
+#+TITLE: slothbar — Pluggable render/display backends
+#+DATE: 2026-11-04
+#+STARTUP: overview
+#+OPTIONS: toc:2 num:nil ^:{}
+
+* 1. Purpose
+
+Add a Wayland rendering backend alongside the existing xcb backend, while
+keeping the Xorg path working unchanged.  The change should also clean up the
+boundary between:
+
+- the *logical model*: modules, format strings, colors, font layout
+- the *composition model*: placements and damage, as produced by
+  =slothbar-layout=
+- the *display backend*: connection, surface/window, pixel surfaces, event
+  handling, presentation
+
+=slothbar-mode=, =slothbar-modules=, the =slothbar-*= defcustoms, hooks,
+module constructors, and the =slothbar-module-*= lifecycle generic names
+are not renamed or re-signatured.
+
+* 2. What is already backend-neutral
+
+- =slothbar-layout.el= is pure elisp: module list to
+  =((left center right))= to a list of =((x y) . module)= placements, plus
+  =slothbar-layout-extents= and =slothbar-layout-subtract-extents= which
+  already yield damage segments.
+- =slothbar-module--layout-format= and =slothbar-module--create-layout= turn
+  a module's format string and color codes into a fontsloth =text-layout= and
+  per-glyph positions.  They only read font metrics and px-size globals.
+- =fontsloth= has no X dependency.  =fontsloth-font-rasterize= returns a
+  =fontsloth-metrics+pixmap= with an A8 (greyscale) pixmap, which is exactly
+  what a CPU compositor needs.  The X path already relies on fontsloth for
+  glyph pixels. XRender only composites them.
+- =slothbar-font.el= (fonts, px sizes, y deltas) is neutral apart from its use
+  of Emacs frame parameters for candidate discovery.
+
+The timer and refresh cadence are conceptually neutral too; they are simply
+implemented in the same file as the X window handling today.
+
+* 3. Current X coupling
+
+| Location | Leak |
+|----------+------|
+| =slothbar-module= struct | =xcb= slot (pixmap/GC/glyphset alist) and =cache= slot are renderer state |
+| =slothbar-module-.el= primary =init= | allocates pixmap, GC, glyphset; fills the pixmap |
+| =slothbar-module-.el= =:before refresh= | frees and recreates the module pixmap on width change |
+| =slothbar-module-.el= =:after init= / =refresh= | draws text with XRender / clears =needs-refresh?= |
+| =slothbar-module--draw-text= | walks color codes, calls =slothbar-render-draw-text= (XRender) |
+| =slothbar-module--load-glyphs= | populates an X glyphset via =slothbar-render-load-glyph= |
+| =slothbar-module-.el= =exit= | frees pixmap, GC, glyphset |
+| =slothbar-color.el= | requires =slothbar-render=; =slothbar-color-map-fg= holds =xcb:render:COLOR=; background "color" is an X TrueColor pixel |
+| =slothbar-util--color->pixel= | returns nil unless =x-display-visual-class= is true-color, so colors vanish on pgtk |
+| =slothbar.el= | connection, window, GC, background pixmap, struts, WM hints, event masks, X geometry via =display-monitor-attributes-list=, Expose handling, module construction, timer |
+| =slothbar-randr.el= | X RandR extension |
+| =slothbar-ewmh.el=, =slothbar-workspaces.el= | EWMH root-window properties |
+| =slothbar-tray.el= | XEmbed/system tray and a second xcb connection. stores an =unused= marker in the module =xcb= slot |
+
+=slothbar-module-init=, =slothbar-module-refresh= and =slothbar-module-exit=
+are the render lifecycle.  A second backend cannot be added without
+either changing those generics or duplicating it.
+
+* 4. Alternatives considered
+
+** 4.1 A parallel backend
+
+Write =slothbar-wayland.el= containing a second copy of start/show/refresh/
+hide/exit and per-module drawing, leaving the X code alone.
+
+- Pros: smallest first diff, zero risk.
+- Cons: two refresh loops, two module-construction paths, two sets of
+  watchers and timers.  Theme changes, visibility, damage handling and future
+  features must be implemented twice.  Rejected.
+
+** 4.2 Backend protocol with backend-owned module surfaces (chosen)
+
+Extract the X code behind a small set of generics.  The core owns the
+lifecycle, layout and damage computation. Each backend owns its connection,
+window/layer surface, and per-module pixel surfaces.
+
+- Pros: one orchestration path, modules keep only logical state, X keeps its
+  current rendering strategy and performance, the seam is also exactly what
+  the later unification (4.3) needs.
+- Cons: a few hundred lines move, risk to breaking existing code.
+
+** 4.3 Immediate-mode scene graph with a shared rasterizer (later)
+
+Modules emit draw operations. A software rasterizer produces ARGB tiles,
+the X backend uploads tiles to a pixmap and the Wayland backend attaches shm
+buffers.  This would delete the XRender glyphset/pen code and make the two
+backends pixel-identical and testable.
+
+- Pros: simplest eventual rendering model, one implementation of glyph
+  compositing, easy image tests.
+- Cons: replaces the proven X render path up front, and pays X upload cost
+  (mitigable later with MIT-SHM).
+
+The chosen plan (4.2) deliberately gives 4.3 the same interface, so 4.3
+becomes an implementation swap inside the X backend rather than a second
+refactor.
+
+* 5. Architecture
+
+** 5.1 Layers
+
+#+begin_example
+  user config (slothbar-modules, defcustoms, hooks)
+        |
+  slothbar.el            core: mode, timers, module construction,
+        |                refresh loop, damage, backend selection
+        |
+  +-----+------------------+
+  |                        |
+  slothbar-module.el    slothbar-layout.el
+  (logical struct,      (pure placements,
+   lifecycle generics)   extents, damage)
+        |
+  slothbar-module-.el   default lifecycle: layout, delegate drawing
+        |
+  slothbar-backend.el   backend generics + neutral data types
+        |
+  +-----+------------------+
+  |                        |
+  slothbar-backend-xcb   slothbar-backend-wayland
+  slothbar-render-xcb    slothbar-render-wayland
+#+end_example
+
+Concrete backends are required lazily, when selected.  A Wayland-only Emacs
+never needs =xelb= on its load path, and an X11 Emacs does not need
+=fd-fairy=.
+
+** 5.2 Backend generics
+
+#+begin_src emacs-lisp
+(cl-defstruct (slothbar-backend (:constructor slothbar-backend--make))
+  "Base type for display backends."
+  kind)                                    ; 'xcb or 'wayland
+
+(cl-defgeneric slothbar-backend-open (b geometry))
+(cl-defgeneric slothbar-backend-close (b))
+(cl-defgeneric slothbar-backend-show (b))
+(cl-defgeneric slothbar-backend-hide (b))
+(cl-defgeneric slothbar-backend-set-geometry (b geometry))
+(cl-defgeneric slothbar-backend-add-module (b m))
+(cl-defgeneric slothbar-backend-remove-module (b m))
+(cl-defgeneric slothbar-backend-draw-module (b m draw-ops))
+(cl-defgeneric slothbar-backend-present (b placements damage))
+(cl-defgeneric slothbar-backend-reposition-module (b m x y))
+(cl-defgeneric slothbar-backend-supports-p (b feature))
+#+end_src
+
+=feature= is a symbol such as =system-tray=, =ewmh=, =randr=, =exclusive-zone=,
+=pointer-input=.  The core uses it to skip or degrade modules that cannot work
+on the active backend.
+
+Backend-private per-module state (pixmap/GC/glyphset on X, ARGB tile on
+Wayland) lives in a hash table owned by the backend, keyed by module object.
+The module struct no longer carries =xcb= or =cache=.
+
+** 5.3 Neutral data types
+
+#+begin_src emacs-lisp
+;; Colors: 16-bit RGBA, matching the existing defcustoms.
+;; (:red #xeeee :green #xffff :blue #xffff :alpha #xeeee)
+;; The X backend converts to xcb:render:COLOR / TrueColor pixels;
+;; the Wayland backend converts to premultiplied 8-bit ARGB.
+
+(cl-defstruct (slothbar-draw-op (:constructor slothbar-draw-op-create))
+  "A run of glyphs sharing one foreground color."
+  glyph-positions                          ; fontsloth-layout-glyph-position list
+  color)                                   ; 16-bit RGBA
+
+;; placements: ((x y) . module), as returned by slothbar-layout-coordinate
+;; damage:     ((x0 x1) ...), as returned by slothbar-layout-extents /
+;;             slothbar-layout-subtract-extents
+#+end_src
+
+The color-code segmentation currently inside =slothbar-module--draw-text=
+(:push, :pop, :fg) moves into a pure function, for example
+=slothbar-module--text-ops=, returning a list of =slothbar-draw-op=.  Both
+backends consume the same ops, only painting differs.
+
+Geometry should be explicit rather than read from globals.:
+=slothbar-layout-coordinate= gains a width argument (and height where
+relevant), defaulting to the defcustom for compatibility.  Wayland
+learns its width from a layer-surface configure event, not from
+=display-monitor-attributes-list=.
+
+** 5.4 Module lifecycle after the change
+
+| Generic | Before | After |
+|---------+--------+-------|
+| =slothbar-module-init= | primary allocates pixmap/GC/glyphset | primary is logical. backend resource creation is done by =slothbar-backend-add-module= from the core's init loop |
+| =slothbar-module-layout= | unchanged | unchanged (pure fontsloth layout) |
+| =slothbar-module-refresh= | primary draws to X pixmap | primary lays out and, if =needs-refresh?=, calls =slothbar-backend-draw-module= with the text ops |
+| =slothbar-module-reposition= | tray moves its X window | unchanged; X modules may override, Wayland ignores or uses it for click regions later |
+| =slothbar-module-update-status= | unchanged | unchanged |
+| =slothbar-module-exit= | frees X resources | timer cancellation stays. backend frees resources via =slothbar-backend-remove-module= |
+
+The core refresh loop becomes:
+
+#+begin_src emacs-lisp
+(let ((prev (slothbar-layout-extents
+             (slothbar-layout-coordinate (slothbar-layout slothbar--modules) w h))))
+  (dolist (m slothbar--modules)
+    (when (slothbar-module-p m) (slothbar-module-refresh m)))
+  (let* ((layout (slothbar-layout-coordinate (slothbar-layout slothbar--modules) w h))
+         (new (slothbar-layout-extents layout))
+         (damage (slothbar-layout-subtract-extents new prev)))
+    (slothbar-backend-present slothbar--display layout damage)))
+#+end_src
+
+Modules whose width changed or whose position moved are re-drawn because the
+refresh step marks them. The backend may redraw any module intersecting
+damage before presenting.  This preserves the current X behavior
+(=slothbar--selectively-clear-areas= plus =slothbar--copy-areas=).
+
+** 5.5 Proposed file layout
+
+#+begin_example
+  slothbar.el                 core: mode, defcustoms, hooks, timer, refresh loop
+  slothbar-module.el          logical module struct + lifecycle generics
+  slothbar-module-.el         default lifecycle, no backend painting
+  slothbar-layout.el          unchanged pure layout/damage
+  slothbar-backend.el         backend generics, neutral types, selection
+  slothbar-backend-xcb.el     moved X window/struts/events/randr wiring
+  slothbar-backend-wayland.el elwl connection, layer shell, configure, hide/show
+  slothbar-render.el          draw ops, color runs, shared helpers
+  slothbar-render-xcb.el      current slothbar-render.el (pixmap/GC/glyphset)
+  slothbar-render-wayland.el  software rasterizer and frame assembly
+  slothbar-color.el           neutral RGBA, no require of a render backend
+  slothbar-util.el            X-only helpers move to the xcb backend
+  slothbar-randr.el           gated on (slothbar-backend-supports-p b 'randr)
+  slothbar-ewmh.el            gated on 'ewmh
+  slothbar-tray.el            gated on 'system-tray
+#+end_example
+
+Public file names that users may require (=slothbar=, =slothbar-module-requires=,
+module files) stay.  =slothbar-render.el= keeps its name for the neutral
+layer; the X primitives move to =slothbar-render-xcb.el=.  If renaming is
+undesirable, the X primitives may stay in =slothbar-render.el= and the neutral
+layer live in =slothbar-backend.el= instead.
+
+* 6. X backend
+
+No intended behavior change:
+
+- =open=: =xcb:connect=, =xcb:ewmh:init=, window creation, dock/sticky/above
+  hints, GC, background pixmap, event masks, geometry from
+  =slothbar--find-display-geometry=.
+- =add-module=: per-module pixmap, GC, glyphset, empty glyph cache.
+- =draw-module=: load glyphs not in the cache, then composite the ops with
+  XRender, using the color map as today.
+- =present=: clear damage segments, copy the background pixmap, copy each
+  module's pixmap, and call =slothbar-module-reposition=.
+- =present=: struts as =_NET_WM_STRUT_PARTIAL=, show/hide as
+  =MapWindow= / =UnmapWindow=.
+- =supports-p=: =system-tray=, =ewmh=, =randr=, =pointer-input= return t.
+
+The existing event handlers (=DestroyNotify=, =ReparentNotify=,
+=ResizeRequest=, =PropertyNotify=, =ClientMessage=, =KeyPress=, =Expose=)
+move with their state into the X backend.  =slothbar-randr-mode= installs its
+handlers through the X backend rather than using =slothbar--connection=
+directly.
+
+* 7. Wayland backend
+
+** 7.1 Setup sequence
+
+#+begin_src emacs-lisp
+(let* ((protocols (list (elwl-protocol-load-wayland)
+                        (elwl-protocol-load-layer-shell)))
+       (conn (elwl-connect protocols)))
+  (elwl-start conn)                         ; non-blocking dispatch pump
+  (let* ((registry (elwl-get-registry conn))
+         (_ (elwl-roundtrip conn))
+         (compositor (elwl-registry-bind registry 'wl-compositor 4))
+         (shm (elwl-registry-bind registry 'wl-shm 1))
+         (shell (elwl-layer-shell-bind registry 5))
+         (surface (elwl-compositor-create-surface compositor))
+         (layer (elwl-layer-shell-create
+                 shell surface :layer 'top :namespace "slothbar"
+                 :output (slothbar-wayland--find-output registry)))
+         (buffer (slothbar-wayland--make-frame ...)))
+    ...))
+#+end_src
+
+=elwl-request= sends immediately. There is no explicit flush.  The
+connection's own pump timer dispatches events on the main thread.
+
+** 7.2 Layer-surface mapping
+
+| slothbar | layer-shell |
+|----------+-------------|
+| =slothbar-height= | =set_size(0, height)= with left+right anchors, the compositor supplies width in =configure= |
+| =slothbar-is-bottom= | anchor bottom, left, right; otherwise top, left, right |
+| =slothbar-margin-y=, =slothbar-offset-x/y= | =set_margin= |
+| struts (X) | =set_exclusive_zone(height + margin-y)= |
+| dock window type | layer =top= (configurable) and namespace ="slothbar" |
+| show / hide | attach a buffer + commit / attach nil + commit (layer surfaces cannot be unmapped) |
+| Expose / resize | layer-surface =configure= listener: =ack_configure=, update geometry, relayout |
+| =slothbar-preferred-display= | match =elwl-output-name=. nil chooses the first output |
+
+A configure event may report width 0 when the compositor lets the client
+choose. With left+right anchors and =set_size(0, height)=, the width arrives
+as the actual surface width and becomes the layout width.  Height changes
+require a new pool/buffer because a =wl_shm_pool= cannot be resized.
+
+** 7.3 Rendering
+
+The rasterizer consumes the same =slothbar-draw-op= list as the X backend:
+
+1. Build or reuse the module's ARGB tile: =width × height= pixels.
+2. Fill the tile with the module background (opaque, alpha 255).
+3. For each op, for each =fontsloth-layout-glyph-position=:
+   - obtain (or cache) the A8 pixmap via =fontsloth-font-rasterize=
+   - blit each nonzero alpha value into the tile at the glyph's x and y,
+     blending the op color
+   - the glyph cache is keyed by =(font-hash, glyph-id, px)= and lives in the
+     backend, shared across modules (unlike the per-module X cache)
+4. Compose: fill damaged extents with the bar background, then blit each
+   module tile whose extent intersects the damage.
+5. Write the frame to the shm backing file, attach it, damage the affected
+   rectangles, commit.
+
+Glyph placement reuses the existing vertical convention. The finalized
+=glyph-position-y= already incorporates the layout settings y, which slothbar
+sets from =slothbar-font-y-delta=.  Verify the exact top-left formula once
+against the X glyphset path, then keep it in one helper.
+
+** 7.4 Buffers and presentation
+
+- One per-module ARGB tile composed into a single full-frame shm buffer is the
+  simplest composition model.  Damage limits what the compositor uploads, even
+  though the client writes the whole backing file.
+- Prefer two buffers (A/B). Writing a buffer the compositor still holds is a
+  protocol hazard.  A release listener marks a buffer free and, if a frame
+  was skipped, presents the pending frame.
+- =elwl-shm-buffer-fill= currently writes the whole pool file and ignores the
+  buffer offset, so a single pool cannot safely hold two buffers.  Either
+  create one pool per buffer, or (preferred) add an offset-aware write helper
+  to =elwl-shm.el=.  The same helper lets slothbar write only damaged row
+  spans instead of the whole frame.
+- =wl_surface.frame= callbacks are optional for a 10-second bar. They become
+  useful for pacing and for knowing when a frame has been consumed.
+
+** 7.5 Output selection and HiDPI
+
+- Bind =wl_output= for each registry global via =elwl-output-bind=; use
+  =elwl-output-name= (connector name) to match
+  =slothbar-preferred-display=.  "Primary" is not a Wayland concept. With nil,
+  use the first output (later: focused output or one surface per output).
+- HiDPI: render at =scale ×= pixel density and send
+  =wl_surface.set_buffer_scale= (not yet wrapped by =elwl-surface.el=; send
+  it with =elwl-request=).  The first version may render in logical pixels
+  with =slothbar-height= as both logical and buffer height, and be sharpened
+  later.
+
+** 7.6 Input
+
+The initial layer surface uses =set_keyboard_interactivity('none)=.  Modules
+are not clickable.  Later: pointer events arrive on the surface and
+=elwl-input-policy= can route them to per-module regions maintained by the
+backend's =reposition-module= bookkeeping. Keyboard focus needs =on-demand= or
+=exclusive=.  This is out of scope for the first backend.
+
+** 7.7 Feature gating
+
+=slothbar-backend-supports-p= returns nil on Wayland for =system-tray=,
+=ewmh= and =randr=.  Modules that require them either no-op with a log
+message or are skipped at construction.  Workspace state under a custom
+compositor will come from the compositor/WM side rather than EWMH. That is a
+module data-source change, independent of the render backend.
+
+* 8. Backend selection
+
+Add a defcustom, for example:
+
+#+begin_src emacs-lisp
+(defcustom slothbar-backend 'auto
+  "Display backend: `auto', `xcb', or `wayland'."
+  :type '(choice (const :tag "auto" auto)
+                 (const :tag "X11 (xcb)" xcb)
+                 (const :tag "Wayland" wayland))
+  :group 'slothbar)
+#+end_src
+
+=auto= prefers Wayland when =WAYLAND_DISPLAY= is set and =elwl= can be
+loaded, otherwise xcb.  Do not infer from =window-system=: an Emacs running
+under XWayland can legitimately drive a Wayland bar, and a pgtk Emacs has no
+elisp-visible Wayland connection.
+
+* 9. Staging
+
+Each stage leaves the X bar working.
+
+1. *Neutral colors.*  Replace the X pixel/ =xcb:render:COLOR= representation
+   with 16-bit RGBA in =slothbar-color.el= and =slothbar-module-rgb=, convert
+   in the X renderer.  Removes the existing FIXME and fixes nil colors on
+   pgtk.  No visible change on X.
+2. *Extract the backend.*  Add =slothbar-backend.el= and
+   =slothbar-backend-xcb.el=, move the X code, switch the core loop to the
+   generics, remove =xcb= and =cache= from the module struct.  No behavior
+   change. Verify by running the bar under Xorg.
+3. *Explicit geometry and draw ops.*  Layout takes width/height arguments,
+   add =slothbar-draw-op= and the pure color-run function.
+4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling,
+   feature gating, backend selection.
+5. *Optional unification.*  Move X onto the shared rasterizer and delete the
+   XRender glyphset/pen path, if output matches.
+
+* 10. Testing
+
+- Existing behavior: a small ERT suite for =slothbar-layout= and
+  =slothbar-layout-subtract-extents= (they are already pure), plus
+  =slothbar--text-ops= once extracted.
+- Rasterizer: golden-image tests over a fixed font and text; compare tiles
+  against committed pixel fixtures or hashes, no compositor required.
+- Wayland protocol: elwl's fixture server covers registry, shm,
+  layer-shell configure/ack/commit, buffer release and global_remove. Add a
+  slothbar fixture scenario that renders one module and asserts the attach/
+  damage sequence.
+- Live smoke test: headless sway (=WLR_BACKENDS=headless=) or the user's
+  compositor, mirroring =elwl/demo/elwl-layer-shell-demo.el=.
+- Non-regression: two backends cannot be active at once. Exit frees GC/
+  glyphsets/pixmaps on X and pools/buffers on Wayland. Theme change and
+  height change redraw both.
+
+* 11. Open questions and elwl API gaps
+
+1. =elwl-shm.el=: add an offset-aware buffer write (needed for double
+   buffering and damage-only writes).  Until then, use one pool per buffer.
+2. =elwl-surface.el=: expose =set_buffer_scale= and possibly
+   =set_input_region= (for clickable module regions later).
+3. =elwl= version pin: the backend should declare a minimum elwl version and
+   fail with a clear message when =fd-fairy= or a protocol global is missing.
+4. Whether the module struct keeps an opaque =render-data= slot or the backend
+   keeps a side table.  Side table is cleaner. The slot is easier for modules
+   like =slothbar-tray= that want to stash backend state.
+5. Whether to eventually run one layer surface per output instead of one
+   selected output.  The backend interface supports it (=open= per output);
+   layout would need a per-output module list.
+6. Theme/background source under Wayland: keep using Emacs's selected-frame
+   background/foreground, or add explicit backend colors.  Current behavior is
+   already based on Emacs frame parameters, which exist under pgtk.
+
+* 12. Performance notes
+
+Measured in batch Emacs 31.1 with fontsloth and DejaVu Sans Mono at a 20 px
+bar height, 2560 px wide (a single module string of 53 glyphs):
+
+- rasterize + blit first time: ~13 ms (dominated by rasterization);
+- blit with cached glyph pixmaps: ~2 ms;
+- serialize a full 2560×20 ARGB frame and write it: ~12 ms.
+
+A full-frame redraw every 10 seconds is therefore viable, and per-module
+damage tracking makes the common case much cheaper.  If profiling shows the
+write dominating, the offset-aware shm helper plus damage-only writes removes
+it.
