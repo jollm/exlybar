@@ -83,7 +83,7 @@
   (animation nil :type 'function)
   (cache nil :type 'hash-table)
   (width slothbar-module-min-width :type 'fixed)
-  (xcb nil :type 'list)
+  (initialized nil :type 'boolean)
   (needs-refresh? nil :type 'boolean)
   (update-timer nil :type 'timer))
 

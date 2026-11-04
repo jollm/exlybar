@@ -42,10 +42,6 @@
 
 ;;; Code:
 
-(require 'xcb)
-
-(defvar slothbar-connection)
-
 (defun slothbar-util--find-background-color ()
   "Attempt to guess a reasonable background color."
   ;; TODO update this after a theme is loaded or changed
@@ -57,13 +53,6 @@
   ;; TODO update this after a theme is loaded or changed
   ;; also, is it possible to get current theme foreground directly?
   (frame-parameter (selected-frame) 'foreground-color))
-
-(defun slothbar-util--find-root-window-id ()
-  "Attempt to find a root window."
-  (when (and (boundp 'slothbar--connection) slothbar--connection)
-    (slot-value (car (slot-value
-                      (xcb:get-setup slothbar--connection) 'roots))
-                'root)))
 
 (provide 'slothbar-util)
 

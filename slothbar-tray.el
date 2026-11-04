@@ -51,6 +51,7 @@
 (require 'xcb-systemtray)
 
 (require 'slothbar-color)
+(require 'slothbar-backend-xcb)
 (require 'slothbar-log)
 (require 'slothbar-module-)
 (require 'slothbar-render)
@@ -104,12 +105,13 @@ This should be a color, or nil for transparent background."
   :set (lambda (symbol value)
          (set-default symbol value)
          ;; Change the background color for embedder.
-         (when (and slothbar--connection
+         (when (and (slothbar-xcb-connection)
                     slothbar-tray--embedder-window)
-           (let ((background-pixel
+           (let ((connection (slothbar-xcb-connection))
+                 (background-pixel
                   (slothbar-render-color->pixel
                    (slothbar-color-from-name value))))
-             (xcb:+request slothbar--connection
+             (xcb:+request connection
                  (make-instance 'xcb:ChangeWindowAttributes
                                 :window slothbar-tray--embedder-window
                                 :value-mask (logior xcb:CW:BackPixmap
@@ -119,13 +121,13 @@ This should be a color, or nil for transparent background."
                                 xcb:BackPixmap:ParentRelative
                                 :background-pixel background-pixel))
              ;; Unmap & map to take effect immediately.
-             (xcb:+request slothbar--connection
+             (xcb:+request connection
                  (make-instance 'xcb:UnmapWindow
                                 :window slothbar-tray--embedder-window))
-             (xcb:+request slothbar--connection
+             (xcb:+request connection
                  (make-instance 'xcb:MapWindow
                                 :window slothbar-tray--embedder-window))
-             (xcb:flush slothbar--connection)))))
+             (xcb:flush connection)))))
 
 ;; GTK icons require at least 16 pixels to show normally.
 (defconst slothbar-tray--icon-min-size 16 "Minimum icon size.")
@@ -233,7 +235,7 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
   (xcb:+request slothbar-tray--connection
       (make-instance 'xcb:ReparentWindow
                      :window icon
-                     :parent (slothbar-util--find-root-window-id)
+                     :parent (slothbar-xcb-root-window-id)
                      :x 0 :y 0))
   (setq slothbar-tray--list
         (assq-delete-all icon slothbar-tray--list))
@@ -367,7 +369,7 @@ This overrides the default module init because system tray is special."
         (slothbar-module-exit m)
         (cl-return-from 'other-tray)))
     (let ((id (xcb:generate-id slothbar-tray--connection))
-          (root (slothbar-util--find-root-window-id)))
+          (root (slothbar-xcb-root-window-id)))
       (setq slothbar-tray--selection-owner-window id)
       (xcb:+request slothbar-tray--connection
           (make-instance 'xcb:CreateWindow
@@ -418,7 +420,7 @@ This overrides the default module init because system tray is special."
            (background-pixel
             (slothbar-render-color->pixel
              (slothbar-color-from-name slothbar-tray-background-color)))
-          (parent slothbar--window)
+          (parent (slothbar-xcb-window))
           (depth (slot-value (xcb:+request-unchecked+reply
                                  slothbar-tray--connection
                                  (make-instance 'xcb:GetGeometry
@@ -461,9 +463,7 @@ This overrides the default module init because system tray is special."
     (xcb:+event slothbar-tray--connection 'xcb:PropertyNotify
                 #'slothbar-tray--on-PropertyNotify)
     (xcb:+event slothbar-tray--connection 'xcb:ClientMessage
-                #'slothbar-tray--on-ClientMessage)
-    ;; we don't need xcb since it is all managed here
-    (push '(unused . unused) (slothbar-module-xcb m))))
+                #'slothbar-tray--on-ClientMessage)))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-tray))
   "Before initialize `slothbar-tray' module M."
@@ -557,7 +557,7 @@ This overrides the default module exit because system tray is special."
       (xcb:+request-checked+request-check slothbar-tray--connection
           (make-instance 'xcb:ReparentWindow
                          :window slothbar-tray--embedder-window
-                         :parent (slothbar-util--find-root-window-id)
+                         :parent (slothbar-xcb-root-window-id)
                          :x 0
                          :y 0)))
     (xcb:disconnect slothbar-tray--connection)

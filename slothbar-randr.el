@@ -46,7 +46,7 @@
 (require 'xcb-randr)
 
 (require 'slothbar)
-(require 'slothbar-util)
+(require 'slothbar-backend-xcb)
 
 (defgroup slothbar-randr nil
   "Slothbar RandR."
@@ -105,18 +105,19 @@ Refresh when any RandR 1.5 monitor changes."
   (let ((evt (make-instance 'xcb:ConfigureNotify)))
     (xcb:unmarshal evt data)
     (with-slots (window) evt
-      (when (eq window slothbar--window)
+      (when (eq window (slothbar-xcb-window))
         (slothbar-refresh)))))
 
 (defun slothbar-randr--init ()
   "Initialize RandR extension and slothbar RandR module.
 
 This is adapted from the EXWM RandR module."
-  (when (= 0 (slot-value (xcb:get-extension-data slothbar--connection 'xcb:randr)
+  (when (= 0 (slot-value (xcb:get-extension-data
+                          (slothbar-xcb-connection) 'xcb:randr)
                          'present))
     (error "[slothbar] RandR extension is not supported by the server"))
   (with-slots (major-version minor-version)
-      (xcb:+request-unchecked+reply slothbar--connection
+      (xcb:+request-unchecked+reply (slothbar-xcb-connection)
           (make-instance 'xcb:randr:QueryVersion
                          :major-version 1 :minor-version 5))
     (cond ((and (= major-version 1) (= minor-version 5))
@@ -129,20 +130,20 @@ This is adapted from the EXWM RandR module."
     ;; Listen for `ScreenChangeNotify' to notify external tools to
     ;; configure RandR and `CrtcChangeNotify/OutputChangeNotify' to
     ;; refresh the workspace layout.
-    (xcb:+event slothbar--connection 'xcb:randr:ScreenChangeNotify
+    (xcb:+event (slothbar-xcb-connection) 'xcb:randr:ScreenChangeNotify
                 #'slothbar-randr--on-ScreenChangeNotify)
-    (xcb:+event slothbar--connection 'xcb:randr:Notify
+    (xcb:+event (slothbar-xcb-connection) 'xcb:randr:Notify
                 #'slothbar-randr--on-Notify)
-    (xcb:+event slothbar--connection 'xcb:ConfigureNotify
+    (xcb:+event (slothbar-xcb-connection) 'xcb:ConfigureNotify
                 #'slothbar-randr--on-ConfigureNotify)
-    (xcb:+request slothbar--connection
+    (xcb:+request (slothbar-xcb-connection)
         (make-instance 'xcb:randr:SelectInput
-                       :window slothbar--window
+                       :window (slothbar-xcb-window)
                        :enable (logior
                                 xcb:randr:NotifyMask:ScreenChange
                                 xcb:randr:NotifyMask:CrtcChange
                                 xcb:randr:NotifyMask:OutputChange)))
-    (xcb:flush slothbar--connection)))
+    (xcb:flush (slothbar-xcb-connection))))
 
 (defun slothbar-randr--exit ()
   "Perform cleanup."

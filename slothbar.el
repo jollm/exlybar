@@ -24,18 +24,18 @@
 
 ;; This file is NOT part of GNU Emacs.
 
-;; GNU Emacs is free software: you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
+;; GNU Emacs is free software: you can redistribute it and/or modify it under
+;; the terms of the GNU General Public License as published by the Free
+;; Software Foundation, either version 3 of the License, or (at your option)
+;; any later version.
 
-;; GNU Emacs is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
+;; GNU Emacs is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+;; FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+;; more details.
 
-;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; You should have received a copy of the GNU General Public License along
+;; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -90,25 +90,16 @@
 (require 'fontsloth)
 (require 'pcase)
 (require 'seq)
-(require 'xcb)
-(require 'xcb-keysyms)
-(require 'xcb-icccm)
-(require 'xcb-ewmh)
 
+(require 'slothbar-backend)
 (require 'slothbar-color)
 (require 'slothbar-module)
 (require 'slothbar-util)
 (require 'slothbar-log)
-(require 'slothbar-render)
 
 (defgroup slothbar nil
   "Slothbar is a status bar that displays as a dock window in X."
   :group 'display)
-
-(defvar slothbar--connection nil "The X connection.")
-(defvar slothbar--window nil "The parent window.")
-(defvar slothbar--gc nil "The graphics context.")
-(defvar slothbar--pixmap nil "The background pixmap.")
 
 (defvar slothbar--enabled nil "Non-nil if slothbar is enabled.")
 
@@ -199,8 +190,6 @@ E.g.: (:left
   :type 'hook
   :group 'slothbar)
 
-(defvar slothbar--connection)
-
 (defvar slothbar--modules nil
   "List of slothbar modules with optional layout instructions.")
 
@@ -212,7 +201,7 @@ E.g.: (:left
 
 The INIT and EXIT functions are added to
 `slothbar-before-module-init-hook' and `slothbar-before-exit-hook'
-respectively.  If an X connection exists, the mode is immediately
+respectively.  If a display backend exists, the mode is immediately
 enabled or disabled."
   (declare (indent 1) (debug t))
   (let* ((mode (intern (format "slothbar-%s-mode" name)))
@@ -223,11 +212,11 @@ enabled or disabled."
         (,mode
          (add-hook 'slothbar-before-module-init-hook #',init)
          (add-hook 'slothbar-before-exit-hook #',exit)
-         (when slothbar--connection (,init)))
+         (when slothbar--backend (,init)))
         (t
          (remove-hook 'slothbar-before-module-init-hook #',init)
          (remove-hook 'slothbar-before-exit-hook #',exit)
-         (when slothbar--connection (,exit)))))))
+         (when slothbar--backend (,exit)))))))
 
 (defsubst slothbar-enabled-p ()
   "Return t if slothbar is enabled."
@@ -240,14 +229,6 @@ enabled or disabled."
 (defun slothbar--foreground-color ()
   "Return the current foreground color as a `slothbar-color-rgb'."
   (slothbar-color-from-name (slothbar-util--find-foreground-color)))
-
-(defun slothbar--background-pixel ()
-  "Return the current background color as an X pixel."
-  (slothbar-render-color->pixel (slothbar--background-color)))
-
-(defun slothbar--foreground-pixel ()
-  "Return the current foreground color as an X pixel."
-  (slothbar-render-color->pixel (slothbar--foreground-color)))
 
 (defun slothbar--find-display-geometry (&optional display)
   "Find DISPLAY geometry as an alist of x-offset, y-offset, width, and height.
@@ -265,156 +246,17 @@ If DISPLAY is not found, the value chosen is the first found in
       (width . ,(caddr geom))
       (height . ,(cadddr geom)))))
 
-(defun slothbar--do-struts
-    (top bottom left top-start-x top-end-x bottom-start-x bottom-end-x)
-  "Do requests for struts.
-
-TOP the top strut
-BOTTOM the bottom strut
-LEFT the left strut
-TOP-START-X x coordinate of the top strut
-TOP-END-X end x coordinate of the top strut
-BOTTOM-START-X x coordinate of the bottom strut
-BOTTOM-END-X end x coordinate of the bottom strut"
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
-                     :window slothbar--window
-                     :left left
-                     :right 0
-                     :top top
-                     :bottom bottom))
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:ewmh:set-_NET_WM_STRUT_PARTIAL
-                     :window slothbar--window
-                     :left left
-                     :right 0
-                     :top top
-                     :bottom bottom
-                     :left-start-y 0
-                     :left-end-y 0
-                     :right-start-y 0
-                     :right-end-y 0
-                     :top-start-x top-start-x
-                     :top-end-x top-end-x
-                     :bottom-start-x bottom-start-x
-                     :bottom-end-x bottom-end-x)))
-
-(defun slothbar--configure-struts (&optional hide?)
-  "Configure the struts.
-
-If HIDE? is non-nil, configure struts to make the bar invisible."
-  (if hide?
-      (slothbar--do-struts 0 0 0 0 0 0 0)
-    (pcase-let* (((eieio (height root-window-height))
-                  (xcb:+request-unchecked+reply
-                      slothbar--connection
-                      (make-instance 'xcb:GetGeometry
-                                     :drawable (slothbar-util--find-root-window-id))))
-                 ((map ('y-offset mon-y-offset) ('height mon-height))
-                  (slothbar--find-display-geometry slothbar-preferred-display))
-                 (bottom-strut (if slothbar-is-bottom
-                                   (+ slothbar-height slothbar-margin-y
-                                      (- root-window-height
-                                         (+ mon-y-offset mon-height)))
-                                 0)))
-      (slothbar--do-struts
-       (if slothbar-is-bottom 0
-         (+ slothbar-height slothbar-offset-y slothbar-margin-y))
-       bottom-strut
-       slothbar-offset-x
-       (if slothbar-is-bottom 0
-         slothbar-offset-x)
-       (if slothbar-is-bottom 0
-         (1- (+ slothbar-offset-x slothbar-width)))
-       (if slothbar-is-bottom slothbar-offset-x
-         0)
-       (if slothbar-is-bottom (1- (+ slothbar-offset-x slothbar-width))
-         0))))
-  (setq slothbar--visible (not hide?)))
+(defun slothbar-show ()
+  "Show slothbar."
+  (when slothbar--backend
+    (slothbar-backend-show slothbar--backend)
+    (setq slothbar--visible t)))
 
 (defun slothbar-hide ()
   "Hide slothbar."
-  (slothbar--configure-struts t)
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:UnmapWindow
-                     :window slothbar--window))
-  (xcb:flush slothbar--connection))
-
-(defun slothbar--configure-geom ()
-  "Configure the window geometry."
-  (let ((ecw (xcb:+request-checked+request-check slothbar--connection
-                 (make-instance 'xcb:ConfigureWindow
-                                :window slothbar--window
-                                :value-mask (logior xcb:ConfigWindow:X
-						    xcb:ConfigWindow:Y
-                                                    xcb:ConfigWindow:Width
-                                                    xcb:ConfigWindow:Height)
-                                :x slothbar-offset-x
-                                :y slothbar-offset-y
-                                :width slothbar-width
-                                :height slothbar-height))))
-    (slothbar--log-debug* "slothbar-refresh: configure window errors: %s" ecw)))
-
-(defun slothbar--configure-pos ()
-  "Configure the window position."
-  (let ((ecw (xcb:+request-checked+request-check slothbar--connection
-                 (make-instance 'xcb:ConfigureWindow
-                                :window slothbar--window
-                                :value-mask (logior xcb:ConfigWindow:X
-						    xcb:ConfigWindow:Y)
-                                :x slothbar-offset-x
-                                :y slothbar-offset-y))))
-    (slothbar--log-debug* "slothbar-refresh: configure window errors: %s" ecw)))
-
-(defun slothbar--change-background (&optional color)
-  "Change the background pixel attribute with optional COLOR.
-
-The default color is from `slothbar-util--find-background-color'."
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:ChangeWindowAttributes
-                     :window slothbar--window
-                     :value-mask (logior xcb:CW:BackPixmap
-                                         xcb:CW:BackPixel)
-                     :background-pixmap xcb:BackPixmap:ParentRelative
-                     :background-pixel
-                     (or color (slothbar--background-pixel))))
-  (xcb:+request-checked+request-check slothbar--connection
-      (make-instance 'xcb:ChangeGC
-                     :gc slothbar--gc
-                     :value-mask (logior xcb:GC:Background
-                                         xcb:GC:Foreground)
-                     :background (slothbar--background-pixel)
-                     :foreground (slothbar--background-pixel)))
-  (slothbar-render-fill-rectangle slothbar--connection
-                                  slothbar--gc slothbar--pixmap
-                                  slothbar-width slothbar-height))
-
-(defun slothbar--configure-wm-hints ()
-  "Configure icccm and ewmh hints."
-  (xcb:+request-checked slothbar--connection
-      (make-instance 'xcb:icccm:set-WM_SIZE_HINTS
-                     :window slothbar--window
-                     :data (xcb:icccm:-WM_SIZE_HINTS
-                            :x slothbar-offset-x
-                            :y slothbar-offset-y
-                            :width slothbar-width
-                            :height slothbar-height)))
-  (xcb:+request-checked slothbar--connection
-      (make-instance 'xcb:ewmh:set-_NET_WM_DESKTOP
-                     :window slothbar--window
-                     :data #xFFFFFFFF)))
-
-(defun slothbar-show ()
-  "Show slothbar."
-  (slothbar--configure-geom)
-  (slothbar--change-background)
-  (slothbar--configure-struts)
-  (slothbar--configure-wm-hints)
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:MapWindow
-                     :window slothbar--window))
-  (slothbar--configure-pos)
-  (xcb:flush slothbar--connection))
+  (when slothbar--backend
+    (slothbar-backend-hide slothbar--backend)
+    (setq slothbar--visible nil)))
 
 (defun slothbar-hide-show ()
   "Hide slothbar if visible and show if hidden."
@@ -446,75 +288,10 @@ It will remap colors and refresh the display."
         (setf (slothbar-module-needs-refresh? m) t)))
     (run-with-idle-timer 0 nil (lambda () (slothbar--refresh t)))))
 
-(defun slothbar--on-DestroyNotify (data _synthetic)
-  "DestroyNotify.
-DATA the event data"
-  (slothbar--log-trace* "received destroynotify %s" data))
+(defvar slothbar--geometry-changed? nil
+  "Non-nil when the bar geometry changed.  Cleared by the backend's
+Expose handler.")
 
-(defun slothbar--on-ReparentNotify (data _synthetic)
-  "ReparentNotify.
-DATA the event data"
-  (slothbar--log-trace* "received reparentnotify %s" data))
-
-(defun slothbar--on-ResizeRequest (data _synthetic)
-  "ResizeRequest.
-DATA the event data"
-  (slothbar--log-trace* "received resizerequest %s" data))
-
-(defun slothbar--on-PropertyNotify (data _synthetic)
-  "PropertyNotify.
-DATA the event data"
-  (slothbar--log-trace* "received propertynotify %s" data))
-
-(defun slothbar--on-ClientMessage (data _synthetic)
-  "Handle client messages.
-DATA the event data"
-  (slothbar--log-trace* "received clientmessage %s" data))
-
-(defun slothbar--on-KeyPress (data _synthetic)
-  "TODO: do something useful with keypress DATA."
-  (let ((keypress (make-instance 'xcb:KeyPress)))
-    (xcb:unmarshal keypress data)
-    (with-slots (detail state) keypress
-      (let ((keysym (xcb:keysyms:keycode->keysym slothbar--connection detail state)))
-        (slothbar--log-debug* "keypress: %s" keysym)))))
-
-(defun slothbar--selectively-clear-areas (prev-extents new-extents)
-  "Clear old areas that the new extents do not cover.
-PREV-EXTENTS the previous layout extents
-NEW-EXTENTS the new layout extents"
-  (let ((to-clear (slothbar-layout-subtract-extents new-extents prev-extents)))
-    (pcase-dolist (`(,l ,r) to-clear)
-      (xcb:+request slothbar--connection
-          (make-instance 'xcb:ClearArea
-                         :exposures 0
-                         :window slothbar--window
-                         :x l :y 0
-                         :width (- r l) :height slothbar-height)))))
-
-(defun slothbar--copy-areas (layout)
-  "Copy a LAYOUT's modules' pixmaps into their respective areas."
-  ;; first copy the background pixmap
-  (xcb:+request slothbar--connection
-      (make-instance 'xcb:CopyArea
-                     :src-drawable slothbar--pixmap
-                     :dst-drawable slothbar--window
-                     :gc slothbar--gc
-                     :src-x 0 :src-y 0 :dst-x 0 :dst-y 0
-                     :width slothbar-width :height slothbar-height))
-  (dolist (m layout)
-    (pcase-let ((`((,x ,y) ,(cl-struct slothbar-module width xcb)) m))
-      (when (alist-get 'pixmap xcb)
-        (xcb:+request slothbar--connection
-            (make-instance 'xcb:CopyArea
-                           :src-drawable (alist-get 'pixmap xcb)
-                           :dst-drawable slothbar--window
-                           :gc (alist-get 'gc xcb)
-                           :src-x 0 :src-y 0 :dst-x x :dst-y y
-                           :width width :height slothbar-height)))
-      (slothbar-module-reposition (cadr m) x y))))
-
-(defvar slothbar--geometry-changed? nil "Held by `slothbar--on-Expose'.")
 (cl-defun slothbar-refresh-modules (&optional modules)
   "Ask the modules to refresh and see whether the layout has changed.
 MODULES optional modules to refresh and compare with prev-extents"
@@ -522,27 +299,26 @@ MODULES optional modules to refresh and compare with prev-extents"
     (dolist (m slothbar--modules)
       (when (slothbar-module-p m)
         (setf (slothbar-module-needs-refresh? m) t
-              (slothbar-module-cache m) (make-hash-table :test 'equal))))
+              (slothbar-module-cache m) (make-hash-table :test 'equal))
+        (when slothbar--backend
+          (slothbar-backend-reset-module-cache slothbar--backend m))))
     (slothbar--refresh))
-  ;; (message "refreshing modules")
   ;; refresh modules to update to latest dimensions
   (let ((prev-extents
          (slothbar-layout-extents
           (slothbar-layout-coordinate (slothbar-layout slothbar--modules) 0 0)))
         (slothbar--modules (or modules slothbar--modules)))
-    ;; (message "prev extents %s" prev-extents)
     (dolist (m slothbar--modules)
       (when (slothbar-module-p m)
         (slothbar-module-refresh m)))
     (let* ((new-layout
             (slothbar-layout-coordinate (slothbar-layout slothbar--modules) 0 0))
-           (new-extents (slothbar-layout-extents new-layout)))
-      ;; (message "prev extents %s new extents %s" prev-extents new-extents)
-      (when (not (equal prev-extents new-extents))
-        ;; (message "layout has changed")
-        (slothbar--selectively-clear-areas prev-extents new-extents))
-      (slothbar--copy-areas new-layout)))
-  (xcb:flush slothbar--connection))
+           (new-extents (slothbar-layout-extents new-layout))
+           (damage (unless (equal prev-extents new-extents)
+                     (slothbar-layout-subtract-extents
+                      new-extents prev-extents))))
+      (when slothbar--backend
+        (slothbar-backend-present slothbar--backend new-layout damage)))))
 
 (defun slothbar--watch-modules (_ nval oper where)
   "With OPER eq \\='set and nil WHERE, refresh `slothbar--modules' with NVAL."
@@ -555,7 +331,7 @@ MODULES optional modules to refresh and compare with prev-extents"
     ;; check for uninitialized modules
     (dolist (m nval)
       (when (slothbar-module-p m)
-        (unless (slothbar-module-xcb m)
+        (unless (slothbar-module-initialized m)
           (slothbar-module-init m))))
     (slothbar-refresh-modules nval)))
 
@@ -566,21 +342,6 @@ MODULES optional modules to refresh and compare with prev-extents"
   "Start a timer to periodically refresh the modules."
   (setq slothbar--module-refresh-timer
         (run-at-time nil 10 #'slothbar-refresh-modules)))
-
-(defun slothbar--on-Expose (data _synthetic)
-  "Can draw things after Expose.
-DATA the event data"
-  (slothbar--log-debug* "slothbar received expose %s" data)
-  (ignore data)
-  (when slothbar--enabled
-    (when slothbar--module-refresh-timer
-      (slothbar--log-debug* "slothbar restarting module refresh timer")
-      (cancel-timer slothbar--module-refresh-timer)
-      (setq slothbar--module-refresh-timer nil))
-    (slothbar--start-module-refresh-timer))
-  (when (and slothbar--enabled slothbar--geometry-changed?)
-    (setq slothbar--geometry-changed? nil)
-    (run-at-time 0 nil #'slothbar-refresh-modules)))
 
 (defun slothbar--watch-height (_ nval oper where)
   "Refresh modules when changing `slothbar-height'.
@@ -617,31 +378,11 @@ NVAL is check against the existing value for any changes."
              (not (equal nval slothbar-modules)))
     (run-at-time 0 nil #'slothbar--construct-modules)))
 
-(defun slothbar--ensure-event-mask (win event)
-  "Ensure WIN event mask has mask EVENT."
-  (with-slots (your-event-mask)
-      (xcb:+request-unchecked+reply slothbar--connection
-          (make-instance 'xcb:GetWindowAttributes :window win))
-    (xcb:+request-checked+request-check slothbar--connection
-        (make-instance 'xcb:ChangeWindowAttributes
-                       :window win
-                       :value-mask xcb:CW:EventMask
-                       :event-mask (logior event your-event-mask)))))
-
-(defun slothbar--clear-event-mask (win)
-  "Clear event mask from WIN."
-  (xcb:+request-checked+request-check slothbar--connection
-      (make-instance 'xcb:ChangeWindowAttributes
-                     :window win
-                     :value-mask xcb:CW:EventMask
-                     :event-mask xcb:EventMask:NoEvent)))
-
 (defun slothbar--start ()
   "Start slothbar.
-Initialize the connection, window, graphics context, and modules."
+Initialize the display backend, window, and modules."
   (run-hook-with-args 'slothbar-before-init-hook)
-  (cl-assert (not slothbar--connection))
-  (cl-assert (not slothbar--window))
+  (cl-assert (not slothbar--backend))
   (slothbar--log-enable-logging)
   (let ((geom (slothbar--find-display-geometry slothbar-preferred-display)))
     (setq slothbar-offset-x (alist-get 'x-offset geom)
@@ -654,118 +395,18 @@ Initialize the connection, window, graphics context, and modules."
   (setq slothbar-font-px-size
         (slothbar-font--precompute-px-sizes
          slothbar-height slothbar-font--color-code-map))
-  (setq slothbar--connection (xcb:connect))
-  ;; apparently ewmh initializes icccm automatically
-  (xcb:ewmh:init slothbar--connection)
-  (slothbar--ensure-event-mask (slothbar-util--find-root-window-id)
-                               xcb:EventMask:PropertyChange)
-  ;; (xcb:icccm:init slothbar--connection)
-  (set-process-query-on-exit-flag (slot-value slothbar--connection
-                                              'process)
-                                  nil)
-  ;; initialize the bar window
-  (let ((id (xcb:generate-id slothbar--connection))
-        (background-pixel (slothbar--background-pixel))
-        (y slothbar-offset-y)
-        parent depth)
-    (setq slothbar--window id)
-    (slothbar--log-debug* "Slothbar window id: %s" slothbar--window)
-    (setq parent (slothbar-util--find-root-window-id)
-          depth (slot-value (xcb:+request-unchecked+reply
-                                slothbar--connection
-                                (make-instance 'xcb:GetGeometry
-                                               :drawable parent))
-                            'depth))
-    (xcb:+request slothbar--connection
-        (make-instance 'xcb:CreateWindow
-                       :depth depth
-                       :wid id
-                       :parent parent
-                       :override-redirect 1
-                       :x slothbar-offset-x
-                       :y y
-                       :width 1
-                       :height slothbar-height
-                       :border-width 1
-                       :class xcb:WindowClass:InputOutput
-                       :visual 0
-                       :value-mask (logior xcb:CW:BackPixmap
-                                           (if background-pixel
-                                               xcb:CW:BackPixel 0)
-                                           xcb:CW:EventMask)
-                       :background-pixmap xcb:BackPixmap:ParentRelative
-                       :background-pixel background-pixel
-                       :event-mask (logior xcb:EventMask:Exposure
-                                           xcb:EventMask:KeyPress
-                                           xcb:EventMask:PointerMotion
-                                           xcb:EventMask:PropertyChange
-                                           xcb:EventMask:SubstructureNotify)))
-    ;; Set WM_NAME and WM_CLASS.
-    (xcb:+request slothbar--connection
-        (make-instance 'xcb:icccm:set-WM_NAME
-                       :window id
-                       :data "slothbar"))
-    (xcb:+request slothbar--connection
-        (make-instance 'xcb:icccm:set-WM_CLASS
-                       :window id
-                       :instance-name "slothbar"
-                       :class-name "Slothbar"))
-    ;; dock the window
-    (xcb:+request slothbar--connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_WINDOW_TYPE
-                       :window id
-                       :data `(,xcb:Atom:_NET_WM_WINDOW_TYPE_DOCK)))
-    ;; state is sticky and above
-    (xcb:+request slothbar--connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_STATE
-                       :window id
-                       :data `(,xcb:Atom:_NET_WM_STATE_STICKY
-                               ,xcb:Atom:_NET_WM_STATE_ABOVE)))
-    ;; create gc
-    (setq slothbar--gc (xcb:generate-id slothbar--connection))
-    (setq slothbar--pixmap (xcb:generate-id slothbar--connection))
-    (slothbar-render-create-pixmap slothbar--connection slothbar--pixmap
-                                   slothbar-width slothbar-height)
-    (let ((egc
-           (xcb:+request-checked+request-check slothbar--connection
-               (make-instance 'xcb:CreateGC
-                              :cid slothbar--gc
-                              :drawable slothbar--window
-                              :value-mask (logior xcb:GC:Background
-                                                  xcb:GC:Foreground)
-                              :background (slothbar--background-pixel)
-                              :foreground (slothbar--foreground-pixel)))))
-      (slothbar--log-debug* "slothbar init create gc errors: %s" egc))
-    (slothbar-render-fill-rectangle slothbar--connection
-                                    slothbar--gc slothbar--pixmap
-                                    slothbar-width slothbar-height)
-    ;; initialize modules
-    (slothbar--construct-modules)
-    (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
-    (run-hooks 'slothbar-before-module-init-hook)
-    (dolist (m slothbar--modules)
-      (when (slothbar-module-p m)
-        (slothbar-module-init m)))
-    (xcb:flush slothbar--connection)
-    ;; Attach event listeners.
-    (xcb:+event slothbar--connection 'xcb:DestroyNotify
-                #'slothbar--on-DestroyNotify)
-    (xcb:+event slothbar--connection 'xcb:ReparentNotify
-                #'slothbar--on-ReparentNotify)
-    (xcb:+event slothbar--connection 'xcb:ResizeRequest
-                #'slothbar--on-ResizeRequest)
-    (xcb:+event slothbar--connection 'xcb:PropertyNotify
-                #'slothbar--on-PropertyNotify)
-    (xcb:+event slothbar--connection 'xcb:ClientMessage
-                #'slothbar--on-ClientMessage)
-    (xcb:+event slothbar--connection 'xcb:KeyPress
-                #'slothbar--on-KeyPress)
-    (xcb:+event slothbar--connection 'xcb:Expose
-                #'slothbar--on-Expose)
-    (setq slothbar--visible t)
-    (slothbar--refresh)
-    (setq slothbar--enabled t)
-    (run-hook-with-args 'slothbar-after-init-hook)))
+  (setq slothbar--backend (slothbar-backend-create 'xcb))
+  (slothbar-backend-open slothbar--backend)
+  ;; initialize modules
+  (slothbar--construct-modules)
+  (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
+  (run-hooks 'slothbar-before-module-init-hook)
+  (dolist (m slothbar--modules)
+    (when (slothbar-module-p m)
+      (slothbar-module-init m)))
+  (slothbar-show)
+  (setq slothbar--enabled t)
+  (run-hook-with-args 'slothbar-after-init-hook))
 
 (defun slothbar-refresh ()
   "Refresh slothbar according to geometry and settings."
@@ -803,24 +444,10 @@ Initialize the connection, window, graphics context, and modules."
     (when (slothbar-module-p m)
       (slothbar-module-exit m)))
   (remove-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
-  (when slothbar--connection
-    (when slothbar--window
-      (xcb:+request slothbar--connection
-          (make-instance 'xcb:UnmapWindow
-                         :window slothbar--window)))
-    (when slothbar--gc
-      (xcb:+request slothbar--connection
-          (make-instance 'xcb:FreeGC
-                         :gc slothbar--gc)))
-    (when slothbar--window
-      (xcb:+request-checked+request-check slothbar--connection
-          (make-instance 'xcb:DestroyWindow
-                         :window slothbar--window)))
-    (xcb:flush slothbar--connection)
-    (xcb:disconnect slothbar--connection)
-    (setq slothbar--connection nil
-          slothbar--window nil
-          slothbar--gc nil)
+  (when slothbar--backend
+    (slothbar-backend-close slothbar--backend)
+    (setq slothbar--backend nil
+          slothbar--visible nil)
     (run-hook-with-args 'slothbar-after-exit-hook)))
 
 ;;;###autoload

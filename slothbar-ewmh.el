@@ -47,8 +47,8 @@
 (require 'seq)
 
 (require 'slothbar)
+(require 'slothbar-backend-xcb)
 (require 'slothbar-log)
-(require 'slothbar-util)
 
 (defgroup slothbar-ewmh nil
   "Slothbar ewmh."
@@ -86,8 +86,8 @@
 Only when OPER eq \\='set and WHERE is nil."
   (when (and (eq 'set oper) (not where))
     (cl-loop for client across nval
-             do (slothbar--ensure-event-mask
-                 client xcb:EventMask:PropertyChange))))
+             do (slothbar-backend-xcb--ensure-event-mask
+                 slothbar--backend client xcb:EventMask:PropertyChange))))
 
 (add-variable-watcher 'slothbar-ewmh--client-list
                       #'slothbar-ewmh--watch-client-list)
@@ -130,16 +130,16 @@ WHERE the context of the operation"
 PROP-CLASS the xcb class representing the value to get
 SLOT optional and defaults to \\='value"
   (slot-value (xcb:+request-unchecked+reply
-                  slothbar--connection
+                  (slothbar-xcb-connection)
                   (make-instance prop-class :window win))
               slot))
 
 (defsubst slothbar-ewmh--get-root-win-prop (prop-class)
   "Get the root window property represented by PROP-CLASS.
 
-The root window is determined by `slothbar-util--find-root-window-id'."
+The root window is determined by `slothbar-xcb-root-window-id'."
   (slothbar-ewmh--get-window-property
-   (slothbar-util--find-root-window-id) prop-class))
+   (slothbar-xcb-root-window-id) prop-class))
 
 (defsubst slothbar-ewmh--get-desktop-names ()
   "Get the window manager desktop names.
@@ -166,7 +166,7 @@ the stringified desktop numbers."
   "Given CLIENT-VEC, return an alist mapping clients to desktop numbers."
   (cl-loop for client across client-vec
            for desktop = (slot-value (xcb:+request-unchecked+reply
-                                         slothbar--connection
+                                         (slothbar-xcb-connection)
                                          (make-instance
                                           'xcb:ewmh:get-_NET_WM_DESKTOP
                                           :window client))
@@ -226,7 +226,7 @@ the stringified desktop numbers."
   "Update the client to desktop mapping for win ID."
   (slothbar--log-debug* "wm_desktop notify for win %s" id)
   (when-let* ((reply (xcb:+request-unchecked+reply
-                        slothbar--connection
+                        (slothbar-xcb-connection)
                         (make-instance
                          'xcb:ewmh:get-_NET_WM_DESKTOP
                          :window id)))
@@ -268,13 +268,13 @@ DATA is the marshalled event data"
 (defun slothbar-ewmh--check-conforming ()
   "Return non-nil if the WM appears ewmh conforming."
   (when-let* ((reply (xcb:+request-unchecked+reply
-                        slothbar--connection
+                        (slothbar-xcb-connection)
                         (make-instance
                          'xcb:ewmh:get-_NET_SUPPORTING_WM_CHECK
-                         :window (slothbar-util--find-root-window-id))))
+                         :window (slothbar-xcb-root-window-id))))
               (window (slot-value reply 'value))
               (child-reply (xcb:+request-unchecked+reply
-                               slothbar--connection
+                               (slothbar-xcb-connection)
                                (make-instance
                                 'xcb:ewmh:get-_NET_SUPPORTING_WM_CHECK
                                 :window window)))
@@ -313,22 +313,22 @@ DATA is the marshalled event data"
 
           slothbar-ewmh--urgent-desktops (slothbar-ewmh--urgent-desktops))
     (unless (memq #'slothbar-ewmh--on-PropertyNotify
-                  (plist-get (slot-value slothbar--connection 'event-plist)
+                  (plist-get (slot-value (slothbar-xcb-connection) 'event-plist)
                              (xcb:-error-or-event-class->number
-                              slothbar--connection 'xcb:PropertyNotify)))
-      (xcb:+event slothbar--connection 'xcb:PropertyNotify
+                              (slothbar-xcb-connection) 'xcb:PropertyNotify)))
+      (xcb:+event (slothbar-xcb-connection) 'xcb:PropertyNotify
                   #'slothbar-ewmh--on-PropertyNotify))))
 
 (defun slothbar-ewmh--exit ()
   "Exit the global mode `slothbar-ewmh-mode'."
   (when (slothbar-enabled-p)
     (cl-loop for client across slothbar-ewmh--client-list
-             do (slothbar--clear-event-mask client))
-    (let* ((event-plist (slot-value slothbar--connection 'event-plist))
+             do (slothbar-backend-xcb--clear-event-mask client))
+    (let* ((event-plist (slot-value (slothbar-xcb-connection) 'event-plist))
            (event-number (xcb:-error-or-event-class->number
-                          slothbar--connection 'xcb:PropertyNotify))
+                          (slothbar-xcb-connection) 'xcb:PropertyNotify))
            (listeners (plist-get event-plist event-number)))
-      (setf (slot-value slothbar--connection 'event-plist)
+      (setf (slot-value (slothbar-xcb-connection) 'event-plist)
             (plist-put event-plist event-number
                        (remq #'slothbar-ewmh--on-PropertyNotify listeners)
                        #'equal)))))

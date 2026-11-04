@@ -42,7 +42,7 @@ implemented in the same file as the X window handling today.
 
 | Location | Leak |
 |----------+------|
-| =slothbar-module= struct | =xcb= slot (pixmap/GC/glyphset alist) and =cache= slot are renderer state |
+| =slothbar-module= struct | =xcb= slot (pixmap/GC/glyphset alist) is renderer state; =cache= is module-owned data and stays |
 | =slothbar-module-.el= primary =init= | allocates pixmap, GC, glyphset; fills the pixmap |
 | =slothbar-module-.el= =:before refresh= | frees and recreates the module pixmap on width change |
 | =slothbar-module-.el= =:after init= / =refresh= | draws text with XRender / clears =needs-refresh?= |
@@ -155,7 +155,9 @@ on the active backend.
 
 Backend-private per-module state (pixmap/GC/glyphset on X, ARGB tile on
 Wayland) lives in a hash table owned by the backend, keyed by module object.
-The module struct no longer carries =xcb= or =cache=.
+The module struct no longer carries =xcb=.  The =cache= slot stays: modules
+such as wifi, battery, workspaces, and tray use it for their own data.  Render
+caches live in the backend, keyed by module.
 
 ** 5.3 Neutral data types
 
@@ -400,8 +402,8 @@ Each stage leaves the X bar working.
    pgtk.  No visible change on X.
 2. *Extract the backend.*  Add =slothbar-backend.el= and
    =slothbar-backend-xcb.el=, move the X code, switch the core loop to the
-   generics, remove =xcb= and =cache= from the module struct.  No behavior
-   change. Verify by running the bar under Xorg.
+   generics, remove =xcb= (but keep the module-owned =cache=) from the module
+   struct.  No behavior change. Verify by running the bar under Xorg.
 3. *Explicit geometry and draw ops.*  Layout takes width/height arguments,
    add =slothbar-draw-op= and the pure color-run function.
 4. *Wayland backend.*  Layer shell, shm, rasterizer, configure handling,

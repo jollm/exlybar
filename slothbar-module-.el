@@ -47,95 +47,22 @@
 (require 'cl-lib)
 (require 'cl-generic)
 (require 'fontsloth-layout)
-(require 'map)
 (require 'pcase)
-(require 'xcb-render)
 
-(require 'slothbar)
+(require 'slothbar-backend)
 (require 'slothbar-color)
 (require 'slothbar-font)
 (require 'slothbar-log)
 (require 'slothbar-module)
-(require 'slothbar-render)
-
-(defvar slothbar--connection)
-(defvar slothbar--window)
 
 (cl-defmethod slothbar-module-init ((m slothbar-module))
   "Initialize module M.
-This default primary method gives M a graphics context, a pixmap, a glyphset,
-and a cache.  The xcb ids are stored in the module xcb alist."
-  (pcase-let* ((c slothbar--connection)
-               (pmap (xcb:generate-id c))
-               (gc (xcb:generate-id c))
-               ((cl-struct slothbar-module name width colors) m))
-    (slothbar--log-debug* "slothbar-module-init %s" name)
-    (let ((epixmap (slothbar-render-create-pixmap c pmap width slothbar-height))
-          (egc
-           (xcb:+request-checked+request-check c
-               (make-instance 'xcb:CreateGC
-                              :cid gc
-                              :drawable slothbar--window
-                              :value-mask (logior xcb:GC:Background
-                                                  xcb:GC:Foreground
-                                                  xcb:GC:GraphicsExposures)
-                              :background
-                              (slothbar-render-color->pixel
-                               (slothbar-module-rgb-background-color colors))
-                              :foreground
-                              (slothbar-render-color->pixel
-                               (slothbar-module-rgb-background-color colors))
-                              :graphics-exposures 0))))
-      (slothbar--log-debug* "create %s pixmap, errors %s" name epixmap)
-      (slothbar--log-debug* "create %s gc, errors %s" name egc))
-    (slothbar-render-fill-rectangle c gc pmap width slothbar-height)
-    (push `(pixmap . ,pmap) (slothbar-module-xcb m))
-    (push `(gc . ,gc) (slothbar-module-xcb m))
-    (push `(gs . ,(slothbar-render-create-glyphset c)) (slothbar-module-xcb m))
-    (setf (slothbar-module-cache m) (make-hash-table :test 'equal))))
-
-(defun slothbar-module--load-glyphs (text-layout gs cache)
-  "Load glyphs from TEXT-LAYOUT into GS unless found in CACHE."
-  (dolist (pos text-layout)
-    (when (fontsloth-layout-glyph-position-p pos)
-      (pcase-let* (((cl-struct
-                     fontsloth-layout-glyph-position
-                     key (parent char-code) (user-data font-idx)) pos)
-                   (cache-key (map-elt cache char-code)))
-        (unless (equal cache-key key)
-          (when-let ((font-path (slothbar-font-find font-idx)))
-            (slothbar-render-load-glyph
-             slothbar--connection gs
-             (fontsloth-load-font font-path)
-             pos)
-            (map-put! cache char-code key)))))))
-
-(defun slothbar-module--draw-text (m)
-  "Draw module M's text into its pixmap.
-
-If any color codes are present, the resulting text will be colorized
-accordingly.  Currently only commands :push, :pop, and :fg are supported."
-  (pcase-let* (((cl-struct
-                 slothbar-module cache text-layout xcb) m)
-               ((map ('pixmap pixmap) ('gs gs)) xcb))
-    (when (and pixmap gs)
-      (slothbar-module--load-glyphs text-layout gs cache)
-      (cl-flet ((draw (layout color)
-                  (slothbar-render-draw-text
-                   slothbar--connection pixmap gs layout color)))
-        (cl-loop for pos in text-layout
-                 with fgidx = 0 with fg-stack = nil with next = nil do
-                 (if (fontsloth-layout-glyph-position-p pos)
-                     (push pos next)
-                   (cl-case (car pos)
-                     (:push (push fgidx fg-stack))
-                     (:pop (draw (nreverse next) (slothbar-color-find fgidx t))
-                           (setq fgidx (pop fg-stack))
-                           (setq next nil))
-                     (:fg (draw (nreverse next) (slothbar-color-find fgidx t))
-                          (setq fgidx (cadr pos))
-                          (setq next nil))))
-                 finally (draw (nreverse next) (slothbar-color-find fgidx t)))))))
+This default primary method gives M a cache and asks the active display
+backend for the pixel resources it needs to draw."
+  (slothbar--log-debug* "slothbar-module-init %s" (slothbar-module-name m))
+  (setf (slothbar-module-cache m) (make-hash-table :test 'equal))
+  (when slothbar--backend
+    (slothbar-backend-add-module slothbar--backend m)))
 
 (defun slothbar-module--create-layout (text font fidx px x)
   "Create a `fontsloth-layout' for TEXT, FONT, at size PX and offset x.
@@ -221,43 +148,21 @@ This default primary method uses a result from fontsloth-layout to set
       (setf (slothbar-module-update-timer m)
             (run-at-time nil 10 #'slothbar-module-update-status m))))
   (when (slothbar-module-format m)
-    (slothbar-module--draw-text m)))
+    (when slothbar--backend
+      (slothbar-backend-draw-module slothbar--backend m)))
+  (setf (slothbar-module-initialized m) t))
+
+(cl-defmethod slothbar-module-refresh :before ((m slothbar-module))
+  "Lay out module M when it needs a refresh."
+  (when (slothbar-module-needs-refresh? m)
+    (slothbar-module-layout m)))
 
 (cl-defmethod slothbar-module-refresh ((m slothbar-module))
   "Refresh module M.
-This default primary method redraws the text if it has changed."
-  ;; (message "module refresh primary %s" (slothbar-module-name m))
+This default primary method redraws M through the display backend."
   (when (slothbar-module-needs-refresh? m)
-    ;; (message "module %s changed, redrawing text, xcb %s"
-    ;;          (slothbar-module-name m) (slothbar-module-xcb m))
-    (slothbar-module--draw-text m)))
-
-(cl-defmethod slothbar-module-refresh :before ((m slothbar-module))
-  "When refreshing, redo layout and make a new pixmap."
-  ;; (message "running super before refresh")
-  (when (slothbar-module-needs-refresh? m)
-    (slothbar-module-layout m)
-    (pcase-let* ((c slothbar--connection)
-                 ((cl-struct slothbar-module width colors xcb) m))
-      (when (map-elt xcb 'pixmap)
-        (xcb:+request c
-            (make-instance 'xcb:FreePixmap :pixmap (map-elt xcb 'pixmap)))
-        (xcb:+request-checked+request-check c
-            (make-instance 'xcb:ChangeGC
-                           :gc (map-elt xcb 'gc)
-                           :value-mask (logior xcb:GC:Background
-                                               xcb:GC:Foreground)
-                           :background
-                           (slothbar-render-color->pixel
-                            (slothbar-module-rgb-background-color colors))
-                           :foreground
-                           (slothbar-render-color->pixel
-                            (slothbar-module-rgb-background-color colors))))
-        (let ((pmap (xcb:generate-id c)))
-          (slothbar-render-create-pixmap c pmap width slothbar-height)
-          (map-put! (slothbar-module-xcb m) 'pixmap pmap)
-          (slothbar-render-fill-rectangle
-           c (map-elt xcb 'gc) pmap width slothbar-height))))))
+    (when slothbar--backend
+      (slothbar-backend-draw-module slothbar--backend m))))
 
 (cl-defmethod slothbar-module-refresh :after ((m slothbar-module))
   "After refresh update M's needs-refresh?."
@@ -271,25 +176,16 @@ This default primary method redraws the text if it has changed."
   "Cancel the update timer."
   (when (slothbar-module-update-timer m)
     (cancel-timer (slothbar-module-update-timer m)))
-  (setf (slothbar-module-update-timer m) nil))
+  (setf (slothbar-module-update-timer m) nil
+        (slothbar-module-initialized m) nil))
 
 (cl-defmethod slothbar-module-exit ((m slothbar-module))
   "Tear down module M."
   (slothbar--log-debug* "slothbar-module-exit %s" (slothbar-module-name m))
-  (pcase-let (((map ('pixmap pmap) ('gc gc) ('gs gs)) (slothbar-module-xcb m)))
-    (when pmap
-      (xcb:+request slothbar--connection
-          (make-instance 'xcb:FreePixmap :pixmap pmap)))
-    (when gc
-      (xcb:+request slothbar--connection
-          (make-instance 'xcb:FreeGC :gc gc)))
-    (when gs
-      (let ((egs (xcb:+request-checked+request-check slothbar--connection
-                     (make-instance 'xcb:render:FreeGlyphSet :glyphset gs))))
-        (slothbar--log-debug* "trying to free glyphset, errors %s" egs))))
+  (when slothbar--backend
+    (slothbar-backend-remove-module slothbar--backend m))
   (setf (slothbar-module-cache m) nil
-        (slothbar-module-text m) nil
-        (slothbar-module-xcb m) nil))
+        (slothbar-module-text m) nil))
 
 (defsubst slothbar-module--find-by-name (module-name)
   "Find all instances of modules with names equivalent to MODULE-NAME."
