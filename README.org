@@ -1,16 +1,17 @@
 #+TITLE: slothbar
 
-Slothbar is an X window manager status bar that runs within Emacs.
+Slothbar is a window manager status bar that runs within Emacs.
 
 It is window manager agnostic, written completely in elisp, and fully
 configurable in Emacs.
 
 It has been tested with [[https://github.com/emacs-exwm/exwm][Exwm]], [[https://xmonad.org][xmonad]], [[https://herbstluftwm.org][herbstluftwm]], [[https://github.com/conformal/spectrwm][spectrwm]], [[https://stumpwm.github.io/][stumpwm]],
-and [[https://i3wm.org/][i3]].
+and [[https://i3wm.org/][i3]] on Xorg, and with [[https://swaywm.org][sway]] on Wayland.
 
 It is currently pre version 1.0 and the API is not yet stable.
 
-Like Exwm, it relies on xcb via xelb to communicate with an Xorg server.
+On Xorg, slothbar uses xcb via xelb.  On Wayland it uses [[../elwl][elwl]] and the
+wlr-layer-shell protocol.  Both backends use fontsloth for glyph rasterization.
 
 Current version: *0.30.2*
 

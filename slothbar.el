@@ -39,8 +39,8 @@
 
 ;;; Commentary:
 
-;; This package uses xelb to build a dock bar for displaying status
-;; information.
+;; This package uses xelb to build a dock bar on X11 and elwl/wlr-layer-shell
+;; to build a bar on Wayland.
 
 ;; An example configuration with use-package:
 
@@ -98,7 +98,7 @@
 (require 'slothbar-log)
 
 (defgroup slothbar nil
-  "Slothbar is a status bar that displays as a dock window in X."
+  "Slothbar is a status bar that displays as a dock or layer-shell window."
   :group 'display)
 
 (defvar slothbar--enabled nil "Non-nil if slothbar is enabled.")
@@ -106,7 +106,9 @@
 (defcustom slothbar-width (display-pixel-width)
   "Slothbar width.
 
-Defaults to the width obtained from `display-pixel-width'"
+Defaults to the width obtained from `display-pixel-width'.  The Wayland
+backend replaces this with the width supplied by a layer-surface configure
+event."
   :type 'integer
   :group 'slothbar)
 
@@ -140,7 +142,7 @@ Defaults to the width obtained from `display-pixel-width'"
 - nil indicates to automatically choose one.  If the slothbar-randr
   extension is enabled, this will be the primary display
 - string should be the display name as reported by
-  `display-monitor-attributes-list`"
+  `display-monitor-attributes-list' on X or by `wl_output.name' on Wayland"
   :type '(choice (const :tag "auto" nil)
 		 string)
   :group 'slothbar)
@@ -164,6 +166,17 @@ E.g.: (:left
                                    :value slothbar-date-create)))
   :group 'slothbar
   :require 'slothbar-module-requires)
+
+(defcustom slothbar-backend 'auto
+  "Display backend to use.
+
+`auto' prefers Wayland when WAYLAND_DISPLAY names an existing socket and the
+elwl client is loadable; otherwise it uses xcb.  Set `xcb' or `wayland' to
+choose explicitly."
+  :type '(choice (const :tag "Automatic" auto)
+                 (const :tag "X11 (xcb)" xcb)
+                 (const :tag "Wayland" wayland))
+  :group 'slothbar)
 
 (defcustom slothbar-before-init-hook nil
   "Functions to run when before slothbar is initialized."
@@ -289,13 +302,14 @@ It will remap colors and refresh the display."
     (run-with-idle-timer 0 nil (lambda () (slothbar--refresh t)))))
 
 (defvar slothbar--geometry-changed? nil
-  "Non-nil when the bar geometry changed.  Cleared by the backend's
-Expose handler.")
+  "Non-nil when the bar geometry changed.
+Cleared by `slothbar-refresh-modules' after the change is processed.")
 
 (cl-defun slothbar-refresh-modules (&optional modules)
   "Ask the modules to refresh and see whether the layout has changed.
 MODULES optional modules to refresh and compare with prev-extents"
   (when slothbar--geometry-changed?
+    (setq slothbar--geometry-changed? nil)
     (dolist (m slothbar--modules)
       (when (slothbar-module-p m)
         (setf (slothbar-module-needs-refresh? m) t
@@ -397,7 +411,7 @@ Initialize the display backend, window, and modules."
   (setq slothbar-font-px-size
         (slothbar-font--precompute-px-sizes
          slothbar-height slothbar-font--color-code-map))
-  (setq slothbar--backend (slothbar-backend-create 'xcb))
+  (setq slothbar--backend (slothbar-backend-create slothbar-backend))
   (slothbar-backend-open slothbar--backend)
   ;; initialize modules
   (slothbar--construct-modules)
@@ -407,7 +421,9 @@ Initialize the display backend, window, and modules."
     (when (slothbar-module-p m)
       (slothbar-module-init m)))
   (slothbar-show)
+  (slothbar-refresh-modules)
   (setq slothbar--enabled t)
+  (slothbar--start-module-refresh-timer)
   (run-hook-with-args 'slothbar-after-init-hook))
 
 (defun slothbar-refresh ()
@@ -427,11 +443,11 @@ Initialize the display backend, window, and modules."
 ;;;###autoload
 (defun slothbar ()
   "Start slothbar."
-  (if (and (display-graphic-p) (eq 'x window-system))
+  (if (display-graphic-p)
       (fontsloth-async-load-and-cache-fonts
        (slothbar-font-map-candidates)
        :finish-func (lambda (_) (slothbar--start)))
-    (message "Slothbar requires an X window system display to run")))
+    (message "Slothbar requires a graphical display to run")))
 
 ;;;###autoload
 (defun slothbar-exit ()
@@ -454,7 +470,7 @@ Initialize the display backend, window, and modules."
 
 ;;;###autoload
 (define-minor-mode slothbar-mode
-  "Slothbar-mode provides an X window manager status bar."
+  "Slothbar-mode provides a window manager status bar."
   :global t
   :lighter " 🦥"
   (when (and slothbar-mode (not (slothbar-enabled-p)))

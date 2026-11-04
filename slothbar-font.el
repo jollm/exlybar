@@ -78,13 +78,15 @@ code-point ranges."
 
 (declare-function font-info "font.c" (name &optional frame))
 
-(cl-defsubst slothbar-font--filename-search (font-name-list)
-  "Return a path to the first found in FONT-NAME-LIST or nil if none."
-  (seq-some (lambda (v) (when v v))
-	    (cl-mapcar (lambda (name)
-			 (when-let ((fuck (font-info name)))
-			   (elt fuck 12)))
-		       font-name-list)))
+(defun slothbar-font--filename-search (font-name-list)
+  "Return a path to the first found in FONT-NAME-LIST or nil if none.
+Font lookup requires a window-system frame; on a terminal frame it fails, so
+treat that as no match."
+  (seq-some
+   (lambda (name)
+     (let ((info (condition-case nil (font-info name) (error nil))))
+       (and info (> (length info) 12) (elt info 12))))
+   font-name-list))
 
 (defun slothbar-font-map-candidates (&optional candidates)
   "Return a vector with file paths to the best matches for CANDIDATES.

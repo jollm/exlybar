@@ -386,10 +386,10 @@ Add a defcustom, for example:
   :group 'slothbar)
 #+end_src
 
-=auto= prefers Wayland when =WAYLAND_DISPLAY= is set and =elwl= can be
-loaded, otherwise xcb.  Do not infer from =window-system=: an Emacs running
-under XWayland can legitimately drive a Wayland bar, and a pgtk Emacs has no
-elisp-visible Wayland connection.
+=auto= prefers Wayland when =WAYLAND_DISPLAY= names an existing socket and
+=elwl= can be loaded, otherwise xcb.  Do not infer from =window-system=: an
+Emacs running under XWayland can legitimately drive a Wayland bar, and a pgtk
+Emacs has no elisp-visible Wayland connection.
 
 * 9. Staging
 
