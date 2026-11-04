@@ -44,6 +44,7 @@
 
 (require 'cl-lib)
 
+(require 'slothbar-color)
 (require 'slothbar-util)
 
 (defvar slothbar-module-min-width 10
@@ -55,10 +56,12 @@
      (:constructor slothbar-module-rgb-create)
      (:copier nil))
   "Container for a background and a foreground color."
-  (background-color (slothbar-util--color->pixel
-                     (slothbar-util--find-background-color)) :type 'number)
-  (foreground-color (slothbar-util--color->pixel
-                     (slothbar-util--find-foreground-color)) :type 'number))
+  (background-color (slothbar-color-from-name
+                     (slothbar-util--find-background-color))
+                    :type 'slothbar-color-rgb)
+  (foreground-color (slothbar-color-from-name
+                     (slothbar-util--find-foreground-color))
+                    :type 'slothbar-color-rgb))
 
 (cl-defstruct
     (slothbar-module

@@ -79,10 +79,12 @@ and a cache.  The xcb ids are stored in the module xcb alist."
                               :value-mask (logior xcb:GC:Background
                                                   xcb:GC:Foreground
                                                   xcb:GC:GraphicsExposures)
-                              :background (slothbar-module-rgb-background-color
-                                           colors)
-                              :foreground (slothbar-module-rgb-background-color
-                                           colors)
+                              :background
+                              (slothbar-render-color->pixel
+                               (slothbar-module-rgb-background-color colors))
+                              :foreground
+                              (slothbar-render-color->pixel
+                               (slothbar-module-rgb-background-color colors))
                               :graphics-exposures 0))))
       (slothbar--log-debug* "create %s pixmap, errors %s" name epixmap)
       (slothbar--log-debug* "create %s gc, errors %s" name egc))
@@ -245,10 +247,12 @@ This default primary method redraws the text if it has changed."
                            :gc (map-elt xcb 'gc)
                            :value-mask (logior xcb:GC:Background
                                                xcb:GC:Foreground)
-                           :background (slothbar-module-rgb-background-color
-                                        colors)
-                           :foreground (slothbar-module-rgb-background-color
-                                        colors)))
+                           :background
+                           (slothbar-render-color->pixel
+                            (slothbar-module-rgb-background-color colors))
+                           :foreground
+                           (slothbar-render-color->pixel
+                            (slothbar-module-rgb-background-color colors))))
         (let ((pmap (xcb:generate-id c)))
           (slothbar-render-create-pixmap c pmap width slothbar-height)
           (map-put! (slothbar-module-xcb m) 'pixmap pmap)

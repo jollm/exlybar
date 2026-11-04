@@ -99,6 +99,7 @@
 (require 'slothbar-module)
 (require 'slothbar-util)
 (require 'slothbar-log)
+(require 'slothbar-render)
 
 (defgroup slothbar nil
   "Slothbar is a status bar that displays as a dock window in X."
@@ -232,6 +233,22 @@ enabled or disabled."
   "Return t if slothbar is enabled."
   slothbar--enabled)
 
+(defun slothbar--background-color ()
+  "Return the current background color as a `slothbar-color-rgb'."
+  (slothbar-color-from-name (slothbar-util--find-background-color)))
+
+(defun slothbar--foreground-color ()
+  "Return the current foreground color as a `slothbar-color-rgb'."
+  (slothbar-color-from-name (slothbar-util--find-foreground-color)))
+
+(defun slothbar--background-pixel ()
+  "Return the current background color as an X pixel."
+  (slothbar-render-color->pixel (slothbar--background-color)))
+
+(defun slothbar--foreground-pixel ()
+  "Return the current foreground color as an X pixel."
+  (slothbar-render-color->pixel (slothbar--foreground-color)))
+
 (defun slothbar--find-display-geometry (&optional display)
   "Find DISPLAY geometry as an alist of x-offset, y-offset, width, and height.
 
@@ -360,18 +377,14 @@ The default color is from `slothbar-util--find-background-color'."
                                          xcb:CW:BackPixel)
                      :background-pixmap xcb:BackPixmap:ParentRelative
                      :background-pixel
-                     (or color
-                         (slothbar-util--color->pixel
-                          (slothbar-util--find-background-color)))))
+                     (or color (slothbar--background-pixel))))
   (xcb:+request-checked+request-check slothbar--connection
       (make-instance 'xcb:ChangeGC
                      :gc slothbar--gc
                      :value-mask (logior xcb:GC:Background
                                          xcb:GC:Foreground)
-                     :background (slothbar-util--color->pixel
-                                  (slothbar-util--find-background-color))
-                     :foreground (slothbar-util--color->pixel
-                                  (slothbar-util--find-background-color))))
+                     :background (slothbar--background-pixel)
+                     :foreground (slothbar--background-pixel)))
   (slothbar-render-fill-rectangle slothbar--connection
                                   slothbar--gc slothbar--pixmap
                                   slothbar-width slothbar-height))
@@ -429,8 +442,7 @@ It will remap colors and refresh the display."
       (when (slothbar-module-p m)
         (setf (slothbar-module-rgb-background-color
                (slothbar-module-colors m))
-              (slothbar-util--color->pixel
-               (slothbar-util--find-background-color)))
+              (slothbar--background-color))
         (setf (slothbar-module-needs-refresh? m) t)))
     (run-with-idle-timer 0 nil (lambda () (slothbar--refresh t)))))
 
@@ -653,8 +665,7 @@ Initialize the connection, window, graphics context, and modules."
                                   nil)
   ;; initialize the bar window
   (let ((id (xcb:generate-id slothbar--connection))
-        (background-pixel (slothbar-util--color->pixel
-                           (slothbar-util--find-background-color)))
+        (background-pixel (slothbar--background-pixel))
         (y slothbar-offset-y)
         parent depth)
     (setq slothbar--window id)
@@ -722,10 +733,8 @@ Initialize the connection, window, graphics context, and modules."
                               :drawable slothbar--window
                               :value-mask (logior xcb:GC:Background
                                                   xcb:GC:Foreground)
-                              :background (slothbar-util--color->pixel
-                                           (slothbar-util--find-background-color))
-                              :foreground (slothbar-util--color->pixel
-                                           (slothbar-util--find-foreground-color))))))
+                              :background (slothbar--background-pixel)
+                              :foreground (slothbar--foreground-pixel)))))
       (slothbar--log-debug* "slothbar init create gc errors: %s" egc))
     (slothbar-render-fill-rectangle slothbar--connection
                                     slothbar--gc slothbar--pixmap

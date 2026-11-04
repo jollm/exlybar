@@ -52,6 +52,7 @@
 (require 'xcb-renderutil)
 (require 'fontsloth-layout)
 
+(require 'slothbar-color)
 (require 'slothbar-log)
 (require 'slothbar-util)
 
@@ -100,11 +101,30 @@ ALPHA 16 bit alpha value"
   (make-instance 'xcb:render:COLOR
                   :red red :green green :blue blue :alpha alpha))
 
+(defun slothbar-render-color->xcb (color)
+  "Return an `xcb:render:COLOR' for COLOR, a `slothbar-color-rgb'.
+Return nil when COLOR is nil."
+  (when color
+    (slothbar-render-create-color
+     :red (slothbar-color-rgb-red color)
+     :green (slothbar-color-rgb-green color)
+     :blue (slothbar-color-rgb-blue color)
+     :alpha (slothbar-color-rgb-alpha color))))
+
+(defun slothbar-render-color->pixel (color)
+  "Return an X TrueColor pixel for COLOR, a `slothbar-color-rgb'.
+Return nil when COLOR is nil."
+  (when color
+    (logior (ash (ash (slothbar-color-rgb-red color) -8) 16)
+            (ash (ash (slothbar-color-rgb-green color) -8) 8)
+            (ash (slothbar-color-rgb-blue color) -8))))
+
 (defun slothbar-render--create-pen (c color)
   "Create a pen for sketching glyphs.
 C the connection
-COLOR the pen color, an symbol `xcb:render:COLOR'"
-  (let* ((fmts (xcb:renderutil:query-formats c))
+COLOR the pen color, a `slothbar-color-rgb'"
+  (let* ((color (slothbar-render-color->xcb color))
+         (fmts (xcb:renderutil:query-formats c))
          (fmt (xcb:renderutil:find-standard
                fmts xcb:renderutil:PICT_STANDARD:ARGB_32))
          (pmap (xcb:generate-id c)))
@@ -152,7 +172,7 @@ PMAP the pixmap
 GS the glyphset
 GLYPH-POSITIONS the list of glyph positions
 TEXT the text to draw
-COLOR color of text, an symbol `xcb:render:COLOR'"
+COLOR color of text, a `slothbar-color-rgb'"
   (pcase-let* ((fmts (xcb:renderutil:query-formats c))
                (fmt (xcb:renderutil:find-standard
                      fmts xcb:renderutil:PICT_STANDARD:RGB_24))

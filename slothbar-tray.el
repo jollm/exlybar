@@ -50,8 +50,10 @@
 (require 'xcb-xembed)
 (require 'xcb-systemtray)
 
+(require 'slothbar-color)
 (require 'slothbar-log)
 (require 'slothbar-module-)
+(require 'slothbar-render)
 
 (cl-defstruct (slothbar-tray--icon
                (:constructor slothbar-tray--icon-create))
@@ -104,7 +106,9 @@ This should be a color, or nil for transparent background."
          ;; Change the background color for embedder.
          (when (and slothbar--connection
                     slothbar-tray--embedder-window)
-           (let ((background-pixel (slothbar-util--color->pixel value)))
+           (let ((background-pixel
+                  (slothbar-render-color->pixel
+                   (slothbar-color-from-name value))))
              (xcb:+request slothbar--connection
                  (make-instance 'xcb:ChangeWindowAttributes
                                 :window slothbar-tray--embedder-window
@@ -412,7 +416,8 @@ This overrides the default module init because system tray is special."
     ;; Create the embedder.
     (let* ((id (xcb:generate-id slothbar-tray--connection))
            (background-pixel
-            (slothbar-util--color->pixel slothbar-tray-background-color))
+            (slothbar-render-color->pixel
+             (slothbar-color-from-name slothbar-tray-background-color)))
           (parent slothbar--window)
           (depth (slot-value (xcb:+request-unchecked+reply
                                  slothbar-tray--connection

@@ -48,8 +48,43 @@
 
 (require 'slothbar-util)
 (require 'slothbar-log)
-;; FIXME: store colors without relying on an xcb type
-(require 'slothbar-render)
+
+;;; colors
+
+(cl-defstruct
+    (slothbar-color-rgb
+     (:constructor slothbar-color-rgb-create
+                   (&key red green blue (alpha #xffff)))
+     (:copier nil))
+  "A backend-neutral color with 16-bit channels.
+RED, GREEN, BLUE, and ALPHA are integers in the range 0-65535."
+  (red 0 :type 'number)
+  (green 0 :type 'number)
+  (blue 0 :type 'number)
+  (alpha #xffff :type 'number))
+
+(defun slothbar-color-from-plist (plist)
+  "Return a `slothbar-color-rgb' from PLIST.
+
+PLIST uses :red, :green, :blue, and optional :alpha keys, as in the
+`slothbar-color-*' defcustoms."
+  (slothbar-color-rgb-create
+   :red (or (plist-get plist :red) 0)
+   :green (or (plist-get plist :green) 0)
+   :blue (or (plist-get plist :blue) 0)
+   :alpha (or (plist-get plist :alpha) #xffff)))
+
+(defun slothbar-color-from-name (name)
+  "Return a `slothbar-color-rgb' for the color named NAME.
+Return nil when NAME is nil or not a known color.  The alpha channel is
+opaque."
+  (when (stringp name)
+    (let ((values (color-values name)))
+      (when values
+        (slothbar-color-rgb-create
+         :red (nth 0 values)
+         :green (nth 1 values)
+         :blue (nth 2 values))))))
 
 ;;; foreground colors
 
@@ -147,11 +182,11 @@
 
 ;; TODO: use this
 ;; (defcustom slothbar-color-bg
-;;   (slothbar-util--color->pixel
+;;   (slothbar-color-from-name
 ;;    (slothbar-util--find-background-color))
 ;;   "The default background color.
 ;; Currently unused."
-;;   :type 'natnum
+;;   :type '(sexp :tag "color")
 ;;   :group 'slothbar)
 
 ;;; color maps
@@ -173,12 +208,13 @@
              for i from 0
              for color-map in colors
              do (aset vec i
-                      (apply #'slothbar-render-create-color
-                             (plist-get color-map color-key)))
+                      (slothbar-color-from-plist
+                       (plist-get color-map color-key)))
              finally return vec)))
 
 (defcustom slothbar-color-map-fg (slothbar-color--gen-color-map)
-  "The color map corresponding to color codes ^0-^9."
+  "The color map corresponding to color codes ^0-^9.
+Each element is a `slothbar-color-rgb'."
   :type '(vector sexp sexp sexp sexp sexp sexp sexp sexp sexp sexp)
   :group 'slothbar)
 
@@ -202,9 +238,10 @@ See `slothbar-color-zone'"
 
 (defsubst slothbar-color-find (color-index fg)
   "Find a color given COLOR-INDEX.
+Return a `slothbar-color-rgb'.
 FG t if a foreground color, nil if a background color"
   (if fg (aref slothbar-color-map-fg color-index)
-    (slothbar-util--color->pixel
+    (slothbar-color-from-name
      (slothbar-util--find-background-color))))
 
 ;; TODO change these to keyword params

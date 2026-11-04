@@ -44,16 +44,7 @@
 
 (require 'xcb)
 
-(declare-function x-display-visual-class "xfns.c" (&optional terminal))
-
-(defun slothbar-util--color->pixel (color)
-  "Convert COLOR to PIXEL (index in TrueColor colormap)."
-  (when (and color
-             (eq (x-display-visual-class) 'true-color))
-    (let ((rgb (color-values color)))
-      (logior (ash (ash (pop rgb) -8) 16)
-              (ash (ash (pop rgb) -8) 8)
-              (ash (pop rgb) -8)))))
+(defvar slothbar-connection)
 
 (defun slothbar-util--find-background-color ()
   "Attempt to guess a reasonable background color."
@@ -66,8 +57,6 @@
   ;; TODO update this after a theme is loaded or changed
   ;; also, is it possible to get current theme foreground directly?
   (frame-parameter (selected-frame) 'foreground-color))
-
-(defvar slothbar-connection)
 
 (defun slothbar-util--find-root-window-id ()
   "Attempt to find a root window."
