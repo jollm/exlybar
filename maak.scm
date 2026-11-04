@@ -2,6 +2,8 @@
   #:declarative? #t
   #:use-module (maak maak))
 
+(define emacs (or (getenv "EMACS") "emacs"))
+
 ;; Display program help screen.
 (define (help)
   ($ '("maak --help")))
@@ -15,3 +17,16 @@
 (define (test-xwayland)
   "Run the xcb backend smoke test under headless sway and Xwayland."
   ($ '("bash test/slothbar-xwayland-smoke.sh")))
+
+;; Run the pure layout/damage/draw-op tests.
+(define (test-unit)
+  "Run the pure unit tests."
+  ($ (list (string-append
+            emacs " -Q --batch -L . -l test/slothbar-unit-test.el"
+            " -f ert-run-tests-batch-and-exit"))))
+
+;; Run the pure tests and the live X backend smoke test.
+(define (test)
+  "Run the unit tests and the Xwayland smoke test."
+  (test-unit)
+  (test-xwayland))

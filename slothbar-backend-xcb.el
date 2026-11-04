@@ -60,7 +60,8 @@
 (require 'slothbar-font)
 (require 'slothbar-log)
 (require 'slothbar-module)
-(require 'slothbar-render)
+(require 'slothbar-draw-op)
+(require 'slothbar-render-xcb)
 
 (cl-defstruct
     (slothbar-backend-xcb
@@ -472,32 +473,17 @@ The default color is from `slothbar-util--find-background-color'."
               (puthash char-code key cache))))))))
 
 (defun slothbar-backend-xcb--draw-text (backend module surface)
-  "Draw MODULE's text into SURFACE for BACKEND.
-
-If any color codes are present, the resulting text will be colorized
-accordingly.  Currently only commands :push, :pop, and :fg are supported."
+  "Draw MODULE's text into SURFACE for BACKEND."
   (let ((pixmap (slothbar-backend-xcb--module-surface-pixmap surface))
-        (gs (slothbar-backend-xcb--module-surface-gs surface))
-        (text-layout (slothbar-module-text-layout module)))
+        (gs (slothbar-backend-xcb--module-surface-gs surface)))
     (when (and pixmap gs)
-      (cl-flet ((draw (layout color)
-                  (slothbar-render-draw-text
-                   (slothbar-backend-xcb-connection backend)
-                   pixmap gs layout color)))
-        (cl-loop for pos in text-layout
-                 with fgidx = 0 with fg-stack = nil with next = nil do
-                 (if (fontsloth-layout-glyph-position-p pos)
-                     (push pos next)
-                   (cl-case (car pos)
-                     (:push (push fgidx fg-stack))
-                     (:pop (draw (nreverse next) (slothbar-color-find fgidx t))
-                           (setq fgidx (pop fg-stack))
-                           (setq next nil))
-                     (:fg (draw (nreverse next) (slothbar-color-find fgidx t))
-                          (setq fgidx (cadr pos))
-                          (setq next nil))))
-                 finally (draw (nreverse next)
-                               (slothbar-color-find fgidx t)))))))
+      (dolist (op (slothbar-text-draw-ops
+                   (slothbar-module-text-layout module)))
+        (slothbar-render-draw-text
+         (slothbar-backend-xcb-connection backend)
+         pixmap gs
+         (slothbar-draw-op-glyph-positions op)
+         (slothbar-draw-op-color op))))))
 
 ;;; Event handling
 

@@ -177,10 +177,10 @@ caches live in the backend, keyed by module.
 ;;             slothbar-layout-subtract-extents
 #+end_src
 
-The color-code segmentation currently inside =slothbar-module--draw-text=
-(:push, :pop, :fg) moves into a pure function, for example
-=slothbar-module--text-ops=, returning a list of =slothbar-draw-op=.  Both
-backends consume the same ops, only painting differs.
+The color-code segmentation (:push, :pop, :fg) is a pure function,
+=slothbar-text-draw-ops= in =slothbar-draw-op.el=, returning a list of
+=slothbar-draw-op=.  Both backends consume the same ops, only painting
+differs.
 
 Geometry should be explicit rather than read from globals.:
 =slothbar-layout-coordinate= gains a width argument (and height where
@@ -227,8 +227,8 @@ damage before presenting.  This preserves the current X behavior
   slothbar-backend.el         backend generics, neutral types, selection
   slothbar-backend-xcb.el     moved X window/struts/events/randr wiring
   slothbar-backend-wayland.el elwl connection, layer shell, configure, hide/show
-  slothbar-render.el          draw ops, color runs, shared helpers
-  slothbar-render-xcb.el      current slothbar-render.el (pixmap/GC/glyphset)
+  slothbar-draw-op.el         draw ops, color runs
+  slothbar-render-xcb.el      X render primitives (pixmap/GC/glyphset)
   slothbar-render-wayland.el  software rasterizer and frame assembly
   slothbar-color.el           neutral RGBA, no require of a render backend
   slothbar-util.el            X-only helpers move to the xcb backend
@@ -238,10 +238,9 @@ damage before presenting.  This preserves the current X behavior
 #+end_example
 
 Public file names that users may require (=slothbar=, =slothbar-module-requires=,
-module files) stay.  =slothbar-render.el= keeps its name for the neutral
-layer; the X primitives move to =slothbar-render-xcb.el=.  If renaming is
-undesirable, the X primitives may stay in =slothbar-render.el= and the neutral
-layer live in =slothbar-backend.el= instead.
+module files) stay.  The X render primitives moved out of the old
+=slothbar-render.el= into =slothbar-render-xcb.el=; the neutral draw-operation
+layer is =slothbar-draw-op.el=.
 
 * 6. X backend
 
@@ -413,9 +412,12 @@ Each stage leaves the X bar working.
 
 * 10. Testing
 
-- Existing behavior: a small ERT suite for =slothbar-layout= and
-  =slothbar-layout-subtract-extents= (they are already pure), plus
-  =slothbar--text-ops= once extracted.
+- Existing behavior: =test/slothbar-unit-test.el= covers =slothbar-layout=,
+  =slothbar-layout-coordinate=, extents/damage subtraction, and
+  =slothbar-text-draw-ops=.  Run it with =maak test-unit=.
+- Live X backend: =test/slothbar-xwayland-smoke.sh= boots headless sway and
+  Xwayland and exercises the xcb backend and the core start/exit lifecycle.
+  Run it with =maak test-xwayland=; =maak test= runs both.
 - Rasterizer: golden-image tests over a fixed font and text; compare tiles
   against committed pixel fixtures or hashes, no compositor required.
 - Wayland protocol: elwl's fixture server covers registry, shm,

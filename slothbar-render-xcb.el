@@ -1,4 +1,4 @@
-;;; slothbar-render.el --- Slothbar XCB specific render fns -*- lexical-binding: t -*-
+;;; slothbar-render-xcb.el --- XCB-specific render primitives  -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2021 Jo Gay <jo.gay@mailfence.com>
 
@@ -41,7 +41,7 @@
 
 ;; This module provides xcb helpers for slothbar.
 ;; Particularly it provides useful helpers involving the render/renderutil
-;; extensions.
+;; extensions.  Backend-neutral draw operations live in slothbar-render.el.
 
 ;;; Code:
 
@@ -280,5 +280,5 @@ GLYPH-POSITION the `fontsloth-layout-glyph-position'"
     ;;          )
     char-code))
 
-(provide 'slothbar-render)
-;;; slothbar-render.el ends here
+(provide 'slothbar-render-xcb)
+;;; slothbar-render-xcb.el ends here

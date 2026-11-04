@@ -260,33 +260,39 @@ Slothbar consists of five primary components:
   that type.
 
   Generic functions (default primary method descriptions):
-  + ~(slothbar-module-init (m slothbar-module))~: gives an xcb pixmap,
-    graphics context, a glyphset, a cache, and fills a rectangle with
-    the background color. Generally it is not necessary to override
-    the default primary method. It may be helpful to provide before or
-    after methods.
+  + ~(slothbar-module-init (m slothbar-module))~: gives the module a cache
+    and asks the display backend for the pixel resources it needs to draw.
+    Generally it is not necessary to override the default primary method.
+    It may be helpful to provide before or after methods.
 
   + ~(slothbar-module-layout (m slothbar-module))~: relies on
     ~fontsloth-layout~, ~slothbar-color~, and ~slothbar-font~ to produce a
     sequence of color commands and glyph positions
 
   + ~(slothbar-module-refresh (m slothbar-module))~: if the module requests a
-    refresh, draw the text using glyph positions and color commands
+    refresh, redraw the text through the display backend
 
   + ~(slothbar-module-update-status (m slothbar-module))~: for modules
     that need to poll status information, if a module defines a
     primary method for this, it will run on a repeat timer until the
     module exits
 
-  + ~(slothbar-module-exit (m slothbar-module))~: free xcb assets and clear
-    module state
+  + ~(slothbar-module-exit (m slothbar-module))~: release the backend's pixel
+    resources and clear module state
 
   Module implementations can provide specific :before and/or :after methods of
   the above as well as overrides to hook into the module
   init/layout/refresh/exit cycle.
 
++ Text layout to draw operations
+  Entry point: [[./slothbar-draw-op.el][./slothbar-draw-op.el]]
+
+  Converts a module's fontsloth text layout and color commands into
+  backend-neutral draw operations.  Display backends paint these operations;
+  no X or Wayland types appear here.
+
 + Glyph rendering, loading, and compositing
-  Entry point: [[./slothbar-render.el][./slothbar-render.el]]
+  Entry point: [[./slothbar-render-xcb.el][./slothbar-render-xcb.el]]
 
   This is used by slothbar-module.el to draw text. It relies on [[https://github.com/jollm/fontsloth][fontsloth]] for
   glyph rasterization and provides an implementation of glyph stream like

@@ -54,7 +54,7 @@
 (require 'slothbar-backend-xcb)
 (require 'slothbar-log)
 (require 'slothbar-module-)
-(require 'slothbar-render)
+(require 'slothbar-render-xcb)
 
 (cl-defstruct (slothbar-tray--icon
                (:constructor slothbar-tray--icon-create))

@@ -306,13 +306,15 @@ MODULES optional modules to refresh and compare with prev-extents"
   ;; refresh modules to update to latest dimensions
   (let ((prev-extents
          (slothbar-layout-extents
-          (slothbar-layout-coordinate (slothbar-layout slothbar--modules) 0 0)))
+          (slothbar-layout-coordinate
+           (slothbar-layout slothbar--modules) 0 0 slothbar-width)))
         (slothbar--modules (or modules slothbar--modules)))
     (dolist (m slothbar--modules)
       (when (slothbar-module-p m)
         (slothbar-module-refresh m)))
     (let* ((new-layout
-            (slothbar-layout-coordinate (slothbar-layout slothbar--modules) 0 0))
+            (slothbar-layout-coordinate
+             (slothbar-layout slothbar--modules) 0 0 slothbar-width))
            (new-extents (slothbar-layout-extents new-layout))
            (damage (unless (equal prev-extents new-extents)
                      (slothbar-layout-subtract-extents
