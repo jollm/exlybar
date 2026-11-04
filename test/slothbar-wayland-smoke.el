@@ -190,6 +190,10 @@
             (slothbar-wayland-check
              "frame contains glyph pixels" found))
           (slothbar-backend-show backend)
+          (slothbar-wayland-check
+           "presented buffer was submitted in-flight"
+           (cl-some #'elwl-shm-buffer-in-flight-p
+                    (slothbar-backend-wayland-buffers backend)))
           (elwl-dispatch (slothbar-backend-wayland-connection backend) 0.1)
           (slothbar-wayland-check
            "frame was presented"

@@ -368,12 +368,14 @@ Return non-nil if a buffer was presented."
              (slothbar-backend-wayland-logical-width backend)
              (slothbar-backend-wayland-logical-height backend))
             (elwl-surface-commit (slothbar-backend-wayland-surface backend))
+            (elwl-shm-buffer-submit buffer)
             (slothbar-backend-wayland--cleanup-retired backend)
             (setf (slothbar-backend-wayland-pending backend) nil
                   (slothbar-backend-wayland-presented backend) t)
             t)
         (error
-         (setf (elwl-shm-buffer-busy buffer) nil)
+         (when (elwl-shm-buffer-leased-p buffer)
+           (ignore-errors (elwl-shm-buffer-unlease buffer)))
          (signal (car err) (cdr err)))))))
 
 ;;; Layer-shell configuration

@@ -115,6 +115,7 @@ SLOTHBAR_TEST_FONT="$FONT" \
 SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
 SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
   timeout 120 "$EMACS" -Q --batch "${LOAD_ARGS[@]}" \
+  --eval "(setq load-prefer-newer t)" \
   -l "$TEST_ELISP" > "$WORK/emacs.log" 2>&1
 status=$?
 
