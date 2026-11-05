@@ -40,6 +40,7 @@
 (require 'slothbar)
 (require 'slothbar-backend)
 (require 'slothbar-format)
+(require 'slothbar-sysinfo)
 (require 'slothbar-layout)
 (require 'slothbar-module)
 (require 'slothbar-draw-op)
@@ -365,6 +366,102 @@
                  (list (list :cpu :width -1))
                  '((:cpu . ?c))))
   (should-error (slothbar-format-compile '(:cpu) '((:cpu . ?%)))))
+
+(ert-deftest slothbar-unit-sysinfo-registry ()
+  "Sysinfo fields have unique keys and resolve through the compiler."
+  (let ((characters (mapcar #'slothbar-sysinfo-field-char
+                            slothbar-sysinfo-fields))
+        (keywords (mapcar #'slothbar-sysinfo-field-keyword
+                          slothbar-sysinfo-fields)))
+    (should (= (length characters)
+               (length (delete-dups (copy-sequence characters)))))
+    (should (= (length keywords)
+               (length (delete-dups (copy-sequence keywords))))))
+  (let ((field (slothbar-sysinfo-find-field :cpu-usage)))
+    (should field)
+    (should (= (slothbar-sysinfo-field-char field) ?c))
+    (should (eq (slothbar-sysinfo-field-formatter field) 'percent))
+    (should (eq (slothbar-sysinfo-find-field-by-char ?c) field)))
+  (dolist (field slothbar-sysinfo-fields)
+    (should (assq (slothbar-sysinfo-field-formatter field)
+                  slothbar-sysinfo--formatters)))
+  (should (equal (slothbar-sysinfo-compile-format
+                  (list (list :cpu-usage :width 4 :suffix "%")))
+                 "%4c%%")))
+
+(ert-deftest slothbar-unit-sysinfo-formatters ()
+  "Sysinfo formatters render values in their display units."
+  (should (equal (slothbar-sysinfo-format-percent 42.4 0) "42"))
+  (should (equal (slothbar-sysinfo-format-percent 42.4 1) "42.4"))
+  (should (equal (slothbar-sysinfo-format-byte-count 0) "0B"))
+  (should (equal (slothbar-sysinfo-format-byte-count 1024) "1.0KiB"))
+  (should (equal (slothbar-sysinfo-format-byte-count 1536 0) "2KiB"))
+  (should (equal (slothbar-sysinfo-format-rate 1024) "1.0KiB/s"))
+  (should (equal (slothbar-sysinfo-format-duration 59) "59s"))
+  (should (equal (slothbar-sysinfo-format-duration 3661) "1h 1m"))
+  (should (equal (slothbar-sysinfo-format-duration 90061) "1d 1h"))
+  (should (equal (slothbar-sysinfo-format-load 1.234) "1.23"))
+  (should (equal (slothbar-sysinfo-format-frequency 3200000000) "3.2GHz"))
+  (should (equal (slothbar-sysinfo-format-frequency 800000000) "800MHz"))
+  (should (equal (slothbar-sysinfo-format-temperature 42.24 1) "42.2°C"))
+  (let ((field (slothbar-sysinfo-find-field :cpu-usage)))
+    (should (equal (slothbar-sysinfo-format-value field 42) "42"))
+    (should (equal (slothbar-sysinfo-format-value field nil)
+                   slothbar-sysinfo-missing))))
+
+(ert-deftest slothbar-unit-sysinfo-parsers ()
+  "Pure sysinfo parsers handle representative Linux data."
+  (let ((meminfo
+         (slothbar-sysinfo-parse-meminfo
+          (concat "MemTotal:       16384000 kB\n"
+                  "MemFree:         8000000 kB\n"
+                  "MemAvailable:   12000000 kB\n"
+                  "Buffers:          100000 kB\n"
+                  "Cached:          4000000 kB\n"
+                  "SwapTotal:       2000000 kB\n"
+                  "SwapFree:        1500000 kB\n"))))
+    (should (= (alist-get :memory-total meminfo)
+               (* 16384000 1024)))
+    (should (= (alist-get :memory-free meminfo)
+               (* 8000000 1024)))
+    (should (= (alist-get :memory-available meminfo)
+               (* 12000000 1024)))
+    (should (= (alist-get :swap-total meminfo)
+               (* 2000000 1024))))
+  (let* ((previous
+          (slothbar-sysinfo-parse-cpu-stat
+           "cpu  100 0 100 800 0 0 0 0 0 0\n"))
+         (current
+          (slothbar-sysinfo-parse-cpu-stat
+           "cpu  200 0 150 900 0 0 0 0 0 0\n")))
+    (should (= (alist-get :total previous) 1000))
+    (should (= (alist-get :idle previous) 800))
+    (should (= (slothbar-sysinfo-cpu-usage previous current) 60.0)))
+  (let ((load (slothbar-sysinfo-parse-loadavg
+               "0.50 0.25 0.10 3/123 4567\n")))
+    (should (= (alist-get :load-1 load) 0.5))
+    (should (= (alist-get :load-5 load) 0.25))
+    (should (= (alist-get :running load) 3))
+    (should (= (alist-get :total load) 123)))
+  (should (= (slothbar-sysinfo-parse-uptime "12345.67 999.0\n")
+             12345.67))
+  (let* ((net (slothbar-sysinfo-parse-net-dev
+               (concat "Inter-|   Receive                          |  Transmit\n"
+                       " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n"
+                       "  eth0: 1000 10 0 0 0 0 0 0 2000 20 0 0 0 0 0 0\n")))
+         (stats (cdr (assoc "eth0" net))))
+    (should (= (alist-get :rx-bytes stats) 1000))
+    (should (= (alist-get :rx-packets stats) 10))
+    (should (= (alist-get :tx-bytes stats) 2000))
+    (should (= (alist-get :tx-packets stats) 20)))
+  (let ((os (slothbar-sysinfo-parse-os-release
+             "NAME=\"Guix System\"\nID=guix\n")))
+    (should (equal (cdr (assoc "NAME" os)) "Guix System"))
+    (should (equal (cdr (assoc "ID" os)) "guix")))
+  (let ((cpu (slothbar-sysinfo-parse-cpuinfo
+              "model name\t: Example CPU\ncpu MHz\t\t: 3200.000\n")))
+    (should (equal (alist-get :cpu-brand cpu) "Example CPU"))
+    (should (= (alist-get :cpu-frequency cpu) 3200000000.0))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
