@@ -147,6 +147,12 @@ Return VALUE."
           (slothbar-smoke--check "xcb supports randr"
                                  (slothbar-backend-supports-p
                                   backend 'randr))
+          (slothbar-smoke--check "xcb has no ext-workspace support"
+                                 (not (slothbar-backend-supports-p
+                                       backend 'ext-workspace)))
+          (slothbar-smoke--check "xcb has no ext-workspace manager"
+                                 (null (slothbar-backend-ext-workspace-manager
+                                        backend)))
           (slothbar-module-init module)
           (slothbar-smoke--check "module initialized with backend resources"
                                  (slothbar-module-initialized module))

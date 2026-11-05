@@ -56,6 +56,7 @@
 (require 'elwl-registry)
 (require 'elwl-shm)
 (require 'elwl-surface)
+(require 'elwl-workspace)
 (require 'fontsloth)
 (require 'fontsloth-layout)
 
@@ -81,6 +82,7 @@
   surface
   layer-surface
   output
+  ext-workspace-manager
   (scale 1 :type 'integer)
   (logical-width 0 :type 'integer)
   (logical-height 0 :type 'integer)
@@ -103,9 +105,19 @@
   (slothbar-backend-wayland--make :kind 'wayland))
 
 (cl-defmethod slothbar-backend-supports-p
-  ((_backend slothbar-backend-wayland) feature)
+  ((backend slothbar-backend-wayland) feature)
   "The Wayland backend has no X-only facilities."
-  (memq feature '(surface exclusive-zone layer-shell buffer-scale)))
+  (or (memq feature '(surface exclusive-zone layer-shell buffer-scale))
+      (and (eq feature 'ext-workspace)
+           (slothbar-backend-ext-workspace-manager backend))))
+
+(cl-defmethod slothbar-backend-ext-workspace-manager
+  ((backend slothbar-backend-wayland))
+  "Return the live ext-workspace manager for BACKEND, if any."
+  (let ((manager (slothbar-backend-wayland-ext-workspace-manager backend)))
+    (and manager
+         (not (elwl-workspace-manager-dead manager))
+         manager)))
 
 ;;; Colors and pixels
 
@@ -459,7 +471,8 @@ VISIBLE non-nil reserves the bar's exclusive zone."
   "Open BACKEND's Wayland connection and layer surface."
   (condition-case err
       (let* ((protocols (list (elwl-protocol-load-wayland)
-                              (elwl-protocol-load-layer-shell)))
+                              (elwl-protocol-load-layer-shell)
+                              (elwl-protocol-load-ext-workspace)))
              (connection (elwl-connect protocols)))
         (setf (slothbar-backend-wayland-connection backend) connection)
         (let ((registry (elwl-get-registry connection)))
@@ -478,6 +491,26 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                    (scale (or (and output (elwl-output-scale output)) 1)))
               (setf (slothbar-backend-wayland-output backend) output
                     (slothbar-backend-wayland-scale backend) scale)))
+          ;; ext-workspace is optional: the compositor may not advertise it.
+          (when (elwl-registry-find registry 'ext-workspace-manager-v1)
+            (let ((manager
+                   (elwl-workspace-manager-bind
+                    registry nil
+                    (lambda (_manager)
+                      (condition-case hook-err
+                          (run-hook-with-args
+                           'slothbar-backend-workspace-change-hook backend)
+                        (error
+                         (slothbar--log-debug*
+                          "workspace change hook error: %S" hook-err)))))))
+              (setf (slothbar-backend-wayland-ext-workspace-manager backend)
+                    manager)
+              (unless (slothbar-backend-wayland--wait-for
+                       backend
+                       (lambda () (elwl-workspace-manager-done manager))
+                       2)
+                (slothbar--log-debug*
+                 "ext-workspace initial sync timed out"))))
           (let* ((surface (elwl-compositor-create-surface
                            (slothbar-backend-wayland-compositor backend)))
                  (output (slothbar-backend-wayland-output backend))
@@ -516,6 +549,10 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 
 (cl-defmethod slothbar-backend-close ((backend slothbar-backend-wayland))
   "Tear down BACKEND's Wayland objects and connection."
+  (when (slothbar-backend-wayland-ext-workspace-manager backend)
+    (ignore-errors
+      (elwl-workspace-manager-stop
+       (slothbar-backend-wayland-ext-workspace-manager backend))))
   (when (slothbar-backend-wayland-layer-surface backend)
     (ignore-errors
       (elwl-layer-surface-destroy
@@ -547,6 +584,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
         (slothbar-backend-wayland-surface backend) nil
         (slothbar-backend-wayland-layer-surface backend) nil
         (slothbar-backend-wayland-output backend) nil
+        (slothbar-backend-wayland-ext-workspace-manager backend) nil
         (slothbar-backend-wayland-pool backend) nil
         (slothbar-backend-wayland-buffers backend) nil
         (slothbar-backend-wayland-retired backend) nil

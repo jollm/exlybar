@@ -91,9 +91,14 @@
   (slothbar-backend-xcb--make :kind 'xcb))
 
 (cl-defmethod slothbar-backend-supports-p
-  ((_backend slothbar-backend-xcb) _feature)
-  "The xcb backend supports every slothbar feature."
-  t)
+  ((_backend slothbar-backend-xcb) feature)
+  "The xcb backend supports X-specific features."
+  (memq feature '(system-tray ewmh randr)))
+
+(cl-defmethod slothbar-backend-ext-workspace-manager
+  ((_backend slothbar-backend-xcb))
+  "The xcb backend has no ext-workspace manager."
+  nil)
 
 ;;; Accessors for X-only modules
 

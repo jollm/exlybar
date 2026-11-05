@@ -92,8 +92,15 @@ that must be repainted, or nil if nothing is known to be stale.")
 
 (cl-defgeneric slothbar-backend-supports-p (backend feature)
   "Return non-nil when BACKEND supports FEATURE.
-Known features include `system-tray', `ewmh', `randr', `layer-shell', and
-`buffer-scale'.")
+Known features include `system-tray', `ewmh', `randr', `layer-shell',
+`buffer-scale', and `ext-workspace'.")
+
+(cl-defgeneric slothbar-backend-ext-workspace-manager (backend)
+  "Return BACKEND's live ext-workspace manager, or nil.")
+
+(defvar slothbar-backend-workspace-change-hook nil
+  "Hook run when a backend's workspace information changes.
+Functions are called with the backend as the sole argument.")
 
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
 (declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())

@@ -118,6 +118,32 @@
           (slothbar-wayland-check
            "Wayland has no randr support"
            (not (slothbar-backend-supports-p backend 'randr)))
+          (let ((manager (slothbar-backend-ext-workspace-manager backend)))
+            (slothbar-wayland-check
+             "Wayland advertises ext-workspace"
+             (slothbar-backend-supports-p backend 'ext-workspace))
+            (slothbar-wayland-check
+             "ext-workspace manager is bound" manager)
+            (slothbar-wayland-check
+             "ext-workspace initial sync completed"
+             (elwl-workspace-manager-done manager))
+            (let ((groups (elwl-workspace-manager-groups manager)))
+              (slothbar-wayland-record
+               (format "ext-workspace groups=%d workspaces=%d\n"
+                       (length groups)
+                       (length (elwl-workspace-manager-workspaces manager))))
+              (slothbar-wayland-check
+               "ext-workspace lists a group" groups)
+              (let* ((group (car groups))
+                     (output (slothbar-backend-wayland-output backend)))
+                (slothbar-wayland-check
+                 "workspace group includes the bar output"
+                 (and output
+                      (memq (elwl-output-object output)
+                            (elwl-workspace-group-outputs group)))))
+              (slothbar-wayland-check
+               "ext-workspace lists a workspace"
+               (> (length (elwl-workspace-manager-workspaces manager)) 0))))
           ;; X-only modules are filtered out during construction.
           (require 'slothbar-tray)
           (require 'slothbar-workspaces)
