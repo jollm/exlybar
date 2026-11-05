@@ -33,7 +33,9 @@
 (require 'cl-lib)
 (require 'seq)
 
+(require 'slothbar)
 (require 'slothbar-format)
+(require 'slothbar-module-)
 
 (defgroup slothbar-sysinfo nil
   "System information module."
@@ -720,6 +722,96 @@ STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
   (let ((state (or state (slothbar-sysinfo-state-create))))
     (slothbar-sysinfo-update state now force)
     (copy-sequence (slothbar-sysinfo-state-values state))))
+
+;;; Module
+
+(defcustom slothbar-sysinfo-format
+  (let ((percent "^[^2%^]"))
+    `("^f2^6"
+      (:cpu-usage :width 3 :pad zero :suffix ,percent)
+      "^[^f1 ^2^f4^]"
+      " "
+      (:memory-usage :width 3 :suffix ,percent)
+      "^[^f1 ^2^f4^]"))
+  "Token list used to format the sysinfo module.
+See `slothbar-format-compile' for the token and option syntax."
+  :type 'sexp
+  :group 'slothbar-sysinfo)
+
+(defcustom slothbar-sysinfo-refresh-interval 1
+  "Seconds between sysinfo status updates."
+  :type 'natnum
+  :group 'slothbar-sysinfo)
+
+(cl-defstruct
+    (slothbar-sysinfo
+     (:include slothbar-module
+               (name "sysinfo")
+               (format "")
+               (lpad 4)
+               (rpad 8))
+     (:constructor slothbar-sysinfo-create)
+     (:copier nil))
+  "A system information module."
+  state)
+
+(defun slothbar-sysinfo--format-values (values)
+  "Build the `format-spec' alist from sysinfo VALUES."
+  (cl-loop for field in slothbar-sysinfo-fields
+           collect
+           (cons (slothbar-sysinfo-field-char field)
+                 (slothbar-sysinfo-format-value
+                  field
+                  (alist-get (slothbar-sysinfo-field-keyword field) values)))))
+
+(defun slothbar-sysinfo--render (format values)
+  "Render FORMAT using sysinfo VALUES."
+  (format-spec format (slothbar-sysinfo--format-values values) 'ignore))
+
+(cl-defmethod slothbar-module-update-status ((m slothbar-sysinfo))
+  "Collect sysinfo values for M and update its text."
+  (let* ((state (or (slothbar-sysinfo-state m)
+                    (setf (slothbar-sysinfo-state m)
+                          (slothbar-sysinfo-state-create))))
+         (values (slothbar-sysinfo-collect state))
+         (format (slothbar-sysinfo-compile-format slothbar-sysinfo-format))
+         (spec (slothbar-sysinfo--format-values values))
+         (text (format-spec format spec 'ignore))
+         (changed (not (equal text (slothbar-module-text m)))))
+    (setf (slothbar-module-format m) format
+          (slothbar-module-format-spec m) spec
+          (slothbar-module-text m) text)
+    (when changed
+      (setf (slothbar-module-needs-refresh? m) t)
+      (when (and slothbar--backend (slothbar-enabled-p))
+        (slothbar-refresh-modules)))
+    text))
+
+(cl-defmethod slothbar-module-init :before ((m slothbar-sysinfo))
+  "Prepare M's state and initial text before layout."
+  (setf (slothbar-sysinfo-state m) (slothbar-sysinfo-state-create))
+  (slothbar-module-update-status m))
+
+(cl-defmethod slothbar-module-init ((m slothbar-sysinfo))
+  "Initialize M and start its high-frequency update timer."
+  (cl-call-next-method)
+  (when (slothbar-module-update-timer m)
+    (cancel-timer (slothbar-module-update-timer m)))
+  (setf (slothbar-module-update-timer m)
+        (run-at-time nil slothbar-sysinfo-refresh-interval
+                     #'slothbar-module-update-status m)))
+
+(cl-defmethod slothbar-module-exit :after ((m slothbar-sysinfo))
+  "Drop M's provider state after exit."
+  (setf (slothbar-sysinfo-state m) nil))
+
+(defun slothbar-sysinfo--watch-format (_ _nval oper where)
+  "Refresh sysinfo modules when `slothbar-sysinfo-format' changes."
+  (when (and (not where) (eq 'set oper))
+    (slothbar-module--refresh-all-by-name "sysinfo")))
+
+(add-variable-watcher 'slothbar-sysinfo-format
+                      'slothbar-sysinfo--watch-format)
 
 (provide 'slothbar-sysinfo)
 ;;; slothbar-sysinfo.el ends here

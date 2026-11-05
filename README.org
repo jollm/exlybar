@@ -58,12 +58,12 @@ The following displays all the built-in modules with default settings:
 #+begin_src emacs-lisp
   (require 'slothbar-module-requires)
 
-  ;;; layout tray, date, and workspaces to the left, and wifi, volume,
-  ;;; backlight, and battery to the right
+  ;;; layout tray, date, workspaces, and sysinfo to the left, and wifi,
+  ;;; volume, backlight, and battery to the right
   (setq slothbar-modules
         '(:left
           slothbar-tray-create slothbar-date-create
-          slothbar-workspaces-create
+          slothbar-workspaces-create slothbar-sysinfo-create
           :right
           slothbar-wifi-create slothbar-volume-create
           slothbar-backlight-create slothbar-battery-create))
@@ -108,6 +108,35 @@ statuses =:window=, =:current=, =:blankish=, =:inactive=, and =:urgent=;
 Left-clicking a workspace label switches to that workspace when the active
 source can activate workspaces: ext-workspace on Wayland, EWMH on X11, or
 EXWM directly.
+
+** System information
+
+The sysinfo module gathers CPU, memory, swap, disk, network, load, uptime,
+process, thermal, battery, and system identity fields.  The Linux providers
+read =/proc= and =/sys=; unavailable values are shown as
+=slothbar-sysinfo-missing=.
+
+Its display is configured with a token list, compiled by
+=slothbar-format-compile=:
+
+#+begin_src emacs-lisp
+  (setq slothbar-sysinfo-format
+        '((:cpu-usage :width 3 :suffix "%")
+          " "
+          (:memory-usage :width 3 :suffix "%")
+          " "
+          (:temperature)))
+#+end_src
+
+Tokens can use =:width=, =:precision=, =:pad=, =:truncate=, =:case=,
+=:prefix=, =:suffix=, and =:char=.  The available field keywords are in
+=slothbar-sysinfo-fields=; common ones include =:cpu-usage=,
+=:memory-usage=, =:disk-usage=, =:net-down=, =:net-up=, =:load-1=,
+=:uptime=, =:process-count=, =:temperature=, and =:battery-percent=.
+
+=slothbar-sysinfo-refresh-interval= controls how often the module updates its
+status, while =slothbar-sysinfo-intervals= controls how often each provider
+category is read.  The default format shows CPU and memory percentages with their icons to the right.
 
 ** Fun or tiresome things to configure
 

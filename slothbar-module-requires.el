@@ -46,6 +46,7 @@
 (require 'slothbar-backlight)
 (require 'slothbar-battery)
 (require 'slothbar-date)
+(require 'slothbar-sysinfo)
 (require 'slothbar-volume)
 (require 'slothbar-tray)
 (require 'slothbar-wifi)

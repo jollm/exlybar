@@ -552,5 +552,39 @@
       (should (= (alist-get :disk-used values) 750))
       (should (= (alist-get :disk-usage values) 75.0)))))
 
+(ert-deftest slothbar-unit-sysinfo-module-render ()
+  "Sysinfo module rendering applies field formatting and missing values."
+  (let* ((values '((:cpu-usage . 42) (:memory-usage . 17)))
+         (format (slothbar-sysinfo-compile-format
+                  '((:cpu-usage :width 3 :suffix "%")
+                    " "
+                    (:memory-usage :width 3 :suffix "%")))))
+    (should (equal (slothbar-sysinfo--render format values)
+                   " 42%  17%"))
+    (should (equal (slothbar-sysinfo--render "%c" nil) "--"))))
+
+(ert-deftest slothbar-unit-sysinfo-module-update ()
+  "The sysinfo module updates its format spec and text."
+  (let ((m (slothbar-sysinfo-create))
+        (slothbar-sysinfo-format
+         '((:cpu-usage :width 3 :suffix "%")
+           " "
+           (:memory-usage :width 3 :suffix "%"))))
+    (setf (slothbar-sysinfo-state m) (slothbar-sysinfo-state-create))
+    (cl-letf (((symbol-function 'slothbar-sysinfo-collect)
+               (lambda (&optional _state _now _force)
+                 '((:cpu-usage . 5) (:memory-usage . 10)))))
+      (slothbar-module-update-status m))
+    (should (equal (slothbar-module-text m) "  5%  10%"))
+    (should (equal (alist-get ?c (slothbar-module-format-spec m)) "5"))
+    (should (slothbar-module-needs-refresh? m))))
+
+(ert-deftest slothbar-unit-sysinfo-percent-suffix ()
+  "A literal percent in a colored suffix renders once."
+  (let ((format (slothbar-sysinfo-compile-format
+                 '((:cpu-usage :width 3 :suffix "^[^6%^]")))))
+    (should (equal (slothbar-sysinfo--render format '((:cpu-usage . 3)))
+                   "  3^[^6%^]"))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

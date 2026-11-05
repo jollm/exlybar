@@ -91,7 +91,7 @@ LPAD is the module left padding"
                   prev-x) collect
            (if (stringp part)
                (if-let ((font-path (slothbar-font-find fidx)))
-                   (let* ((txt (format-spec part spec t))
+                   (let* ((txt (format-spec part spec 'ignore))
                           (font (fontsloth-load-font font-path))
                           (px (+ (aref slothbar-font-px-size fidx)
                                  (aref slothbar-font-px-delta fidx)))
