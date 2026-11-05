@@ -150,8 +150,8 @@ never needs =xelb= on its load path, and an X11 Emacs does not need
 #+end_src
 
 =feature= is a symbol such as =system-tray=, =ewmh=, =randr=, =exclusive-zone=,
-=pointer-input=.  The core uses it to skip or degrade modules that cannot work
-on the active backend.
+=pointer-input=, or =ext-workspace=.  The core uses it to skip or degrade
+modules that cannot work on the active backend.
 
 Backend-private per-module state (pixmap/GC/glyphset on X, ARGB tile on
 Wayland) lives in a hash table owned by the backend, keyed by module object.
@@ -256,7 +256,8 @@ No intended behavior change:
   module's pixmap, and call =slothbar-module-reposition=.
 - =present=: struts as =_NET_WM_STRUT_PARTIAL=, show/hide as
   =MapWindow= / =UnmapWindow=.
-- =supports-p=: =system-tray=, =ewmh=, =randr=, =pointer-input= return t.
+- =supports-p=: =system-tray=, =ewmh=, and =randr= return t; all other
+  features return nil.
 
 The existing event handlers (=DestroyNotify=, =ReparentNotify=,
 =ResizeRequest=, =PropertyNotify=, =ClientMessage=, =KeyPress=, =Expose=)
@@ -368,10 +369,12 @@ backend's =reposition-module= bookkeeping. Keyboard focus needs =on-demand= or
 ** 7.7 Feature gating
 
 =slothbar-backend-supports-p= returns nil on Wayland for =system-tray=,
-=ewmh= and =randr=.  Modules that require them either no-op with a log
-message or are skipped at construction.  Workspace state under a custom
-compositor will come from the compositor/WM side rather than EWMH. That is a
-module data-source change, independent of the render backend.
+=ewmh= and =randr=.  It returns t for =ext-workspace= only when the
+compositor advertised =ext_workspace_manager_v1= and the backend bound a
+manager.  Modules that require unsupported features either no-op with a log
+message or are skipped at construction.  The workspaces module uses
+ext-workspace when available and falls back to EWMH, EXWM, herbstluftwm, or
+xmonad as before.
 
 * 8. Backend selection
 

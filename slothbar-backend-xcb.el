@@ -100,6 +100,10 @@
   "The xcb backend has no ext-workspace manager."
   nil)
 
+(cl-defmethod slothbar-backend-output ((_backend slothbar-backend-xcb))
+  "The xcb backend has no Wayland output."
+  nil)
+
 ;;; Accessors for X-only modules
 
 (defun slothbar-xcb-connection ()

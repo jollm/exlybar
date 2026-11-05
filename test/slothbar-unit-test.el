@@ -174,5 +174,40 @@
     (should (equal (mapcar #'slothbar-module-name slothbar--modules)
                    '("plain")))))
 
+(require 'slothbar-workspaces)
+
+(ert-deftest slothbar-unit-ext-workspace-status ()
+  "Ext-workspace state flags map to the documented status lists."
+  (should (equal (slothbar-workspaces--ext-workspace-status nil nil)
+                 '(:inactive)))
+  (should (equal (slothbar-workspaces--ext-workspace-status t nil)
+                 '(:current)))
+  (should (equal (slothbar-workspaces--ext-workspace-status nil t)
+                 '(:urgent)))
+  (should (equal (slothbar-workspaces--ext-workspace-status t t)
+                 '(:current :urgent))))
+
+(ert-deftest slothbar-unit-ext-workspace-coordinate-order ()
+  "Ext-workspace coordinates sort lexicographically."
+  (should (slothbar-workspaces--ext-workspace-coordinate-lessp
+           '(1) '(2)))
+  (should (slothbar-workspaces--ext-workspace-coordinate-lessp
+           '(1) '(1 0)))
+  (should-not (slothbar-workspaces--ext-workspace-coordinate-lessp
+               '(1 0) '(1)))
+  (should-not (slothbar-workspaces--ext-workspace-coordinate-lessp
+               '(1) '(1)))
+  (cl-letf (((symbol-function 'elwl-workspace-coordinates)
+             (lambda (workspace) (plist-get workspace :coordinates))))
+    (should
+     (equal (mapcar (lambda (workspace)
+                      (plist-get workspace :name))
+                    (slothbar-workspaces--ext-workspace-sort
+                     (list '(:name "unset" :coordinates nil)
+                           '(:name "second" :coordinates (2))
+                           '(:name "first" :coordinates (1))
+                           '(:name "first-b" :coordinates (1 0)))))
+            '("first" "first-b" "second" "unset")))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

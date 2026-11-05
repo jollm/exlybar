@@ -98,6 +98,9 @@ Known features include `system-tray', `ewmh', `randr', `layer-shell',
 (cl-defgeneric slothbar-backend-ext-workspace-manager (backend)
   "Return BACKEND's live ext-workspace manager, or nil.")
 
+(cl-defgeneric slothbar-backend-output (backend)
+  "Return BACKEND's selected output object, or nil.")
+
 (defvar slothbar-backend-workspace-change-hook nil
   "Hook run when a backend's workspace information changes.
 Functions are called with the backend as the sole argument.")

@@ -119,6 +119,11 @@
          (not (elwl-workspace-manager-dead manager))
          manager)))
 
+(cl-defmethod slothbar-backend-output ((backend slothbar-backend-wayland))
+  "Return BACKEND's selected Wayland output object."
+  (let ((output (slothbar-backend-wayland-output backend)))
+    (and output (elwl-output-object output))))
+
 ;;; Colors and pixels
 
 (defun slothbar-backend-wayland--color-vector (color)

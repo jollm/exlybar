@@ -55,6 +55,7 @@
 (require 'slothbar-ewmh)
 (require 'slothbar-log)
 (require 'slothbar-module-)
+(require 'slothbar-backend)
 
 (defgroup slothbar-workspaces nil
   "An Slothbar workspaces module."
@@ -79,9 +80,12 @@ would indicate:
 - workspace 4 is current and has a window
 - workspace 5 is not current and has an urgent window
 
-The possible status keywords are :window, :current, and :blankish. If
-:current appears in the status list for a workspace, it is expected at
-the head of the list."
+The possible status keywords are :window, :current, :blankish, :inactive,
+and :urgent.  If :current appears in the status list for a workspace, it is
+expected at the head of the list.  :inactive means the workspace is not
+current, but the source does not know whether it contains a window; this is
+what the ext-workspace protocol provides.  :window and :blankish are only
+used by sources that know whether a workspace is occupied."
   :type 'function
   :group 'slothbar-workspaces)
 
@@ -94,8 +98,9 @@ the head of the list."
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-workspaces) (backend slothbar-backend))
-  "Workspaces read EWMH root-window properties."
-  (slothbar-backend-supports-p backend 'ewmh))
+  "Workspaces read EWMH root-window properties or ext-workspace."
+  (or (slothbar-backend-supports-p backend 'ewmh)
+      (slothbar-backend-supports-p backend 'ext-workspace)))
 
 (defcustom slothbar-workspaces-ensure-ewmh nil
   "Non-nil to ensure ewmh mode if it is not already enabled."
@@ -127,8 +132,11 @@ WS-LIST."
                         ('(:urgent) (concat "^[^3 " ws-safe "^]"))
                         ((or '(:window) `(:window ,_))
                          (concat "^[^1 " ws-safe "^]"))
+                        ('(:current :urgent)
+                         (concat "^[^3 [" ws-safe "]^]"))
                         (`(:current ,_) (concat "^[^0 [" ws-safe "]^]"))
-                        ('(:blankish) (concat "^[^2 " ws-safe "^]"))))))))
+                        ('(:blankish) (concat "^[^2 " ws-safe "^]"))
+                        ('(:inactive) (concat "^[^2 " ws-safe "^]"))))))))
 
 (defun slothbar-workspaces-format-format (m)
   "Format M's format string."
@@ -164,6 +172,113 @@ WS-LIST."
 ;;; Begin slothbar-workspaces-generate-list-fn implementations
 
 (declare-function shorten-strings "shorten" (lst))
+
+;;; ext-workspace (Wayland)
+
+(declare-function elwl-workspace-manager-groups "elwl-workspace" (manager))
+(declare-function elwl-workspace-manager-workspaces "elwl-workspace" (manager))
+(declare-function elwl-workspace-group-workspaces "elwl-workspace" (group))
+(declare-function elwl-workspace-group-outputs "elwl-workspace" (group))
+(declare-function elwl-workspace-hidden-p "elwl-workspace" (workspace))
+(declare-function elwl-workspace-active-p "elwl-workspace" (workspace))
+(declare-function elwl-workspace-urgent-p "elwl-workspace" (workspace))
+(declare-function elwl-workspace-name "elwl-workspace" (workspace))
+(declare-function elwl-workspace-id "elwl-workspace" (workspace))
+(declare-function elwl-workspace-coordinates "elwl-workspace" (workspace))
+
+(defun slothbar-workspaces--ext-workspace-status (active urgent)
+  "Return a workspaces status list for ext-workspace flags.
+ACTIVE and URGENT are booleans.  ext-workspace cannot report whether a
+workspace is occupied, so inactive workspaces use :inactive."
+  (cond ((and active urgent) '(:current :urgent))
+        (active '(:current))
+        (urgent '(:urgent))
+        (t '(:inactive))))
+
+(defun slothbar-workspaces--ext-workspace-coordinate-lessp (a b)
+  "Return non-nil when coordinate list A sorts before coordinate list B."
+  (while (and a b (= (car a) (car b)))
+    (setq a (cdr a)
+          b (cdr b)))
+  (cond ((null a) (and b t))
+        ((null b) nil)
+        (t (< (car a) (car b)))))
+
+(defun slothbar-workspaces--ext-workspace-sort (workspaces)
+  "Return WORKSPACES ordered by their ext-workspace coordinates.
+Workspaces without coordinates keep their relative order after those with
+coordinates."
+  (let ((indexed (cl-loop for workspace in workspaces
+                          for index from 0
+                          collect (cons workspace index))))
+    (mapcar
+     #'car
+     (sort
+      indexed
+      (lambda (a b)
+        (let ((ca (elwl-workspace-coordinates (car a)))
+              (cb (elwl-workspace-coordinates (car b))))
+          (cond ((and ca cb)
+                 (if (equal ca cb)
+                     (< (cdr a) (cdr b))
+                   (slothbar-workspaces--ext-workspace-coordinate-lessp ca cb)))
+                (ca t)
+                (cb nil)
+                (t (< (cdr a) (cdr b))))))))))
+
+(defun slothbar-workspaces-generate-list-fn-ext-workspace ()
+  "Implement `slothbar-workspaces-generate-list-fn' for ext-workspace.
+Use the workspace group assigned to the bar's output, falling back to the
+first group.  Hidden workspaces are omitted."
+  (let ((manager (and slothbar--backend
+                      (slothbar-backend-ext-workspace-manager
+                       slothbar--backend))))
+    (when manager
+      (let* ((groups (elwl-workspace-manager-groups manager))
+             (output (slothbar-backend-output slothbar--backend))
+             (group (or (and output
+                             (cl-find-if
+                              (lambda (group)
+                                (memq output
+                                      (elwl-workspace-group-outputs group)))
+                              groups))
+                        (car groups)))
+             (workspaces (if group
+                             (elwl-workspace-group-workspaces group)
+                           (elwl-workspace-manager-workspaces manager)))
+             (visible (cl-remove-if #'elwl-workspace-hidden-p workspaces)))
+        (cl-loop for workspace
+                 in (slothbar-workspaces--ext-workspace-sort visible)
+                 for index from 0
+                 collect
+                 (list (or (elwl-workspace-name workspace)
+                           (elwl-workspace-id workspace)
+                           (number-to-string index))
+                       (slothbar-workspaces--ext-workspace-status
+                        (elwl-workspace-active-p workspace)
+                        (elwl-workspace-urgent-p workspace))))))))
+
+(defun slothbar-workspaces--ext-workspace-change (backend)
+  "Refresh workspaces modules when BACKEND's workspace state changes."
+  (when (eq backend slothbar--backend)
+    (slothbar-module--refresh-all-by-name "workspaces")))
+
+(defun slothbar-workspaces--setup-defaults-ext-workspace ()
+  "Configure the module to use ext-workspace when BACKEND supports it.
+Return non-nil when ext-workspace was selected."
+  (when (and slothbar--backend
+             (slothbar-backend-ext-workspace-manager slothbar--backend))
+    (require 'elwl-workspace nil t)
+    (setq slothbar-workspaces-generate-list-fn
+          #'slothbar-workspaces-generate-list-fn-ext-workspace)
+    (add-hook 'slothbar-backend-workspace-change-hook
+              #'slothbar-workspaces--ext-workspace-change)
+    t))
+
+(defun slothbar-workspaces--teardown-ext-workspace ()
+  "Stop using ext-workspace for workspace updates."
+  (remove-hook 'slothbar-backend-workspace-change-hook
+               #'slothbar-workspaces--ext-workspace-change))
 
 ;;; ewmh (extended window manager hints)
 
@@ -494,17 +609,22 @@ Note that the xmonad config must send dbus events.  See the
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-workspaces))
   "Configure M and its initial icon and text."
-  (slothbar-workspaces--setup-defaults-ewmh)
-  (add-hook 'slothbar-ewmh-mode-hook #'slothbar-workspaces--ewmh-toggle)
-  (when (locate-library "exwm")
-    (slothbar-workspaces-setup-defaults-exwm)
-    (add-hook 'slothbar-ewmh-mode-hook
-              (lambda ()
-                (when slothbar-ewmh-mode
-                  (slothbar-workspaces-remove-hooks-exwm)))))
-  (slothbar-workspaces-setup-defaults-herbstluftwm)
-  (slothbar-workspaces-setup-defaults-xmonad)
+  (unless (slothbar-workspaces--setup-defaults-ext-workspace)
+    (slothbar-workspaces--setup-defaults-ewmh)
+    (add-hook 'slothbar-ewmh-mode-hook #'slothbar-workspaces--ewmh-toggle)
+    (when (locate-library "exwm")
+      (slothbar-workspaces-setup-defaults-exwm)
+      (add-hook 'slothbar-ewmh-mode-hook
+                (lambda ()
+                  (when slothbar-ewmh-mode
+                    (slothbar-workspaces-remove-hooks-exwm)))))
+    (slothbar-workspaces-setup-defaults-herbstluftwm)
+    (slothbar-workspaces-setup-defaults-xmonad))
   (slothbar-module-update-status m))
+
+(cl-defmethod slothbar-module-exit :before ((_m slothbar-workspaces))
+  "Stop ext-workspace updates when the module exits."
+  (slothbar-workspaces--teardown-ext-workspace))
 
 (provide 'slothbar-workspaces)
 ;;; slothbar-workspaces.el ends here

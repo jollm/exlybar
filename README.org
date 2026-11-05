@@ -41,8 +41,10 @@ color will match the current Emacs background color.
 The Wayland backend is an independent Wayland client, so Emacs may itself be
 running under XWayland or a pgtk/Wayland frame.  It requires [[../elwl][elwl]] and the
 =fd-fairy= dynamic module on =load-path=.  X-only modules such as the system
-tray and EWMH workspaces are skipped automatically; =slothbar-randr-mode= and
-=slothbar-ewmh-mode= report that they are unsupported and disable themselves.
+tray are skipped automatically.  On Wayland the workspaces module uses the
+compositor's ext-workspace protocol when it is advertised, and is skipped
+otherwise, =slothbar-randr-mode= and =slothbar-ewmh-mode= report that they are
+unsupported and disable themselves.
 
 ** Displaying modules
 
@@ -88,6 +90,20 @@ an additional volume module to control microphone volume:
                                     :format "^8^f2^[^f4%i^]%p"))
           slothbar-backlight-create slothbar-battery-create))
 #+END_SRC
+
+** Workspaces
+
+The workspaces module reads EWMH workspace properties on X11, EXWM workspace
+state under EXWM, and ext-workspace-v1 on Wayland when the compositor
+advertises =ext_workspace_manager_v1=.  ext-workspace reports whether a
+workspace is active and urgent, but not whether it contains windows, so
+inactive workspaces use the =:inactive= status.  Hidden workspaces are
+omitted, and workspaces are ordered by their ext-workspace coordinates when
+available.
+
+Implementations of =slothbar-workspaces-generate-list-fn= can return the
+statuses =:window=, =:current=, =:blankish=, =:inactive=, and =:urgent=;
+=:current= may be combined with =:urgent=.
 
 ** Fun or tiresome things to configure
 

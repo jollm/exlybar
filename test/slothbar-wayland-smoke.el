@@ -144,6 +144,21 @@
               (slothbar-wayland-check
                "ext-workspace lists a workspace"
                (> (length (elwl-workspace-manager-workspaces manager)) 0))))
+          (require 'slothbar-workspaces)
+          (let ((workspaces (slothbar-workspaces-create)))
+            (slothbar-wayland-check
+             "workspaces module supports ext-workspace"
+             (slothbar-module-supported-p workspaces backend))
+            (slothbar-module-init workspaces)
+            (let ((list (funcall slothbar-workspaces-generate-list-fn)))
+              (slothbar-wayland-record
+               (format "ext-workspace list=%S\n" list))
+              (slothbar-wayland-check
+               "ext-workspace generate list is non-empty" list)
+              (slothbar-wayland-check
+               "active ext-workspace maps to :current"
+               (equal (cadr (car list)) '(:current))))
+            (slothbar-module-exit workspaces))
           ;; X-only modules are filtered out during construction.
           (require 'slothbar-tray)
           (require 'slothbar-workspaces)
@@ -153,7 +168,8 @@
             (slothbar--construct-modules)
             (slothbar-wayland-check
              "X-only modules are gated on Wayland"
-             (null slothbar--modules)))
+             (equal (mapcar #'slothbar-module-name slothbar--modules)
+                    '("workspaces"))))
           (require 'slothbar-ewmh)
           (require 'slothbar-randr)
           (slothbar-ewmh-mode 1)
