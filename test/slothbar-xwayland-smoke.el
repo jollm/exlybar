@@ -147,6 +147,9 @@ Return VALUE."
           (slothbar-smoke--check "xcb supports randr"
                                  (slothbar-backend-supports-p
                                   backend 'randr))
+          (slothbar-smoke--check "xcb supports pointer input"
+                                 (slothbar-backend-supports-p
+                                  backend 'pointer-input))
           (slothbar-smoke--check "xcb has no ext-workspace support"
                                  (not (slothbar-backend-supports-p
                                        backend 'ext-workspace)))

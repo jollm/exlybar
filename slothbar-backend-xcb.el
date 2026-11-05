@@ -93,7 +93,7 @@
 (cl-defmethod slothbar-backend-supports-p
   ((_backend slothbar-backend-xcb) feature)
   "The xcb backend supports X-specific features."
-  (memq feature '(system-tray ewmh randr)))
+  (memq feature '(system-tray ewmh randr pointer-input)))
 
 (cl-defmethod slothbar-backend-ext-workspace-manager
   ((_backend slothbar-backend-xcb))
@@ -560,6 +560,24 @@ DATA the event data"
                      (slothbar-xcb-connection) detail state)))
         (slothbar--log-debug* "keypress: %s" keysym)))))
 
+(defun slothbar-backend-xcb--on-ButtonPress (backend data _synthetic)
+  "Dispatch a pointer button press on BACKEND."
+  (let ((event (make-instance 'xcb:ButtonPress)))
+    (xcb:unmarshal event data)
+    (with-slots (event-x event-y detail) event
+      (let ((button (pcase detail
+                      (1 :left)
+                      (2 :middle)
+                      (3 :right))))
+        (when button
+          (condition-case err
+              (run-hook-with-args
+               'slothbar-backend-pointer-button-hook
+               backend event-x event-y button)
+            (error
+             (slothbar--log-debug*
+              "pointer button hook error: %S" err))))))))
+
 (defun slothbar-backend-xcb--on-Expose (data _synthetic)
   "Can draw things after Expose.
 DATA the event data"
@@ -621,6 +639,7 @@ DATA the event data"
                          :background-pixel background-pixel
                          :event-mask (logior xcb:EventMask:Exposure
                                              xcb:EventMask:KeyPress
+                                             xcb:EventMask:ButtonPress
                                              xcb:EventMask:PointerMotion
                                              xcb:EventMask:PropertyChange
                                              xcb:EventMask:SubstructureNotify)))
@@ -681,6 +700,10 @@ DATA the event data"
                 #'slothbar-backend-xcb--on-ClientMessage)
     (xcb:+event connection 'xcb:KeyPress
                 #'slothbar-backend-xcb--on-KeyPress)
+    (xcb:+event connection 'xcb:ButtonPress
+                (lambda (data synthetic)
+                  (slothbar-backend-xcb--on-ButtonPress
+                   backend data synthetic)))
     (xcb:+event connection 'xcb:Expose
                 #'slothbar-backend-xcb--on-Expose)
     backend))
