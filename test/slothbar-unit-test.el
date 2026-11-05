@@ -271,5 +271,21 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-workspaces-click-regions ()
+  "Workspace extent markers produce clickable x ranges."
+  (let* ((m (slothbar-workspaces-create))
+         (a (slothbar-unit--glyph ?1 10))
+         (b (slothbar-unit--glyph ?] 15))
+         (c (slothbar-unit--glyph ?2 30)))
+    (setf (slothbar-module-text-layout m)
+          (list '(:mark-extent ?0) a b '(:end-extent)
+                '(:mark-extent ?1) c '(:end-extent)))
+    (should (equal (slothbar-workspaces--click-regions m)
+                   '((?0 10 20) (?1 30 35)))))
+  (let ((spec (slothbar-workspaces--format-fn-spec
+               '(("1" (:current)) ("2" (:inactive))))))
+    (should (string-match-p "\\^M0" (alist-get ?w spec)))
+    (should (string-match-p "\\^M;" (alist-get ?w spec)))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

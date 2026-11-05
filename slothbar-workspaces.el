@@ -112,6 +112,21 @@ used by sources that know whether a workspace is occupied."
   :type 'natnum
   :group 'slothbar-workspaces)
 
+(defconst slothbar-workspaces--extent-tag-characters
+  "0123456789abcdefghijklmnopqrstuvwxyz"
+  "Characters used as click extent tags in workspace text.")
+
+(defun slothbar-workspaces--extent-tag (index)
+  "Return the extent tag character for workspace INDEX, or nil."
+  (when (and (integerp index)
+             (>= index 0)
+             (< index (length slothbar-workspaces--extent-tag-characters)))
+    (aref slothbar-workspaces--extent-tag-characters index)))
+
+(defun slothbar-workspaces--extent-tag-index (tag)
+  "Return the workspace index for extent TAG, or nil."
+  (cl-position tag slothbar-workspaces--extent-tag-characters))
+
 (defun slothbar-workspaces--format-fn-spec (ws-list)
   "Generate a spec suitable for `format-spec' from data in WS-LIST.
 
@@ -124,8 +139,9 @@ WS-LIST."
                slothbar-workspaces-truncate-to-width
                nil nil t)))
     `((?w . ,(cl-loop for (ws status) in ws-list
+                      for index from 0
                       for ws-safe = (sanitize ws)
-                      concat
+                      for label =
                       (pcase status
                         ((or '(:current) '(:current :window))
                          (concat "^[^1 [" ws-safe "]^]"))
@@ -136,7 +152,103 @@ WS-LIST."
                          (concat "^[^3 [" ws-safe "]^]"))
                         (`(:current ,_) (concat "^[^0 [" ws-safe "]^]"))
                         ('(:blankish) (concat "^[^2 " ws-safe "^]"))
-                        ('(:inactive) (concat "^[^2 " ws-safe "^]"))))))))
+                        ('(:inactive) (concat "^[^2 " ws-safe "^]")))
+                      for tag = (slothbar-workspaces--extent-tag index)
+                      concat
+                      (if tag
+                          (concat (format "^M%c" tag) label "^M;")
+                        label))))))
+
+(defun slothbar-workspaces--click-regions (m)
+  "Return clickable (TAG START . END) extents from M's text layout."
+  (let ((tag nil)
+        (start nil)
+        (end nil)
+        (regions nil))
+    (dolist (item (slothbar-module-text-layout m))
+      (cond
+       ((and (consp item) (eq (car item) :mark-extent))
+        (setq tag (cadr item)
+              start nil
+              end nil))
+       ((and (consp item) (eq (car item) :end-extent))
+        (when (and tag start end)
+          (push (list tag start end) regions))
+        (setq tag nil))
+       ((fontsloth-layout-glyph-position-p item)
+        (when tag
+          (let ((left (fontsloth-layout-glyph-position-x item))
+                (right (+ (fontsloth-layout-glyph-position-x item)
+                          (fontsloth-layout-glyph-position-width item))))
+            (setq start (if start (min start left) left)
+                  end (if end (max end right) right)))))))
+    (nreverse regions)))
+
+(defun slothbar-workspaces--activate-ext-workspace (index)
+  "Activate workspace INDEX through ext-workspace.
+Return non-nil when an activation request was sent."
+  (let* ((manager (and slothbar--backend
+                       (slothbar-backend-ext-workspace-manager
+                        slothbar--backend)))
+         (workspace (and manager
+                         (nth index
+                              (slothbar-workspaces--ext-workspace-visible
+                               manager)))))
+    (when (and workspace
+               (memq 'activate (elwl-workspace-capabilities workspace)))
+      (elwl-workspace-activate workspace)
+      (elwl-workspace-manager-commit manager)
+      t)))
+
+(defun slothbar-workspaces--activate-exwm (index)
+  "Switch EXWM to workspace INDEX when EXWM is active."
+  (when (and (boundp 'exwm--connection)
+             exwm--connection
+             (fboundp 'exwm-workspace-switch-create))
+    (exwm-workspace-switch-create index)
+    t))
+
+(defun slothbar-workspaces--activate-ewmh (index)
+  "Ask the EWMH window manager to switch to desktop INDEX."
+  (when (and (slothbar-ewmh-mode)
+             (slothbar-xcb-connection))
+    (let ((connection (slothbar-xcb-connection))
+          (root (slothbar-xcb-root-window-id)))
+      (when root
+        (xcb:+request connection
+            (make-instance 'xcb:SendEvent
+                           :propagate 0
+                           :destination root
+                           :event-mask xcb:EventMask:SubstructureRedirect
+                           :event (xcb:marshal
+                                   (make-instance 'xcb:ewmh:_NET_CURRENT_DESKTOP
+                                                  :window root
+                                                  :new-index index
+                                                  :timestamp xcb:Time:CurrentTime)
+                                   connection)))
+        (xcb:flush connection)
+        t))))
+
+(defun slothbar-workspaces--activate (index)
+  "Activate workspace INDEX with the active workspace source."
+  (or (slothbar-workspaces--activate-ext-workspace index)
+      (slothbar-workspaces--activate-exwm index)
+      (slothbar-workspaces--activate-ewmh index)))
+
+(cl-defmethod slothbar-module-click
+  ((m slothbar-workspaces) x _y button)
+  "Activate the workspace extent at X in M when BUTTON is :left."
+  (when (eq button :left)
+    (let* ((region
+            (cl-find-if (lambda (region)
+                          (and (>= x (nth 1 region))
+                               (< x (nth 2 region))))
+                        (slothbar-workspaces--click-regions m)))
+           (index (and region
+                       (slothbar-workspaces--extent-tag-index (car region)))))
+      (when index
+        (slothbar-workspaces--activate index)
+        t))))
 
 (defun slothbar-workspaces-format-format (m)
   "Format M's format string."
@@ -185,6 +297,10 @@ WS-LIST."
 (declare-function elwl-workspace-name "elwl-workspace" (workspace))
 (declare-function elwl-workspace-id "elwl-workspace" (workspace))
 (declare-function elwl-workspace-coordinates "elwl-workspace" (workspace))
+(declare-function elwl-workspace-capabilities "elwl-workspace" (workspace))
+(declare-function elwl-workspace-activate "elwl-workspace" (workspace))
+(declare-function elwl-workspace-manager-commit "elwl-workspace" (manager))
+(declare-function exwm-workspace-switch-create "exwm-workspace" (index))
 
 (defun slothbar-workspaces--ext-workspace-status (active urgent)
   "Return a workspaces status list for ext-workspace flags.
@@ -226,6 +342,27 @@ coordinates."
                 (cb nil)
                 (t (< (cdr a) (cdr b))))))))))
 
+(defun slothbar-workspaces--ext-workspace-group (manager)
+  "Return the workspace group for the bar's output in MANAGER.
+Fall back to the first group."
+  (let* ((groups (elwl-workspace-manager-groups manager))
+         (output (slothbar-backend-output slothbar--backend)))
+    (or (and output
+             (cl-find-if
+              (lambda (group)
+                (memq output (elwl-workspace-group-outputs group)))
+              groups))
+        (car groups))))
+
+(defun slothbar-workspaces--ext-workspace-visible (manager)
+  "Return MANAGER's visible workspaces in display order."
+  (let* ((group (slothbar-workspaces--ext-workspace-group manager))
+         (workspaces (if group
+                         (elwl-workspace-group-workspaces group)
+                       (elwl-workspace-manager-workspaces manager))))
+    (slothbar-workspaces--ext-workspace-sort
+     (cl-remove-if #'elwl-workspace-hidden-p workspaces))))
+
 (defun slothbar-workspaces-generate-list-fn-ext-workspace ()
   "Implement `slothbar-workspaces-generate-list-fn' for ext-workspace.
 Use the workspace group assigned to the bar's output, falling back to the
@@ -234,29 +371,16 @@ first group.  Hidden workspaces are omitted."
                       (slothbar-backend-ext-workspace-manager
                        slothbar--backend))))
     (when manager
-      (let* ((groups (elwl-workspace-manager-groups manager))
-             (output (slothbar-backend-output slothbar--backend))
-             (group (or (and output
-                             (cl-find-if
-                              (lambda (group)
-                                (memq output
-                                      (elwl-workspace-group-outputs group)))
-                              groups))
-                        (car groups)))
-             (workspaces (if group
-                             (elwl-workspace-group-workspaces group)
-                           (elwl-workspace-manager-workspaces manager)))
-             (visible (cl-remove-if #'elwl-workspace-hidden-p workspaces)))
-        (cl-loop for workspace
-                 in (slothbar-workspaces--ext-workspace-sort visible)
-                 for index from 0
-                 collect
-                 (list (or (elwl-workspace-name workspace)
-                           (elwl-workspace-id workspace)
-                           (number-to-string index))
-                       (slothbar-workspaces--ext-workspace-status
-                        (elwl-workspace-active-p workspace)
-                        (elwl-workspace-urgent-p workspace))))))))
+      (cl-loop for workspace
+               in (slothbar-workspaces--ext-workspace-visible manager)
+               for index from 0
+               collect
+               (list (or (elwl-workspace-name workspace)
+                         (elwl-workspace-id workspace)
+                         (number-to-string index))
+                     (slothbar-workspaces--ext-workspace-status
+                      (elwl-workspace-active-p workspace)
+                      (elwl-workspace-urgent-p workspace)))))))
 
 (defun slothbar-workspaces--ext-workspace-change (backend)
   "Refresh workspaces modules when BACKEND's workspace state changes."

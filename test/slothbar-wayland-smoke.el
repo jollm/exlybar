@@ -189,6 +189,16 @@
               (slothbar-wayland-check
                "active ext-workspace maps to :current"
                (equal (cadr (car list)) '(:current))))
+            (let ((regions (slothbar-workspaces--click-regions workspaces)))
+              (slothbar-wayland-record
+               (format "workspace click regions=%S\n" regions))
+              (slothbar-wayland-check
+               "workspace click extents were found" regions)
+              (let ((slothbar--last-layout
+                     (list (list (list 0 0) workspaces))))
+                (slothbar-wayland-check
+                 "workspace click dispatches to the module"
+                 (slothbar--click (nth 1 (car regions)) 5 :left))))
             (slothbar-module-exit workspaces))
           ;; X-only modules are filtered out during construction.
           (require 'slothbar-tray)

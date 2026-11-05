@@ -105,6 +105,10 @@ Implementations of =slothbar-workspaces-generate-list-fn= can return the
 statuses =:window=, =:current=, =:blankish=, =:inactive=, and =:urgent=;
 =:current= may be combined with =:urgent=.
 
+Left-clicking a workspace label switches to that workspace when the active
+source can activate workspaces: ext-workspace on Wayland, EWMH on X11, or
+EXWM directly.
+
 ** Fun or tiresome things to configure
 
 + =slothbar-height= the desired height in pixels
