@@ -39,6 +39,7 @@
 
 (require 'slothbar)
 (require 'slothbar-backend)
+(require 'slothbar-format)
 (require 'slothbar-layout)
 (require 'slothbar-module)
 (require 'slothbar-draw-op)
@@ -275,7 +276,7 @@
   "Workspace extent markers produce clickable x ranges."
   (let* ((m (slothbar-workspaces-create))
          (a (slothbar-unit--glyph ?1 10))
-         (b (slothbar-unit--glyph ?] 15))
+         (b (slothbar-unit--glyph ?\] 15))
          (c (slothbar-unit--glyph ?2 30)))
     (setf (slothbar-module-text-layout m)
           (list '(:mark-extent ?0) a b '(:end-extent)
@@ -286,6 +287,84 @@
                '(("1" (:current)) ("2" (:inactive))))))
     (should (string-match-p "\\^M0" (alist-get ?w spec)))
     (should (string-match-p "\\^M;" (alist-get ?w spec)))))
+
+(ert-deftest slothbar-unit-format-compile ()
+  "Format tokens compile to the expected `format-spec' forms."
+  (let ((fields '((:cpu . ?c) (:name . ?n) (:string . "s"))))
+    (should (equal (slothbar-format-compile '("CPU " :cpu) fields)
+                   "CPU %c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :width 4 :pad :zero :suffix "%"))
+                    fields)
+                   "%04c%%"))
+    (should (equal (slothbar-format-compile
+                    (list (cons :cpu 4))
+                    fields)
+                   "%4c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :pad :left :width 4))
+                    fields)
+                   "%-4c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :truncate :left :width 5))
+                    fields)
+                   "%<5c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :truncate :right :width 5))
+                    fields)
+                   "%>5c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :case :upper))
+                    fields)
+                   "%^c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :case :lower))
+                    fields)
+                   "%_c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :width 5 :precision 2))
+                    fields)
+                   "%5.2c"))
+    (should (equal (slothbar-format-compile
+                    (list (list :cpu :prefix "[" :suffix "%]"))
+                    fields)
+                   "[%c%%]"))
+    (should (equal (slothbar-format-compile
+                    (list (list :anything :char ?z))
+                    nil)
+                   "%z"))
+    (should (equal (slothbar-format-compile '(:string) fields)
+                   "%s"))
+    (should (equal (slothbar-format-compile '("100%" :cpu) fields)
+                   "100%%%c"))
+    (should (equal (slothbar-format-compile '("^1CPU^0 " :cpu) fields)
+                   "^1CPU^0 %c"))))
+
+(ert-deftest slothbar-unit-format-compile-format-spec ()
+  "Compiled format strings work with `format-spec'."
+  (let ((format
+         (slothbar-format-compile
+          (list (list :cpu :width 4 :pad :zero)
+                " "
+                (list :name :width 5 :truncate :right))
+          '((:cpu . ?c) (:name . ?n)))))
+    (should (equal format "%04c %>5n"))
+    (should (equal (format-spec format '((?c . "12") (?n . "abcdef")))
+                   "0012 abcde"))))
+
+(ert-deftest slothbar-unit-format-compile-errors ()
+  "The compiler rejects unknown fields and malformed options."
+  (should-error (slothbar-format-compile '(:missing) '((:cpu . ?c))))
+  (should-error (slothbar-format-compile
+                 (list (list :cpu :bogus 1))
+                 '((:cpu . ?c))))
+  (should-error (slothbar-format-compile
+                 (list (list :cpu :pad :middle))
+                 '((:cpu . ?c))))
+  (should-error (slothbar-format-compile
+                 (list (list :cpu :width -1))
+                 '((:cpu . ?c))))
+  (should-error (slothbar-format-compile '(:cpu) '((:cpu . ?%)))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
