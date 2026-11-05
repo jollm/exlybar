@@ -108,10 +108,20 @@
 Modules that depend on X-only facilities override this to consult
 `slothbar-backend-supports-p'.")
 
+(cl-defgeneric slothbar-module-click (m x y button)
+  "Handle a pointer click at X,Y with BUTTON on module M.
+X and Y are relative to M's top-left corner.  BUTTON is one of `:left',
+`:middle', or `:right'.")
+
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-module) (_backend slothbar-backend))
   "By default every module supports every backend."
   t)
+
+(cl-defmethod slothbar-module-click
+  ((_m slothbar-module) (_x number) (_y number) (_button symbol))
+  "By default a module ignores clicks."
+  nil)
 
 (provide 'slothbar-module)
 

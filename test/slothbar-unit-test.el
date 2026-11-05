@@ -159,10 +159,39 @@
                (:constructor slothbar-unit-unsupported-create))
   "A module that is unsupported on the test backend.")
 
+(cl-defstruct (slothbar-unit-clickable
+               (:include slothbar-module)
+               (:constructor slothbar-unit-clickable-create))
+  "A module that records clicks."
+  clicks)
+
+(cl-defmethod slothbar-module-click
+  ((m slothbar-unit-clickable) x y button)
+  "Record a click on M."
+  (push (list x y button) (slothbar-unit-clickable-clicks m))
+  t)
+
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-unit-unsupported) (_backend slothbar-unit-backend))
   "Pretend this module needs X-only facilities."
   nil)
+
+(ert-deftest slothbar-unit-click-dispatch ()
+  "Clicks are routed to the module under the pointer."
+  (let* ((left (slothbar-unit-clickable-create :name "left" :width 10))
+         (right (slothbar-unit-clickable-create :name "right" :width 10))
+         (slothbar--last-layout
+          (list (list (list 0 0) left)
+                (list (list 20 0) right)))
+         (slothbar-height 30))
+    (should (slothbar--click 5 10 :left))
+    (should (equal (slothbar-unit-clickable-clicks left)
+                   '((5 10 :left))))
+    (should (null (slothbar-unit-clickable-clicks right)))
+    (should (slothbar--click 25 3 :right))
+    (should (equal (slothbar-unit-clickable-clicks right)
+                   '((5 3 :right))))
+    (should-not (slothbar--click 100 3 :left))))
 
 (ert-deftest slothbar-unit-module-gating ()
   "Unsupported modules are dropped during module construction."

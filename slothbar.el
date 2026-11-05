@@ -209,6 +209,9 @@ choose explicitly."
 (defvar slothbar--visible nil
   "Non-nil if the bar is visible.")
 
+(defvar slothbar--last-layout nil
+  "The most recent module layout, used to route pointer clicks.")
+
 (defmacro slothbar--global-minor-mode-body (name &optional init exit)
   "Global minor mode body for mode with NAME.
 
@@ -333,8 +336,31 @@ MODULES optional modules to refresh and compare with prev-extents"
            (damage (unless (equal prev-extents new-extents)
                      (slothbar-layout-subtract-extents
                       new-extents prev-extents))))
+      (setq slothbar--last-layout new-layout)
       (when slothbar--backend
         (slothbar-backend-present slothbar--backend new-layout damage)))))
+
+(defun slothbar--click (x y button)
+  "Dispatch a click at X,Y with BUTTON to the module under it.
+X and Y are bar-local logical coordinates."
+  (let ((placement
+         (cl-find-if
+          (lambda (placement)
+            (pcase-let ((`((,px ,py) ,m) placement))
+              (and (>= x px)
+                   (< x (+ px (slothbar-module-width m)))
+                   (>= y py)
+                   (< y (+ py slothbar-height)))))
+          slothbar--last-layout)))
+    (when placement
+      (pcase-let ((`((,px ,py) ,m) placement))
+        (slothbar-module-click m (- x px) (- y py) button)))))
+
+(defun slothbar--on-pointer-button (backend x y button)
+  "Route a pointer BUTTON press on BACKEND at X,Y to a module."
+  (when (and slothbar--enabled
+             (eq backend slothbar--backend))
+    (slothbar--click x y button)))
 
 (defun slothbar--watch-modules (_ nval oper where)
   "With OPER eq \\='set and nil WHERE, refresh `slothbar--modules' with NVAL."
@@ -425,6 +451,8 @@ Initialize the display backend, window, and modules."
          slothbar-height slothbar-font--color-code-map))
   (setq slothbar--backend (slothbar-backend-create slothbar-backend))
   (slothbar-backend-open slothbar--backend)
+  (add-hook 'slothbar-backend-pointer-button-hook
+            #'slothbar--on-pointer-button)
   ;; initialize modules
   (slothbar--construct-modules)
   (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
@@ -469,6 +497,9 @@ Initialize the display backend, window, and modules."
   (when slothbar--module-refresh-timer
     (cancel-timer slothbar--module-refresh-timer)
     (setq slothbar--module-refresh-timer nil))
+  (remove-hook 'slothbar-backend-pointer-button-hook
+               #'slothbar--on-pointer-button)
+  (setq slothbar--last-layout nil)
   (setq slothbar--enabled nil)
   (dolist (m slothbar--modules)
     (when (slothbar-module-p m)
