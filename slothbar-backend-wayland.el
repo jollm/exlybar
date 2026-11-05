@@ -54,6 +54,7 @@
 (require 'elwl-output)
 (require 'elwl-protocol)
 (require 'elwl-registry)
+(require 'elwl-foreign-toplevel)
 (require 'elwl-seat)
 (require 'elwl-shm)
 (require 'elwl-surface)
@@ -84,6 +85,7 @@
   layer-surface
   output
   ext-workspace-manager
+  foreign-toplevel-manager
   seat
   pointer
   pointer-surface
@@ -117,7 +119,12 @@
       (and (eq feature 'pointer-input)
            (slothbar-backend-wayland-pointer backend))
       (and (eq feature 'ext-workspace)
-           (slothbar-backend-ext-workspace-manager backend))))
+           (slothbar-backend-ext-workspace-manager backend))
+      (and (eq feature 'focused-window)
+           (let ((manager
+                  (slothbar-backend-wayland-foreign-toplevel-manager backend)))
+             (and manager
+                  (not (elwl-foreign-toplevel-manager-dead-p manager)))))))
 
 (defun slothbar-backend-wayland--pointer-motion (backend x y)
   "Dispatch pointer motion at X,Y on BACKEND when over the bar."
@@ -196,6 +203,18 @@
           (error
            (slothbar--log-debug*
             "pointer button hook error: %S" err)))))))
+
+(cl-defmethod slothbar-backend-focused-window
+  ((backend slothbar-backend-wayland))
+  "Return the focused Wayland toplevel's title and app-id."
+  (let* ((manager
+          (slothbar-backend-wayland-foreign-toplevel-manager backend))
+         (toplevel (and manager
+                        (elwl-foreign-toplevel-manager-focused manager))))
+    (when toplevel
+      (list :title (elwl-foreign-toplevel-title toplevel)
+            :app-id (elwl-foreign-toplevel-app-id toplevel)
+            :icon nil))))
 
 (cl-defmethod slothbar-backend-ext-workspace-manager
   ((backend slothbar-backend-wayland))
@@ -563,7 +582,8 @@ VISIBLE non-nil reserves the bar's exclusive zone."
   (condition-case err
       (let* ((protocols (list (elwl-protocol-load-wayland)
                               (elwl-protocol-load-layer-shell)
-                              (elwl-protocol-load-ext-workspace)))
+                              (elwl-protocol-load-ext-workspace)
+                              (elwl-protocol-load-wlr-foreign-toplevel)))
              (connection (elwl-connect protocols)))
         (setf (slothbar-backend-wayland-connection backend) connection)
         (let ((registry (elwl-get-registry connection)))
@@ -591,6 +611,22 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                    (scale (or (and output (elwl-output-scale output)) 1)))
               (setf (slothbar-backend-wayland-output backend) output
                     (slothbar-backend-wayland-scale backend) scale)))
+          (when (elwl-registry-find registry 'zwlr-foreign-toplevel-manager-v1)
+            (let ((manager
+                   (elwl-foreign-toplevel-manager-bind
+                    registry nil
+                    (lambda (_manager)
+                      (condition-case hook-err
+                          (run-hook-with-args
+                           'slothbar-backend-focused-window-change-hook
+                           backend)
+                        (error
+                         (slothbar--log-debug*
+                          "focused-window change hook error: %S"
+                          hook-err)))))))
+              (setf (slothbar-backend-wayland-foreign-toplevel-manager backend)
+                    manager)
+              (elwl-roundtrip connection)))
           ;; ext-workspace is optional: the compositor may not advertise it.
           (when (elwl-registry-find registry 'ext-workspace-manager-v1)
             (let ((manager
@@ -653,6 +689,10 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     (ignore-errors
       (elwl-workspace-manager-stop
        (slothbar-backend-wayland-ext-workspace-manager backend))))
+  (when (slothbar-backend-wayland-foreign-toplevel-manager backend)
+    (ignore-errors
+      (elwl-foreign-toplevel-manager-stop
+       (slothbar-backend-wayland-foreign-toplevel-manager backend))))
   (when (slothbar-backend-wayland-pointer backend)
     (ignore-errors
       (elwl-pointer-release (slothbar-backend-wayland-pointer backend))))
@@ -691,6 +731,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
         (slothbar-backend-wayland-layer-surface backend) nil
         (slothbar-backend-wayland-output backend) nil
         (slothbar-backend-wayland-ext-workspace-manager backend) nil
+        (slothbar-backend-wayland-foreign-toplevel-manager backend) nil
         (slothbar-backend-wayland-seat backend) nil
         (slothbar-backend-wayland-pointer backend) nil
         (slothbar-backend-wayland-pointer-surface backend) nil

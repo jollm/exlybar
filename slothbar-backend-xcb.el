@@ -93,7 +93,7 @@
 (cl-defmethod slothbar-backend-supports-p
   ((_backend slothbar-backend-xcb) feature)
   "The xcb backend supports X-specific features."
-  (memq feature '(system-tray ewmh randr pointer-input)))
+  (memq feature '(system-tray ewmh randr pointer-input focused-window)))
 
 (cl-defmethod slothbar-backend-ext-workspace-manager
   ((_backend slothbar-backend-xcb))
@@ -103,6 +103,46 @@
 (cl-defmethod slothbar-backend-output ((_backend slothbar-backend-xcb))
   "The xcb backend has no Wayland output."
   nil)
+
+(cl-defmethod slothbar-backend-focused-window ((backend slothbar-backend-xcb))
+  "Return the active EWMH window's title and class."
+  (let ((connection (slothbar-backend-xcb-connection backend))
+        (root (slothbar-backend-xcb--root-window-id backend)))
+    (when (and connection root)
+      (let ((active (ignore-errors
+                      (slot-value
+                       (xcb:+request-unchecked+reply
+                           connection
+                         (make-instance 'xcb:ewmh:get-_NET_ACTIVE_WINDOW
+                                        :window root))
+                       'value))))
+        (when (and active (/= active 0))
+          (let* ((title
+                  (or (ignore-errors
+                        (slot-value
+                         (xcb:+request-unchecked+reply
+                             connection
+                           (make-instance 'xcb:ewmh:get-_NET_WM_NAME
+                                          :window active))
+                         'value))
+                      (ignore-errors
+                        (slot-value
+                         (xcb:+request-unchecked+reply
+                             connection
+                           (make-instance 'xcb:icccm:get-WM_NAME
+                                          :window active))
+                         'value))))
+                 (class-reply
+                  (ignore-errors
+                    (xcb:+request-unchecked+reply
+                        connection
+                      (make-instance 'xcb:icccm:get-WM_CLASS
+                                     :window active))))
+                 (app-id (or (and class-reply
+                                  (slot-value class-reply 'class-name))
+                             (and class-reply
+                                  (slot-value class-reply 'instance-name)))))
+            (list :title title :app-id app-id :icon nil)))))))
 
 ;;; Accessors for X-only modules
 

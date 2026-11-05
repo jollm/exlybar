@@ -101,6 +101,10 @@ Known features include `system-tray', `ewmh', `randr', `layer-shell',
 (cl-defgeneric slothbar-backend-output (backend)
   "Return BACKEND's selected output object, or nil.")
 
+(cl-defgeneric slothbar-backend-focused-window (backend)
+  "Return the focused window for BACKEND as a plist, or nil.
+The plist contains :title and :app-id when known.")
+
 (defvar slothbar-backend-workspace-change-hook nil
   "Hook run when a backend's workspace information changes.
 Functions are called with the backend as the sole argument.")
@@ -115,6 +119,10 @@ coordinates.")
   "Hook run when the pointer moves over the bar.
 Functions are called with BACKEND, X, and Y.  X and Y are nil when the
 pointer leaves the bar.")
+
+(defvar slothbar-backend-focused-window-change-hook nil
+  "Hook run when the backend's focused window changes.
+Functions are called with the backend as the sole argument.")
 
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
 (declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())

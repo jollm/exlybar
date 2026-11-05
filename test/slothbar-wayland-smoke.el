@@ -149,6 +149,15 @@
                 (setf (slothbar-backend-wayland-pointer-surface backend) nil
                       (slothbar-backend-wayland-pointer-x backend) nil
                       (slothbar-backend-wayland-pointer-y backend) nil))))
+          (slothbar-wayland-check
+           "Wayland advertises focused-window support"
+           (slothbar-backend-supports-p backend 'focused-window))
+          (slothbar-wayland-check
+           "foreign-toplevel manager is bound"
+           (slothbar-backend-wayland-foreign-toplevel-manager backend))
+          (let ((focused (slothbar-backend-focused-window backend)))
+            (slothbar-wayland-record
+             (format "focused-window=%S\n" focused)))
           (let ((manager (slothbar-backend-ext-workspace-manager backend)))
             (slothbar-wayland-check
              "Wayland advertises ext-workspace"

@@ -150,6 +150,9 @@ Return VALUE."
           (slothbar-smoke--check "xcb supports pointer input"
                                  (slothbar-backend-supports-p
                                   backend 'pointer-input))
+          (slothbar-smoke--check "xcb supports focused-window"
+                                 (slothbar-backend-supports-p
+                                  backend 'focused-window))
           (slothbar-smoke--check "xcb has no ext-workspace support"
                                  (not (slothbar-backend-supports-p
                                        backend 'ext-workspace)))
