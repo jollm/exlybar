@@ -209,5 +209,38 @@
                            '(:name "first-b" :coordinates (1 0)))))
             '("first" "first-b" "second" "unset")))))
 
+(ert-deftest slothbar-unit-color-parse-embedded-codes ()
+  "Color codes parse correctly after literal text."
+  (should (equal (slothbar-color-parse-string "a^1b")
+                 '("a" (:bg :reset) (:fg 1) (:reverse nil) "b")))
+  (should (equal (slothbar-color-parse-string "a^f1b")
+                 '("a" (:font 1) "b")))
+  (should (equal (slothbar-color-parse-string "a^1b^0c")
+                 '("a" (:bg :reset) (:fg 1) (:reverse nil)
+                   "b" (:bg :reset) (:fg 0) (:reverse nil) "c"))))
+
+(ert-deftest slothbar-unit-color-parse-extent-markers ()
+  "Extent markers survive parsing as layout-only forms."
+  (should (equal (slothbar-color-parse-string "^M0a^M;b")
+                 '((:mark-extent ?0) "a" (:end-extent) "b")))
+  (should (equal (slothbar-color-parse-string "^MZ")
+                 '((:mark-extent ?Z))))
+  (should (equal (slothbar-color-parse-string "^M;")
+                 '((:end-extent))))
+  (should (equal (slothbar-color-parse-string "^M abc")
+                 '("^M abc")))
+  (should (equal (slothbar-color-parse-string "")
+                 '(""))))
+
+(ert-deftest slothbar-unit-text-draw-ops-ignores-extent-markers ()
+  "Extent markers do not create draw operations."
+  (let* ((a (slothbar-unit--glyph ?a 0))
+         (ops (slothbar-text-draw-ops
+               (list '(:mark-extent ?0) a '(:end-extent)))))
+    (should (= (length ops) 1))
+    (should (equal (mapcar #'fontsloth-layout-glyph-position-parent
+                           (slothbar-draw-op-glyph-positions (car ops)))
+                   '(?a)))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

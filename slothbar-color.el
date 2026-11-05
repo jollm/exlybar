@@ -304,7 +304,7 @@ ivals are expected to be in ascending order."
   (cdr (seq-find (pcase-lambda (`(,p . ,_)) (< val p)) icons)))
 
 (defvar slothbar-color--pattern
-  "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^(.*?)"
+  "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^M;\\|\\^M[^ ;]\\|\\^(.*?)"
   "This is the same color code pattern used in stumpwm.
 Note that not yet all of these options are supported for slothbar.")
 
@@ -335,6 +335,16 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
           (?\] '((:pop)))
           (?> '((:>)))
           (?f `((:font ,(string-to-number (string background)))))
+          (?M
+           (cond
+            ((and (> (length color) 2) (= (elt color 2) ?\;))
+             '((:end-extent)))
+            ((and (> (length color) 2)
+                  (not (or (= (elt color 2) ?\s)
+                           (= (elt color 2) ?\;))))
+             (list (list :mark-extent (elt color 2))))
+            (t
+             (list color))))
           (?^ '("^"))
           (?\; nil)
           (?\( (list (car (read-from-string color 1))))
