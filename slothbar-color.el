@@ -63,6 +63,21 @@ RED, GREEN, BLUE, and ALPHA are integers in the range 0-65535."
   (blue 0 :type 'number)
   (alpha #xffff :type 'number))
 
+(defcustom slothbar-color-bright-factor 1.25
+  "Factor used by ^B to brighten a foreground color."
+  :type 'float
+  :group 'slothbar)
+
+(defun slothbar-color-brighten (color &optional factor)
+  "Return COLOR brightened by FACTOR, clamping channels at full scale."
+  (when color
+    (let ((factor (or factor slothbar-color-bright-factor)))
+      (slothbar-color-rgb-create
+       :red (min #xffff (round (* (slothbar-color-rgb-red color) factor)))
+       :green (min #xffff (round (* (slothbar-color-rgb-green color) factor)))
+       :blue (min #xffff (round (* (slothbar-color-rgb-blue color) factor)))
+       :alpha (slothbar-color-rgb-alpha color)))))
+
 (defun slothbar-color-from-plist (plist)
   "Return a `slothbar-color-rgb' from PLIST.
 
