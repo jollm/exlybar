@@ -348,35 +348,26 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
     (list color)))
 
 (defun slothbar-color-parse-string (string)
-  "Parse a color-coded STRING into a list of strings and color modifiers."
-  ;; these two fns attempt to replicate cl ppcre:split
-  (cl-labels ((expand-positions (pos length)
-                (if pos
-                    (cl-loop for (p . rest) on pos with res = nil do
-                             (push p res)
-                             (let ((nleft (if rest (caar rest) length)))
-                               (when (< (cdr p) nleft)
-                                 (push `(,(cdr p) . ,nleft) res)))
-                             finally return (nreverse res))
-                  `((0 . ,length))))
-              (split-retain (s regex)
-                (let* ((pos (s-matched-positions-all regex s))
-                       (pos (expand-positions pos (length string))))
-                  ;; pretend below is:
-                  ;; (cl-loop for pos in pos collect
-                  ;;          (seq-subseq string (car pos) (cdr pos)))
-                  ;; below should be better than the above given what is known
-                  ;; about expand-positions
-                  (cl-loop for p in pos for acc = nil
-                           with chars = (cl-loop for c across string collect c)
-                           with res = nil do
-                           (cl-loop repeat (- (cdr p) (car p)) do
-                                    (push (pop chars) acc))
-                           (push (apply #'string (nreverse acc)) res)
-                           finally return (nreverse res)))))
-    (let ((substrings
-           (split-retain string slothbar-color--pattern)))
-      (cl-loop for substring in substrings
+  "Parse a color-coded STRING into strings and layout modifiers.
+
+The result preserves text and splices in the forms returned by
+`slothbar-color-parse'.  `^M<TAG>' produces `(:mark-extent TAG)' and
+`^M;' produces `(:end-extent)'."
+  (if (zerop (length string))
+      (list "")
+    (let ((matches (s-matched-positions-all slothbar-color--pattern string))
+          (substrings nil)
+          (pos 0))
+      (dolist (match matches)
+        (let ((start (car match))
+              (end (cdr match)))
+          (when (< pos start)
+            (push (substring string pos start) substrings))
+          (push (substring string start end) substrings)
+          (setq pos end)))
+      (when (< pos (length string))
+        (push (substring string pos) substrings))
+      (cl-loop for substring in (nreverse substrings)
                with resolve~? = nil append
                (let ((p (slothbar-color-parse substring)))
                  (if (stringp (car p)) p
