@@ -385,7 +385,7 @@ The default color is from `slothbar-util--find-background-color'."
   (let ((surface (gethash module
                           (slothbar-backend-xcb-module-surfaces backend))))
     (when surface
-      (slothbar-backend-xcb--resize-module backend surface module)
+      (slothbar-backend-xcb--prepare-module backend surface module)
       (slothbar-backend-xcb--load-glyphs backend module surface)
       (slothbar-backend-xcb--draw-text backend module surface))))
 
@@ -427,36 +427,41 @@ The default color is from `slothbar-util--find-background-color'."
           (slothbar--log-debug* "trying to free glyphset, errors %s" egs)))
       (remhash module surfaces))))
 
-(defun slothbar-backend-xcb--resize-module (backend surface module)
-  "Recreate SURFACE's pixmap when MODULE's width changed."
-  (let ((width (slothbar-module-width module)))
+(defun slothbar-backend-xcb--prepare-module (backend surface module)
+  "Ensure SURFACE's pixmap matches MODULE and clear it before drawing.
+A refreshed module may keep the same width while its text shrinks, so the
+pixmap is always refilled with the module background."
+  (let* ((width (slothbar-module-width module))
+         (connection (slothbar-backend-xcb-connection backend))
+         (colors (slothbar-module-colors module))
+         (background-pixel
+          (slothbar-render-color->pixel
+           (slothbar-module-rgb-background-color colors)))
+         (gc (slothbar-backend-xcb--module-surface-gc surface)))
     (unless (= width (slothbar-backend-xcb--module-surface-width surface))
-      (let ((connection (slothbar-backend-xcb-connection backend))
-            (colors (slothbar-module-colors module))
-            (pixmap (slothbar-backend-xcb--module-surface-pixmap surface))
-            (gc (slothbar-backend-xcb--module-surface-gc surface)))
+      (let ((pixmap (slothbar-backend-xcb--module-surface-pixmap surface)))
         (when pixmap
           (xcb:+request connection
               (make-instance 'xcb:FreePixmap :pixmap pixmap)))
-        (let ((background-pixel
-               (slothbar-render-color->pixel
-                (slothbar-module-rgb-background-color colors))))
-          (xcb:+request-checked+request-check connection
-              (make-instance 'xcb:ChangeGC
-                             :gc gc
-                             :value-mask (logior xcb:GC:Background
-                                                 xcb:GC:Foreground)
-                             :background background-pixel
-                             :foreground background-pixel)))
         (let ((new-pixmap (xcb:generate-id connection)))
           (slothbar-render-create-pixmap connection new-pixmap
                                          width slothbar-height)
           (setf (slothbar-backend-xcb--module-surface-pixmap surface)
                 new-pixmap)
-          (slothbar-render-fill-rectangle connection gc new-pixmap
-                                          width slothbar-height)
           (setf (slothbar-backend-xcb--module-surface-width surface)
-                width))))))
+                width))))
+    (xcb:+request-checked+request-check connection
+        (make-instance 'xcb:ChangeGC
+                       :gc gc
+                       :value-mask (logior xcb:GC:Background
+                                           xcb:GC:Foreground)
+                       :background background-pixel
+                       :foreground background-pixel))
+    (slothbar-render-fill-rectangle
+     connection gc
+     (slothbar-backend-xcb--module-surface-pixmap surface)
+     width slothbar-height)
+    surface))
 
 (defun slothbar-backend-xcb--load-glyphs (backend module surface)
   "Load MODULE's glyphs into SURFACE for BACKEND."

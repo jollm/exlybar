@@ -70,6 +70,37 @@ Return VALUE."
   (unless value (kill-emacs 1))
   value)
 
+(defun slothbar-smoke--pixmap-non-background (backend module)
+  "Count pixels in MODULE's pixmap that differ from its first pixel."
+  (let* ((surface (gethash
+                   module
+                   (slothbar-backend-xcb-module-surfaces backend)))
+         (pixmap (slothbar-backend-xcb--module-surface-pixmap surface))
+         (width (slothbar-module-width module))
+         (height slothbar-height)
+         (reply (xcb:+request-unchecked+reply
+                    (slothbar-xcb-connection)
+                  (make-instance 'xcb:GetImage
+                                 :format xcb:ImageFormat:ZPixmap
+                                 :drawable pixmap
+                                 :x 0 :y 0
+                                 :width width :height height
+                                 :plane-mask #xffffffff)))
+         (data (vconcat (slot-value reply 'data)))
+         (bytes-per-pixel (/ (length data) (* width height)))
+         (background (cl-loop for index below bytes-per-pixel
+                              collect (aref data index)))
+         (count 0))
+    (dotimes (pixel-index (* width height))
+      (let ((offset (* pixel-index bytes-per-pixel))
+            (different nil))
+        (dotimes (byte bytes-per-pixel)
+          (unless (= (aref data (+ offset byte))
+                     (nth byte background))
+            (setq different t)))
+        (when different (cl-incf count))))
+    count))
+
 (defun slothbar-smoke--run ()
   "Exercise the xcb backend and the core lifecycle against a live X server."
   (unless (frame-parameter nil 'display)
@@ -126,6 +157,24 @@ Return VALUE."
                                   module
                                   (slothbar-backend-xcb-module-surfaces
                                    backend)))
+          ;; Regression: a refreshed module can keep its width while its text
+          ;; shrinks.  The old glyphs must not survive the redraw.
+          (let ((previous-width (slothbar-module-width module))
+                (before (slothbar-smoke--pixmap-non-background
+                         backend module)))
+            (slothbar-smoke--check "initial glyphs are drawn" (> before 0))
+            (aset module (cl-struct-slot-offset 'slothbar-module 'format)
+                  "i")
+            (slothbar-module-layout module)
+            ;; Keep the pixmap width unchanged so only the redraw clear can
+            ;; remove the old glyphs.
+            (aset module (cl-struct-slot-offset 'slothbar-module 'width)
+                  previous-width)
+            (slothbar-backend-draw-module backend module)
+            (slothbar-smoke--check
+             "redraw clears previous glyphs"
+             (< (slothbar-smoke--pixmap-non-background backend module)
+                before)))
           (slothbar-backend-present
            backend
            (list (list (list 0 0) module))
