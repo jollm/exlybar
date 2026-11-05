@@ -586,5 +586,54 @@
     (should (equal (slothbar-sysinfo--render format '((:cpu-usage . 3)))
                    "  3^[^6%^]"))))
 
+(ert-deftest slothbar-unit-format-compile-plan-decimals ()
+  "Format plans keep repeated fields separate for per-token decimals."
+  (let* ((fields '((:cpu . ?c)))
+         (plan (slothbar-format-compile-plan
+                '((:cpu :decimals 0)
+                  " "
+                  (:cpu :decimals 1))
+                fields))
+         (slots (slothbar-format-plan-slots plan)))
+    (should (= (length slots) 2))
+    (should (equal (mapcar #'slothbar-format-slot-keyword slots)
+                   '(:cpu :cpu)))
+    (should (equal (mapcar (lambda (slot)
+                             (plist-get (slothbar-format-slot-options slot)
+                                        :decimals))
+                           slots)
+                   '(0 1)))
+    (should-not (equal (slothbar-format-slot-char (nth 0 slots))
+                       (slothbar-format-slot-char (nth 1 slots))))
+    (should (equal (slothbar-format-compile
+                    '((:cpu :decimals 1))
+                    fields)
+                   "%c"))
+    (should-error (slothbar-format-compile-plan
+                   '((:cpu :decimals -1))
+                   fields))))
+
+(ert-deftest slothbar-unit-sysinfo-token-decimals ()
+  "Sysinfo honors per-token decimal overrides."
+  (let* ((plan (slothbar-format-compile-plan
+                '((:cpu-usage :decimals 1)
+                  " "
+                  (:cpu-usage :decimals 0))
+                (slothbar-sysinfo-field-characters))))
+    (should (equal (slothbar-sysinfo--render-plan
+                    plan '((:cpu-usage . 12.34)))
+                   "12.3 12")))
+  (let ((m (slothbar-sysinfo-create))
+        (slothbar-sysinfo-format
+         '((:cpu-usage :decimals 1)
+           " "
+           (:cpu-usage :decimals 0))))
+    (setf (slothbar-sysinfo-state m) (slothbar-sysinfo-state-create))
+    (cl-letf (((symbol-function 'slothbar-sysinfo-collect)
+               (lambda (&optional _state _now _force)
+                 '((:cpu-usage . 12.34)))))
+      (slothbar-module-update-status m))
+    (should (equal (slothbar-module-text m) "12.3 12"))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

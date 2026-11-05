@@ -129,10 +129,19 @@ Its display is configured with a token list, compiled by
 #+end_src
 
 Tokens can use =:width=, =:precision=, =:pad=, =:truncate=, =:case=,
-=:prefix=, =:suffix=, and =:char=.  The available field keywords are in
-=slothbar-sysinfo-fields=; common ones include =:cpu-usage=,
-=:memory-usage=, =:disk-usage=, =:net-down=, =:net-up=, =:load-1=,
-=:uptime=, =:process-count=, =:temperature=, and =:battery-percent=.
+=:prefix=, =:suffix=, =:char=, and =:decimals=.  =:decimals= rounds the
+number before formatting, and =:width= applies to the resulting value
+string.  The width counts the sign, decimal point, and digits of that value,
+but not =:prefix= or =:suffix=.  For example, a value formatted as =7.2=
+with =( :cpu-usage :width 4 :decimals 1 )= becomes = 7.2=; with
+=:pad :zero= and width 5 it becomes =007.2=; =12.3= already fills width 4.
+Width alone is a minimum and does not truncate.  =:precision= truncates the
+formatted string and can remove decimal digits; use =:decimals= for rounding.
+
+The available field keywords are in =slothbar-sysinfo-fields=; common ones
+include =:cpu-usage=, =:memory-usage=, =:disk-usage=, =:net-down=, =:net-up=,
+=:load-1=, =:uptime=, =:process-count=, =:temperature=, and
+=:battery-percent=.
 
 =slothbar-sysinfo-refresh-interval= controls how often the module updates its
 status, while =slothbar-sysinfo-intervals= controls how often each provider

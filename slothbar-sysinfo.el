@@ -290,14 +290,18 @@ DECIMALS defaults to 1."
     (temperature . slothbar-sysinfo-format-temperature))
   "Formatter symbols and their implementations.")
 
-(defun slothbar-sysinfo-format-value (field value)
-  "Format VALUE for FIELD, or return the missing-value string."
+(defun slothbar-sysinfo-format-value (field value &optional decimals)
+  "Format VALUE for FIELD, or return the missing-value string.
+DECIMALS overrides FIELD's default decimal count."
   (if (null value)
       slothbar-sysinfo-missing
-    (let ((formatter (alist-get (slothbar-sysinfo-field-formatter field)
-                                slothbar-sysinfo--formatters)))
+    (let* ((formatter (alist-get (slothbar-sysinfo-field-formatter field)
+                                 slothbar-sysinfo--formatters))
+           (decimals (if (null decimals)
+                         (slothbar-sysinfo-field-decimals field)
+                       decimals)))
       (if formatter
-          (funcall formatter value (slothbar-sysinfo-field-decimals field))
+          (funcall formatter value decimals)
         (format "%s" value)))))
 
 ;;; Pure Linux parsers
@@ -727,12 +731,20 @@ STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
 
 (defcustom slothbar-sysinfo-format
   (let ((percent "^[^2%^]"))
-    `("^f2^6"
+    `("^f2^2"
       (:cpu-usage :width 3 :pad zero :suffix ,percent)
       "^[^f1 ^2^f4^]"
       " "
-      (:memory-usage :width 3 :suffix ,percent)
-      "^[^f1 ^2^f4^]"))
+      (:memory-usage :width 2 :pad zero :decimals 1 :suffix ,percent)
+      "^[^f0 ^2^f4^]"
+      " "
+      "^[^f2"(:net-up :width 10 :pad right)"^]"
+      "^[^f0 ^2^f4^]"
+      "^[^f2"(:net-down :width 10 :pad right)"^]"
+      "^[^f1 ^2^f4^]"
+      " "
+      "^[^2^f0"(:net-interface)"^]"
+      ))
   "Token list used to format the sysinfo module.
 See `slothbar-format-compile' for the token and option syntax."
   :type 'sexp
@@ -755,18 +767,42 @@ See `slothbar-format-compile' for the token and option syntax."
   "A system information module."
   state)
 
-(defun slothbar-sysinfo--format-values (values)
-  "Build the `format-spec' alist from sysinfo VALUES."
-  (cl-loop for field in slothbar-sysinfo-fields
-           collect
-           (cons (slothbar-sysinfo-field-char field)
-                 (slothbar-sysinfo-format-value
-                  field
-                  (alist-get (slothbar-sysinfo-field-keyword field) values)))))
+(defun slothbar-sysinfo--format-values (values &optional plan)
+  "Build the `format-spec' alist from sysinfo VALUES.
+When PLAN is non-nil, use its slots so per-token options such as :decimals
+are honored."
+  (if plan
+      (cl-loop for slot in (slothbar-format-plan-slots plan)
+               for keyword = (slothbar-format-slot-keyword slot)
+               for field = (slothbar-sysinfo-find-field keyword)
+               collect
+               (cons (slothbar-format-slot-char slot)
+                     (slothbar-sysinfo-format-value
+                      field
+                      (alist-get keyword values)
+                      (plist-get (slothbar-format-slot-options slot)
+                                 :decimals))))
+    (cl-loop for field in slothbar-sysinfo-fields
+             collect
+             (cons (slothbar-sysinfo-field-char field)
+                   (slothbar-sysinfo-format-value
+                    field
+                    (alist-get (slothbar-sysinfo-field-keyword field) values))))))
 
 (defun slothbar-sysinfo--render (format values)
   "Render FORMAT using sysinfo VALUES."
   (format-spec format (slothbar-sysinfo--format-values values) 'ignore))
+
+(defun slothbar-sysinfo--render-plan (plan values)
+  "Render PLAN using sysinfo VALUES, including per-token decimals."
+  (format-spec (slothbar-format-plan-format plan)
+               (slothbar-sysinfo--format-values values plan)
+               'ignore))
+
+(defun slothbar-sysinfo-compile-plan ()
+  "Compile `slothbar-sysinfo-format' into a format plan."
+  (slothbar-format-compile-plan slothbar-sysinfo-format
+                                (slothbar-sysinfo-field-characters)))
 
 (cl-defmethod slothbar-module-update-status ((m slothbar-sysinfo))
   "Collect sysinfo values for M and update its text."
@@ -774,8 +810,9 @@ See `slothbar-format-compile' for the token and option syntax."
                     (setf (slothbar-sysinfo-state m)
                           (slothbar-sysinfo-state-create))))
          (values (slothbar-sysinfo-collect state))
-         (format (slothbar-sysinfo-compile-format slothbar-sysinfo-format))
-         (spec (slothbar-sysinfo--format-values values))
+         (plan (slothbar-sysinfo-compile-plan))
+         (format (slothbar-format-plan-format plan))
+         (spec (slothbar-sysinfo--format-values values plan))
          (text (format-spec format spec 'ignore))
          (changed (not (equal text (slothbar-module-text m)))))
     (setf (slothbar-module-format m) format

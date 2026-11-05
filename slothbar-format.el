@@ -34,8 +34,25 @@
 (require 'cl-lib)
 
 (defconst slothbar-format--option-keys
-  '(:width :precision :pad :truncate :case :prefix :suffix :char)
+  '(:width :precision :pad :truncate :case :prefix :suffix :char :decimals)
   "Options accepted in a token list.")
+
+(cl-defstruct
+    (slothbar-format-slot
+     (:constructor slothbar-format-slot-create)
+     (:copier nil))
+  "One value slot in a compiled format plan."
+  char
+  keyword
+  options)
+
+(cl-defstruct
+    (slothbar-format-plan
+     (:constructor slothbar-format-plan-create)
+     (:copier nil))
+  "A format string and the value slots needed to render it."
+  format
+  slots)
 
 (defun slothbar-format--escape (string)
   "Return STRING with literal percent signs escaped for `format-spec'."
@@ -100,11 +117,13 @@ mapping with :char."
              (setq plist (plist-put plist key value)))
     plist))
 
-(defun slothbar-format--spec (keyword options fields)
+(defun slothbar-format--spec (keyword options fields &optional character)
   "Build one `format-spec' specification for KEYWORD.
-OPTIONS is a property list.  FIELDS maps keywords to characters."
+OPTIONS is a property list; FIELDS maps keywords to characters.
+CHARACTER overrides the character resolved from FIELDS."
   (let* ((plist (slothbar-format--validate-options options))
-         (character (slothbar-format--field-character keyword fields plist))
+         (character (or character
+                        (slothbar-format--field-character keyword fields plist)))
          (width (plist-get plist :width))
          (precision (plist-get plist :precision))
          (prefix (or (plist-get plist :prefix) ""))
@@ -114,6 +133,8 @@ OPTIONS is a property list.  FIELDS maps keywords to characters."
     (when (and precision
                (not (and (integerp precision) (>= precision 0))))
       (error "Invalid :precision value %S" precision))
+    (when (eq character ?%)
+      (error "Format field %S cannot use %% as its character" keyword))
     (concat
      (slothbar-format--escape prefix)
      "%"
@@ -124,6 +145,97 @@ OPTIONS is a property list.  FIELDS maps keywords to characters."
      (if precision (concat "." (number-to-string precision)) "")
      (char-to-string character)
      (slothbar-format--escape suffix))))
+
+(defun slothbar-format--token-keyword-options (token)
+  "Return (KEYWORD . OPTIONS) for a field TOKEN."
+  (cond
+   ((keywordp token)
+    (cons token nil))
+   ((consp token)
+    (let ((keyword (car token))
+          (rest (cdr token)))
+      (unless (keywordp keyword)
+        (error "Format token must start with a keyword, got %S" token))
+      (cond
+       ((null rest)
+        (cons keyword nil))
+       ((integerp rest)
+        (cons keyword (list :width rest)))
+       ((and (listp rest) (keywordp (car rest)))
+        (cons keyword rest))
+       (t
+        (error "Invalid format token %S" token)))))
+   (t
+    (error "Invalid format token %S" token))))
+
+(defun slothbar-format--candidate-characters ()
+  "Return characters available for format value slots."
+  (delete-dups
+   (delq ?%
+         (append (number-sequence ?a ?z)
+                 (number-sequence ?A ?Z)
+                 (number-sequence ?0 ?9)
+                 (number-sequence ?! ?~)))))
+
+(defun slothbar-format--allocate-character (preferred used)
+  "Return a free format character, preferring PREFERRED.
+USED is a list of characters already assigned."
+  (or (and preferred (not (memq preferred used)) preferred)
+      (cl-find-if (lambda (character) (not (memq character used)))
+                  (slothbar-format--candidate-characters))
+      (error "No free format characters remain")))
+
+(defun slothbar-format--plan-token (token fields used)
+  "Return (STRING . SLOT) for TOKEN.
+SLOT is nil for literal strings.  USED is the characters already assigned."
+  (cond
+   ((stringp token)
+    (cons (slothbar-format--escape token) nil))
+   ((or (keywordp token) (consp token))
+    (let* ((keyword-options (slothbar-format--token-keyword-options token))
+           (keyword (car keyword-options))
+           (options (cdr keyword-options))
+           (plist (slothbar-format--validate-options options))
+           (decimals (plist-get plist :decimals)))
+      (unless (or (null decimals)
+                  (and (integerp decimals) (>= decimals 0)))
+        (error "Invalid :decimals value %S" decimals))
+      (let* ((preferred (slothbar-format--field-character
+                         keyword fields plist))
+             (character (slothbar-format--allocate-character preferred used))
+             (spec (slothbar-format--spec keyword plist fields character)))
+        (cons spec
+              (slothbar-format-slot-create
+               :char character
+               :keyword keyword
+               :options plist)))))
+   (t
+    (error "Invalid format token %S" token))))
+
+(defun slothbar-format-compile-plan (tokens fields)
+  "Compile TOKENS into a `slothbar-format-plan'.
+FIELDS maps keywords to their preferred `format-spec' characters.  Repeated
+fields receive distinct characters so callers can format each occurrence
+independently, including with different :decimals values.  A consumer that
+applies :decimals before rendering should treat :width as the width of that
+rounded value string, including its sign and decimal point but not :prefix or
+:suffix."
+  (unless (listp tokens)
+    (setq tokens (list tokens)))
+  (let ((used nil)
+        (strings nil)
+        (slots nil))
+    (dolist (token tokens)
+      (let* ((result (slothbar-format--plan-token token fields used))
+             (string (car result))
+             (slot (cdr result)))
+        (push string strings)
+        (when slot
+          (push (slothbar-format-slot-char slot) used)
+          (push slot slots))))
+    (slothbar-format-plan-create
+     :format (mapconcat #'identity (nreverse strings) "")
+     :slots (nreverse slots))))
 
 (defun slothbar-format--token (token fields)
   "Compile one TOKEN using FIELDS."
@@ -166,8 +278,19 @@ of options:
   :prefix     literal text before the field
   :suffix     literal text after the field
   :char       explicit character, bypassing FIELDS
+  :decimals   numeric formatter hint for plan consumers; ignored by this
+              string-only entry point
 
 FIELDS is an alist mapping keywords to single characters.
+
+Use `slothbar-format-compile-plan' when a token's :decimals option should
+reach the value formatter; `slothbar-format-compile' only builds the string.
+
+For plan consumers such as sysinfo, :decimals rounds the value before
+`format-spec' sees it.  :width then applies to that formatted value string,
+counting the sign, decimal point, and digits, but not :prefix or :suffix.
+Width is a minimum; use :truncate or :precision to cut characters.  :precision
+is string truncation, not a decimal-place setting.
 
 Example:
 
@@ -177,12 +300,8 @@ Example:
          (list :load :width 5 :precision 2))
    (list (cons :cpu-usage ?c) (cons :load ?l)))
   => \"%04c%% %5.2l\""
-  (unless (listp tokens)
-    (setq tokens (list tokens)))
-  (mapconcat (lambda (token)
-               (slothbar-format--token token fields))
-             tokens
-             ""))
+  (slothbar-format-plan-format
+   (slothbar-format-compile-plan tokens fields)))
 
 (provide 'slothbar-format)
 ;;; slothbar-format.el ends here
