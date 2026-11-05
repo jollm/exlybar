@@ -214,6 +214,16 @@ size and SCALE the output buffer scale."
                          (slothbar-backend-wayland-glyph-cache backend)))
               entry))))))
 
+(defun slothbar-backend-wayland--glyph-top
+    (glyph-y raster-height scale module-y)
+  "Return the buffer-space top of a glyph.
+GLYPH-Y is fontsloth's negative baseline offset, RASTER-HEIGHT the scaled
+glyph bitmap height, SCALE the output scale, and MODULE-Y the module's
+placement."
+  (- (* scale module-y)
+     (round (* scale glyph-y))
+     raster-height))
+
 (defun slothbar-backend-wayland--draw-ops (backend module ops module-x module-y)
   "Draw MODULE's OPS into BACKEND's frame at MODULE-X, MODULE-Y."
   (let* ((scale (slothbar-backend-wayland-scale backend))
@@ -244,10 +254,8 @@ size and SCALE the output buffer scale."
                              ((cl-struct fontsloth-metrics
                                          width height) metrics)
                              (left (truncate (* scale (+ module-x x))))
-                             (top (+ (* scale module-y)
-                                     height
-                                     (round (* scale y))
-                                     scale)))
+                             (top (slothbar-backend-wayland--glyph-top
+                                   y height scale module-y)))
                   (slothbar-backend-wayland--blend-glyph
                    frame stride frame-width frame-height fg bg
                    left top pixmap width height))))))))))

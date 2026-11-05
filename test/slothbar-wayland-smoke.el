@@ -178,17 +178,33 @@
           (let* ((frame (slothbar-backend-wayland-frame backend))
                  (width (slothbar-backend-wayland-frame-width backend))
                  (height (slothbar-backend-wayland-frame-height backend))
+                 (stride (slothbar-backend-wayland-frame-stride backend))
+                 (background (list (aref frame 0)
+                                   (aref frame 1)
+                                   (aref frame 2)))
                  (found nil)
-                 (index 0))
-            (while (and (not found) (< index (* width height)))
-              (let ((offset (* index 4)))
-                (when (or (> (aref frame offset) 0)
-                          (> (aref frame (1+ offset)) 0)
-                          (> (aref frame (+ offset 2)) 0))
-                  (setq found t)))
-              (cl-incf index))
+                 (min-y nil)
+                 (max-y nil))
+            (dotimes (y height)
+              (dotimes (x width)
+                (let ((offset (+ (* y stride) (* x 4)))
+                      (different nil))
+                  (dotimes (byte 3)
+                    (unless (= (aref frame (+ offset byte))
+                               (nth byte background))
+                      (setq different t)))
+                  (when different
+                    (setq found t
+                          min-y (if min-y (min min-y y) y)
+                          max-y (if max-y (max max-y y) y))))))
             (slothbar-wayland-check
-             "frame contains glyph pixels" found))
+             "frame contains glyph pixels" found)
+            (slothbar-wayland-check
+             "glyphs are not clipped at the top"
+             (and min-y (> min-y 0)))
+            (slothbar-wayland-check
+             "glyphs are not clipped at the bottom"
+             (and max-y (< max-y (1- height)))))
           (slothbar-backend-show backend)
           (slothbar-wayland-check
            "presented buffer was submitted in-flight"
