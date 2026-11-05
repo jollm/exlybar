@@ -64,6 +64,7 @@ The following displays all the built-in modules with default settings:
         '(:left
           slothbar-tray-create slothbar-date-create
           slothbar-workspaces-create slothbar-sysinfo-create
+          slothbar-focus-create
           :right
           slothbar-wifi-create slothbar-volume-create
           slothbar-backlight-create slothbar-battery-create))
@@ -109,6 +110,23 @@ Left-clicking a workspace label switches to that workspace when the active
 source can activate workspaces: ext-workspace on Wayland, EWMH on X11, or
 EXWM directly.  Hovering a workspace label brightens it; modules can implement
 `slothbar-module-hover' to provide their own hover feedback.
+
+** Focused window
+
+The focus module shows the title and, optionally, the application id of the
+currently focused window.  It uses the active EWMH window on X11 and the wlr
+foreign-toplevel protocol on Wayland.
+
+#+begin_src emacs-lisp
+  (setq slothbar-modules '(:left slothbar-focus-create))
+  (setq slothbar-focus-format "%a: %t")
+#+end_src
+
+=%t= is the window title and =%a= is the application id.  The default format
+is =%t=.  Titles are truncated according to
+=slothbar-focus-truncate-to-width=, and =slothbar-focus-refresh-interval=
+controls polling where the backend has no focus-change notification.  Window
+icons are not included yet.
 
 ** System information
 

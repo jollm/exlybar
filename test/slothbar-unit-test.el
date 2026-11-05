@@ -44,6 +44,7 @@
 (require 'slothbar-layout)
 (require 'slothbar-module)
 (require 'slothbar-draw-op)
+(require 'slothbar-focus)
 
 ;; `slothbar-layout' only declares this variable; `slothbar.el' gives it a
 ;; defcustom value.  Define it here so tests can bind it dynamically.
@@ -705,6 +706,43 @@
                                 (substring plain 0
                                            (string-match "\\^M1" plain))))
     (should (string-match-p "\\^B" plain))))
+
+(cl-defstruct (slothbar-unit-focus-backend
+               (:include slothbar-unit-backend))
+  "A test backend that reports a focused window."
+  focused)
+
+(cl-defmethod slothbar-backend-focused-window
+  ((backend slothbar-unit-focus-backend))
+  "Return the fake focused window for BACKEND."
+  (slothbar-unit-focus-backend-focused backend))
+
+(ert-deftest slothbar-unit-focus-render ()
+  "Focus formatting uses title and app-id with empty fallbacks."
+  (should (equal (slothbar-focus--render
+                  "%a: %t" '(:title "Hello" :app-id "app.org"))
+                 "app.org: Hello"))
+  (should (equal (slothbar-focus--render "%t" nil) ""))
+  (let ((slothbar-focus-truncate-to-width 5))
+    (should (<= (length (slothbar-focus--truncate "abcdefgh")) 5)))
+  (let ((m (slothbar-focus-create :format "%a: %t")))
+    (setf (slothbar-module-text m) "")
+    (should (equal (slothbar-focus-format-format m) ""))
+    (setf (slothbar-module-text m) "Hello")
+    (should (equal (slothbar-focus-format-format m) "%a: %t"))))
+
+(ert-deftest slothbar-unit-focus-module-update ()
+  "The focus module reads its backend and updates format-spec and text."
+  (let* ((backend (make-slothbar-unit-focus-backend
+                   :kind 'test
+                   :focused '(:title "Hello" :app-id "app.org")))
+         (m (slothbar-focus-create :format "%a: %t")))
+    (let ((slothbar--backend backend))
+      (slothbar-module-update-status m))
+    (should (equal (slothbar-module-text m) "app.org: Hello"))
+    (should (equal (alist-get ?t (slothbar-module-format-spec m)) "Hello"))
+    (should (equal (alist-get ?a (slothbar-module-format-spec m)) "app.org"))
+    (should (slothbar-module-needs-refresh? m))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
