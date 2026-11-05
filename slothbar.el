@@ -212,6 +212,9 @@ choose explicitly."
 (defvar slothbar--last-layout nil
   "The most recent module layout, used to route pointer clicks.")
 
+(defvar slothbar--hovered-module nil
+  "The module currently under the pointer, or nil.")
+
 (defmacro slothbar--global-minor-mode-body (name &optional init exit)
   "Global minor mode body for mode with NAME.
 
@@ -340,21 +343,43 @@ MODULES optional modules to refresh and compare with prev-extents"
       (when slothbar--backend
         (slothbar-backend-present slothbar--backend new-layout damage)))))
 
+(defun slothbar--module-placement-at (x y)
+  "Return the layout placement containing X and Y, or nil."
+  (cl-find-if
+   (lambda (placement)
+     (pcase-let ((`((,px ,py) ,m) placement))
+       (and (>= x px)
+            (< x (+ px (slothbar-module-width m)))
+            (>= y py)
+            (< y (+ py slothbar-height)))))
+   slothbar--last-layout))
+
 (defun slothbar--click (x y button)
   "Dispatch a click at X,Y with BUTTON to the module under it.
 X and Y are bar-local logical coordinates."
-  (let ((placement
-         (cl-find-if
-          (lambda (placement)
-            (pcase-let ((`((,px ,py) ,m) placement))
-              (and (>= x px)
-                   (< x (+ px (slothbar-module-width m)))
-                   (>= y py)
-                   (< y (+ py slothbar-height)))))
-          slothbar--last-layout)))
+  (let ((placement (slothbar--module-placement-at x y)))
     (when placement
       (pcase-let ((`((,px ,py) ,m) placement))
         (slothbar-module-click m (- x px) (- y py) button)))))
+
+(defun slothbar--clear-hover ()
+  "Tell the hovered module that the pointer has left it."
+  (when slothbar--hovered-module
+    (slothbar-module-hover slothbar--hovered-module nil nil)
+    (setq slothbar--hovered-module nil)))
+
+(defun slothbar--on-pointer-motion (backend x y)
+  "Route pointer motion on BACKEND at X,Y to the module under it."
+  (when (and slothbar--enabled
+             (eq backend slothbar--backend))
+    (let ((placement (and x y (slothbar--module-placement-at x y))))
+      (if (null placement)
+          (slothbar--clear-hover)
+        (pcase-let ((`((,px ,py) ,m) placement))
+          (unless (eq m slothbar--hovered-module)
+            (slothbar--clear-hover)
+            (setq slothbar--hovered-module m))
+          (slothbar-module-hover m (- x px) (- y py)))))))
 
 (defun slothbar--on-pointer-button (backend x y button)
   "Route a pointer BUTTON press on BACKEND at X,Y to a module."
@@ -453,6 +478,8 @@ Initialize the display backend, window, and modules."
   (slothbar-backend-open slothbar--backend)
   (add-hook 'slothbar-backend-pointer-button-hook
             #'slothbar--on-pointer-button)
+  (add-hook 'slothbar-backend-pointer-motion-hook
+            #'slothbar--on-pointer-motion)
   ;; initialize modules
   (slothbar--construct-modules)
   (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
@@ -499,6 +526,9 @@ Initialize the display backend, window, and modules."
     (setq slothbar--module-refresh-timer nil))
   (remove-hook 'slothbar-backend-pointer-button-hook
                #'slothbar--on-pointer-button)
+  (remove-hook 'slothbar-backend-pointer-motion-hook
+               #'slothbar--on-pointer-motion)
+  (slothbar--clear-hover)
   (setq slothbar--last-layout nil)
   (setq slothbar--enabled nil)
   (dolist (m slothbar--modules)

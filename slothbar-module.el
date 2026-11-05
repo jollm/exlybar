@@ -113,6 +113,11 @@ Modules that depend on X-only facilities override this to consult
 X and Y are relative to M's top-left corner.  BUTTON is one of `:left',
 `:middle', or `:right'.")
 
+(cl-defgeneric slothbar-module-hover (m x y)
+  "Handle the pointer hovering at X,Y over module M.
+X and Y are relative to M's top-left corner, or nil when the pointer leaves
+M.")
+
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-module) (_backend slothbar-backend))
   "By default every module supports every backend."
@@ -121,6 +126,11 @@ X and Y are relative to M's top-left corner.  BUTTON is one of `:left',
 (cl-defmethod slothbar-module-click
   ((_m slothbar-module) (_x number) (_y number) (_button symbol))
   "By default a module ignores clicks."
+  nil)
+
+(cl-defmethod slothbar-module-hover
+  ((_m slothbar-module) (_x t) (_y t))
+  "By default a module ignores hover."
   nil)
 
 (provide 'slothbar-module)

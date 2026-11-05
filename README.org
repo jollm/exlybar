@@ -107,7 +107,8 @@ statuses =:window=, =:current=, =:blankish=, =:inactive=, and =:urgent=;
 
 Left-clicking a workspace label switches to that workspace when the active
 source can activate workspaces: ext-workspace on Wayland, EWMH on X11, or
-EXWM directly.
+EXWM directly.  Hovering a workspace label brightens it; modules can implement
+`slothbar-module-hover' to provide their own hover feedback.
 
 ** System information
 
@@ -321,6 +322,9 @@ Slothbar consists of the following primary components:
     push the current fg and font onto the stack
   - :pop, shorthand ^]
     pop the stack and restore the previous fg and font
+  - :bright, shorthand ^B
+    brighten the current foreground color; ^b restores normal brightness.
+    Workspaces use this for the label under the pointer.
   - ^; (not in stumpwm) acts as a noop to separate non color command
     segments. it’s mostly useful in combination with ~ operator described above
 

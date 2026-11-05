@@ -94,7 +94,9 @@ used by sources that know whether a workspace is occupied."
                          (format "^2^[^5^f4%i^]%w")
                          (format-fn #'slothbar-workspaces-format-format))
                (:constructor slothbar-workspaces-create)
-               (:copier nil)))
+               (:copier nil))
+  "A workspaces module."
+  hover-index)
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-workspaces) (backend slothbar-backend))
@@ -127,11 +129,9 @@ used by sources that know whether a workspace is occupied."
   "Return the workspace index for extent TAG, or nil."
   (cl-position tag slothbar-workspaces--extent-tag-characters))
 
-(defun slothbar-workspaces--format-fn-spec (ws-list)
+(defun slothbar-workspaces--format-fn-spec (ws-list &optional hover-index)
   "Generate a spec suitable for `format-spec' from data in WS-LIST.
-
-See `slothbar-workspaces-generate-list-fn' for the expected structure of
-WS-LIST."
+HOVER-INDEX is the workspace index currently under the pointer."
   (cl-flet ((sanitize (s)
               (truncate-string-to-width
                (string-replace " " "-"
@@ -141,7 +141,7 @@ WS-LIST."
     `((?w . ,(cl-loop for (ws status) in ws-list
                       for index from 0
                       for ws-safe = (sanitize ws)
-                      for label =
+                      for base-label =
                       (pcase status
                         ((or '(:current) '(:current :window))
                          (concat "^[^1 [" ws-safe "]^]"))
@@ -154,6 +154,9 @@ WS-LIST."
                         ('(:blankish) (concat "^[^2 " ws-safe "^]"))
                         ('(:inactive) (concat "^[^2 " ws-safe "^]")))
                       for tag = (slothbar-workspaces--extent-tag index)
+                      for label = (if (eql index hover-index)
+                                      (concat "^B" base-label "^b")
+                                    base-label)
                       concat
                       (if tag
                           (concat (format "^M%c" tag) label "^M;")
@@ -250,12 +253,32 @@ Return non-nil when an activation request was sent."
         (slothbar-workspaces--activate index)
         t))))
 
+(cl-defmethod slothbar-module-hover
+  ((m slothbar-workspaces) x y)
+  "Track the workspace extent under the pointer in M."
+  (let ((index
+         (when (and x y)
+           (let ((region
+                  (cl-find-if (lambda (region)
+                                (and (>= x (nth 1 region))
+                                     (< x (nth 2 region))))
+                              (slothbar-workspaces--click-regions m))))
+             (and region
+                  (slothbar-workspaces--extent-tag-index (car region)))))))
+    (unless (eql index (slothbar-workspaces-hover-index m))
+      (setf (slothbar-workspaces-hover-index m) index
+            (slothbar-module-needs-refresh? m) t)
+      (when (and slothbar--backend (slothbar-enabled-p))
+        (slothbar-refresh-modules)))))
+
 (defun slothbar-workspaces-format-format (m)
   "Format M's format string."
   (let ((ws-list (or (map-elt (slothbar-module-cache m) 'ws-list)
                      (funcall slothbar-workspaces-generate-list-fn))))
     (format-spec (slothbar-module-format m)
-                 (slothbar-workspaces--format-fn-spec ws-list) t)))
+                 (slothbar-workspaces--format-fn-spec
+                  ws-list (slothbar-workspaces-hover-index m))
+                 'ignore)))
 
 (defun slothbar-workspaces--format-spec (icon)
   "Build the `format-spec' spec used to generate module text given ICON."

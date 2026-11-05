@@ -662,5 +662,49 @@
       (should (equal heights '(30)))
       (should (eq slothbar-font-px-size :scaled)))))
 
+(ert-deftest slothbar-unit-color-brighten ()
+  "Brightening clamps channels and preserves alpha."
+  (let* ((color (slothbar-color-rgb-create
+                 :red 100 :green 200 :blue 300 :alpha 5000))
+         (bright (slothbar-color-brighten color 2)))
+    (should (= (slothbar-color-rgb-red bright) 200))
+    (should (= (slothbar-color-rgb-green bright) 400))
+    (should (= (slothbar-color-rgb-blue bright) 600))
+    (should (= (slothbar-color-rgb-alpha bright) 5000)))
+  (let ((bright (slothbar-color-brighten
+                 (slothbar-color-rgb-create
+                  :red #xff00 :green #xffff :blue 1)
+                 10)))
+    (should (= (slothbar-color-rgb-red bright) #xffff))
+    (should (= (slothbar-color-rgb-green bright) #xffff))
+    (should (= (slothbar-color-rgb-blue bright) 10))))
+
+(ert-deftest slothbar-unit-text-draw-ops-bright ()
+  "The ^B state brightens only its glyph run."
+  (let* ((a (slothbar-unit--glyph ?a 0))
+         (b (slothbar-unit--glyph ?b 6))
+         (ops (slothbar-text-draw-ops
+               (list '(:bright t) a '(:bright nil) b)))
+         (normal (slothbar-color-find 0 t)))
+    (should (= (length ops) 2))
+    (should (equal (slothbar-draw-op-color (nth 0 ops))
+                   (slothbar-color-brighten normal)))
+    (should (equal (slothbar-draw-op-color (nth 1 ops)) normal))))
+
+(ert-deftest slothbar-unit-workspaces-hover-markers ()
+  "Only the hovered workspace label gets a bright range."
+  (let ((hovered (alist-get
+                  ?w (slothbar-workspaces--format-fn-spec
+                      '(("1" (:current)) ("2" (:inactive))) 0)))
+        (plain (alist-get
+                ?w (slothbar-workspaces--format-fn-spec
+                    '(("1" (:current)) ("2" (:inactive))) 1))))
+    (should (string-match-p "\\^B" hovered))
+    (should (string-match-p "\\^b" hovered))
+    (should-not (string-match-p "\\^B"
+                                (substring plain 0
+                                           (string-match "\\^M1" plain))))
+    (should (string-match-p "\\^B" plain))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
