@@ -105,6 +105,12 @@ Known features include `system-tray', `ewmh', `randr', `layer-shell',
   "Hook run when a backend's workspace information changes.
 Functions are called with the backend as the sole argument.")
 
+(defvar slothbar-backend-pointer-button-hook nil
+  "Hook run when a pointer button is pressed on the bar.
+Functions are called with BACKEND, X, Y, and BUTTON.  BUTTON is one of
+`:left', `:middle', or `:right'.  X and Y are surface-local logical
+coordinates.")
+
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
 (declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())
 

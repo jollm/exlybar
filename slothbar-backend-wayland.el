@@ -54,6 +54,7 @@
 (require 'elwl-output)
 (require 'elwl-protocol)
 (require 'elwl-registry)
+(require 'elwl-seat)
 (require 'elwl-shm)
 (require 'elwl-surface)
 (require 'elwl-workspace)
@@ -83,6 +84,11 @@
   layer-surface
   output
   ext-workspace-manager
+  seat
+  pointer
+  pointer-surface
+  pointer-x
+  pointer-y
   (scale 1 :type 'integer)
   (logical-width 0 :type 'integer)
   (logical-height 0 :type 'integer)
@@ -108,8 +114,66 @@
   ((backend slothbar-backend-wayland) feature)
   "The Wayland backend has no X-only facilities."
   (or (memq feature '(surface exclusive-zone layer-shell buffer-scale))
+      (and (eq feature 'pointer-input)
+           (slothbar-backend-wayland-pointer backend))
       (and (eq feature 'ext-workspace)
            (slothbar-backend-ext-workspace-manager backend))))
+
+(defun slothbar-backend-wayland--ensure-pointer (backend)
+  "Create BACKEND's pointer when the seat advertises one."
+  (let ((seat (slothbar-backend-wayland-seat backend)))
+    (when (and seat
+               (memq 'pointer (elwl-seat-capabilities seat))
+               (null (slothbar-backend-wayland-pointer backend)))
+      (let ((pointer (elwl-seat-get-pointer seat)))
+        (setf (slothbar-backend-wayland-pointer backend) pointer)
+        (elwl-object-add-listener
+         (elwl-pointer-object pointer) 'enter
+         (lambda (_object arguments)
+           (setf (slothbar-backend-wayland-pointer-surface backend)
+                 (alist-get 'surface arguments)
+                 (slothbar-backend-wayland-pointer-x backend)
+                 (alist-get 'surface-x arguments)
+                 (slothbar-backend-wayland-pointer-y backend)
+                 (alist-get 'surface-y arguments))))
+        (elwl-object-add-listener
+         (elwl-pointer-object pointer) 'motion
+         (lambda (_object arguments)
+           (setf (slothbar-backend-wayland-pointer-x backend)
+                 (alist-get 'surface-x arguments)
+                 (slothbar-backend-wayland-pointer-y backend)
+                 (alist-get 'surface-y arguments))))
+        (elwl-object-add-listener
+         (elwl-pointer-object pointer) 'leave
+         (lambda (_object _arguments)
+           (setf (slothbar-backend-wayland-pointer-surface backend) nil)))
+        (elwl-object-add-listener
+         (elwl-pointer-object pointer) 'button
+         (lambda (_object arguments)
+           (slothbar-backend-wayland--pointer-button
+            backend arguments)))))))
+
+(defun slothbar-backend-wayland--pointer-button (backend arguments)
+  "Dispatch a pointer button event from ARGUMENTS on BACKEND."
+  (when (and (or (eq (alist-get 'state arguments) 'pressed)
+                 (eql (alist-get 'state arguments) 1))
+             (eq (slothbar-backend-wayland-pointer-surface backend)
+                 (slothbar-backend-wayland-surface backend)))
+    (let ((button (pcase (alist-get 'button arguments)
+                    (272 :left)
+                    (273 :right)
+                    (274 :middle))))
+      (when button
+        (condition-case err
+            (run-hook-with-args
+             'slothbar-backend-pointer-button-hook
+             backend
+             (round (or (slothbar-backend-wayland-pointer-x backend) 0))
+             (round (or (slothbar-backend-wayland-pointer-y backend) 0))
+             button)
+          (error
+           (slothbar--log-debug*
+            "pointer button hook error: %S" err)))))))
 
 (cl-defmethod slothbar-backend-ext-workspace-manager
   ((backend slothbar-backend-wayland))
@@ -489,9 +553,18 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                 (elwl-registry-bind registry 'wl-shm 1)
                 (slothbar-backend-wayland-layer-shell backend)
                 (elwl-layer-shell-bind registry))
+          (when (elwl-registry-find registry 'wl-seat)
+            (let ((seat (elwl-seat-bind registry)))
+              (setf (slothbar-backend-wayland-seat backend) seat)
+              ;; The initial capability list arrives on the next roundtrip.
+              (elwl-object-add-listener
+               (elwl-seat-object seat) 'capabilities
+               (lambda (_object _arguments)
+                 (slothbar-backend-wayland--ensure-pointer backend)))))
           (let ((outputs (elwl-output-sync registry)))
             ;; Names and scale arrive as events.
             (elwl-roundtrip connection)
+            (slothbar-backend-wayland--ensure-pointer backend)
             (let* ((output (slothbar-backend-wayland--select-output outputs))
                    (scale (or (and output (elwl-output-scale output)) 1)))
               (setf (slothbar-backend-wayland-output backend) output
@@ -558,6 +631,12 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     (ignore-errors
       (elwl-workspace-manager-stop
        (slothbar-backend-wayland-ext-workspace-manager backend))))
+  (when (slothbar-backend-wayland-pointer backend)
+    (ignore-errors
+      (elwl-pointer-release (slothbar-backend-wayland-pointer backend))))
+  (when (slothbar-backend-wayland-seat backend)
+    (ignore-errors
+      (elwl-seat-release (slothbar-backend-wayland-seat backend))))
   (when (slothbar-backend-wayland-layer-surface backend)
     (ignore-errors
       (elwl-layer-surface-destroy
@@ -590,6 +669,11 @@ VISIBLE non-nil reserves the bar's exclusive zone."
         (slothbar-backend-wayland-layer-surface backend) nil
         (slothbar-backend-wayland-output backend) nil
         (slothbar-backend-wayland-ext-workspace-manager backend) nil
+        (slothbar-backend-wayland-seat backend) nil
+        (slothbar-backend-wayland-pointer backend) nil
+        (slothbar-backend-wayland-pointer-surface backend) nil
+        (slothbar-backend-wayland-pointer-x backend) nil
+        (slothbar-backend-wayland-pointer-y backend) nil
         (slothbar-backend-wayland-pool backend) nil
         (slothbar-backend-wayland-buffers backend) nil
         (slothbar-backend-wayland-retired backend) nil

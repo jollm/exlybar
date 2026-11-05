@@ -43,6 +43,9 @@
     (dolist (dir (split-string extra path-separator t))
       (add-to-list 'load-path dir))))
 
+;; Define the backend accessors before any `setf' forms are expanded.
+(require 'slothbar-backend-wayland)
+
 (defvar slothbar-wayland-results
   (or (getenv "SLOTHBAR_SMOKE_RESULTS")
       (expand-file-name "slothbar-wayland-smoke-results.txt"
@@ -118,6 +121,34 @@
           (slothbar-wayland-check
            "Wayland has no randr support"
            (not (slothbar-backend-supports-p backend 'randr)))
+          (let ((pointer (slothbar-backend-wayland-pointer backend)))
+            (slothbar-wayland-record
+             (format "pointer=%S\n" pointer))
+            (when pointer
+              (slothbar-wayland-check
+               "Wayland supports pointer input"
+               (slothbar-backend-supports-p backend 'pointer-input))))
+          (let ((clicks nil)
+                (surface (slothbar-backend-wayland-surface backend)))
+            (setf (slothbar-backend-wayland-pointer-surface backend) surface
+                  (slothbar-backend-wayland-pointer-x backend) 12
+                  (slothbar-backend-wayland-pointer-y backend) 7)
+            (let ((function (lambda (_backend _x _y _button)
+                              (push (list _x _y _button) clicks))))
+              (add-hook 'slothbar-backend-pointer-button-hook function)
+              (unwind-protect
+                  (progn
+                    (slothbar-backend-wayland--pointer-button
+                     backend '((state . pressed) (button . 272)))
+                    (slothbar-wayland-check
+                     "pointer button hook receives clicks" clicks)
+                    (slothbar-wayland-check
+                     "pointer click coordinates and button are preserved"
+                     (equal (car clicks) '(12 7 :left))))
+                (remove-hook 'slothbar-backend-pointer-button-hook function)
+                (setf (slothbar-backend-wayland-pointer-surface backend) nil
+                      (slothbar-backend-wayland-pointer-x backend) nil
+                      (slothbar-backend-wayland-pointer-y backend) nil))))
           (let ((manager (slothbar-backend-ext-workspace-manager backend)))
             (slothbar-wayland-check
              "Wayland advertises ext-workspace"
