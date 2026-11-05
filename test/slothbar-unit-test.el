@@ -463,5 +463,94 @@
     (should (equal (alist-get :cpu-brand cpu) "Example CPU"))
     (should (= (alist-get :cpu-frequency cpu) 3200000000.0))))
 
+
+(ert-deftest slothbar-unit-sysinfo-update-intervals ()
+  "Sysinfo providers run only when their interval has elapsed."
+  (let* ((state (slothbar-sysinfo-state-create))
+         (calls nil)
+         (slothbar-sysinfo--providers
+          (list (cons 'once (lambda (_state _now)
+                              (push 'once calls) '((:a . 1))))
+                (cons 'fast (lambda (_state _now)
+                              (push 'fast calls) '((:b . 2))))
+                (cons 'slow (lambda (_state _now)
+                              (push 'slow calls) '((:c . 3))))))
+         (slothbar-sysinfo-intervals
+          '((once . nil) (fast . 1) (slow . 10))))
+    (slothbar-sysinfo-update state 100)
+    (should (equal (reverse calls) '(once fast slow)))
+    (should (= (alist-get :a (slothbar-sysinfo-state-values state)) 1))
+    (should (= (alist-get :b (slothbar-sysinfo-state-values state)) 2))
+    (should (= (alist-get :c (slothbar-sysinfo-state-values state)) 3))
+    (setq calls nil)
+    (slothbar-sysinfo-update state 100.5)
+    (should (null calls))
+    (slothbar-sysinfo-update state 101.1)
+    (should (equal calls '(fast)))
+    (setq calls nil)
+    (slothbar-sysinfo-update state 111.1)
+    (should (equal (reverse calls) '(fast slow)))
+    (setq calls nil)
+    (slothbar-sysinfo-update state 120 t)
+    (should (equal (reverse calls) '(once fast slow)))))
+
+(ert-deftest slothbar-unit-sysinfo-provider-cpu ()
+  "The CPU provider tracks counters and exposes cpuinfo fields."
+  (let ((stat "cpu  100 0 100 800 0 0 0 0 0 0\n")
+        (cpuinfo (concat "processor\t: 0\n"
+                         "model name\t: Example CPU\n"
+                         "cpu MHz\t\t: 1000.000\n"
+                         "processor\t: 1\n")))
+    (cl-letf (((symbol-function 'slothbar-sysinfo--read-file)
+               (lambda (path)
+                 (cond ((equal path "/proc/stat") stat)
+                       ((equal path "/proc/cpuinfo") cpuinfo)))))
+      (let* ((state (slothbar-sysinfo-state-create))
+             (first (slothbar-sysinfo--read-cpu state 0)))
+        (should-not (alist-get :cpu-usage first))
+        (should (equal (alist-get :cpu-brand first) "Example CPU"))
+        (should (= (alist-get :cpu-frequency first) 1000000000.0))
+        (should (= (alist-get :cpu-count first) 2))
+        (setq stat "cpu  200 0 150 900 0 0 0 0 0 0\n")
+        (let ((second (slothbar-sysinfo--read-cpu state 1)))
+          (should (= (alist-get :cpu-usage second) 60.0)))))))
+
+(ert-deftest slothbar-unit-sysinfo-provider-memory-network-disk ()
+  "Memory, network, and disk providers derive their values from samples."
+  (let ((meminfo (concat "MemTotal:       1000 kB\n"
+                         "MemFree:         500 kB\n"
+                         "MemAvailable:    750 kB\n"
+                         "SwapTotal:       200 kB\n"
+                         "SwapFree:         50 kB\n")))
+    (cl-letf (((symbol-function 'slothbar-sysinfo--read-file)
+               (lambda (path)
+                 (when (equal path "/proc/meminfo") meminfo))))
+      (let ((values (slothbar-sysinfo--read-memory
+                     (slothbar-sysinfo-state-create) 0)))
+        (should (= (alist-get :memory-total values) (* 1000 1024)))
+        (should (= (alist-get :memory-used values) (* 250 1024)))
+        (should (= (alist-get :memory-usage values) 25.0))
+        (should (= (alist-get :swap-usage values) 75.0)))))
+  (let ((netdev (concat "  eth0: 100 1 0 0 0 0 0 0 200 2 0 0 0 0 0 0\n")))
+    (cl-letf (((symbol-function 'slothbar-sysinfo--read-file)
+               (lambda (path)
+                 (when (equal path "/proc/net/dev") netdev))))
+      (let ((state (slothbar-sysinfo-state-create)))
+        (let ((first (slothbar-sysinfo--read-network state 100)))
+          (should (equal (alist-get :net-interface first) "eth0"))
+          (should (= (alist-get :net-down first) 0.0))
+          (should (= (alist-get :net-up first) 0.0)))
+        (setq netdev "  eth0: 1100 1 0 0 0 0 0 0 2200 2 0 0 0 0 0 0\n")
+        (let ((second (slothbar-sysinfo--read-network state 110)))
+          (should (= (alist-get :net-down second) 100.0))
+          (should (= (alist-get :net-up second) 200.0))))))
+  (cl-letf (((symbol-function 'file-system-info)
+             (lambda (_path) '(1000 250 0))))
+    (let ((values (slothbar-sysinfo--read-disk
+                   (slothbar-sysinfo-state-create) 0)))
+      (should (= (alist-get :disk-total values) 1000))
+      (should (= (alist-get :disk-used values) 750))
+      (should (= (alist-get :disk-usage values) 75.0)))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

@@ -404,11 +404,13 @@ Return an alist with :total and :idle counters."
     (nreverse values)))
 
 (defun slothbar-sysinfo-parse-cpuinfo (text)
-  "Parse /proc/cpuinfo TEXT for the model name and frequency.
-Return an alist with :cpu-brand and :cpu-frequency in hertz."
-  (let (brand mhz)
+  "Parse /proc/cpuinfo TEXT for brand, frequency, and logical CPU count.
+Return an alist with :cpu-brand, :cpu-frequency in hertz, and :cpu-count."
+  (let (brand mhz (count 0))
     (dolist (line (split-string text "\n" t))
       (cond
+       ((string-match "^processor\\s-*:" line)
+        (cl-incf count))
        ((and (not brand)
              (string-match "^model name\\s-*:\\s-*\\(.+\\)$" line))
         (setq brand (string-trim (match-string 1 line))))
@@ -416,11 +418,308 @@ Return an alist with :cpu-brand and :cpu-frequency in hertz."
              (string-match "^cpu MHz\\s-*:\\s-*\\([0-9.]+\\)$" line))
         (setq mhz (string-to-number (match-string 1 line))))))
     (list (cons :cpu-brand brand)
-          (cons :cpu-frequency (and mhz (* mhz 1000000.0))))))
+          (cons :cpu-frequency (and mhz (* mhz 1000000.0)))
+          (cons :cpu-count (and (> count 0) count)))))
 
 (defun slothbar-sysinfo-format-network-address (value)
   "Format a network address VALUE."
   (format "%s" value))
+
+;;; Live providers and update state
+
+(defcustom slothbar-sysinfo-intervals
+  '((system . nil)
+    (cpu . 1)
+    (memory . 2)
+    (disk . 5)
+    (network . 1)
+    (load . 2)
+    (uptime . 5)
+    (process . 5)
+    (thermal . 5)
+    (power . 5)
+    (gpu . 5))
+  "Seconds between updates for each sysinfo category.
+A nil interval means read once per state."
+  :type '(alist :key-type symbol
+                :value-type (choice (const :tag "Once" nil) natnum))
+  :group 'slothbar-sysinfo)
+
+(defcustom slothbar-sysinfo-disk-path "/"
+  "Path whose filesystem is reported by the disk fields."
+  :type 'string
+  :group 'slothbar-sysinfo)
+
+(defcustom slothbar-sysinfo-network-interface nil
+  "Network interface to report, or nil to select one automatically."
+  :type '(choice (const :tag "Automatic" nil) string)
+  :group 'slothbar-sysinfo)
+
+(defcustom slothbar-sysinfo-count-threads nil
+  "Non-nil to count threads in addition to processes."
+  :type 'boolean
+  :group 'slothbar-sysinfo)
+
+(cl-defstruct
+    (slothbar-sysinfo-state
+     (:constructor slothbar-sysinfo-state-create)
+     (:copier nil))
+  "Cache and delta state for live sysinfo providers."
+  (values nil)
+  (timestamps (make-hash-table :test 'eq))
+  (cpu-previous nil)
+  (net-previous (make-hash-table :test 'equal)))
+
+(defun slothbar-sysinfo--read-file (path)
+  "Return the contents of PATH, or nil if it cannot be read."
+  (condition-case nil
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-string))
+    (error nil)))
+
+(defun slothbar-sysinfo--command-output (&rest args)
+  "Run ARGS with `call-process' and return trimmed output, or nil."
+  (condition-case nil
+      (with-temp-buffer
+        (apply #'call-process (car args) nil t nil (cdr args))
+        (string-trim (buffer-string)))
+    (error nil)))
+
+(defun slothbar-sysinfo--percent (used total)
+  "Return USED as a percentage of TOTAL, or nil."
+  (when (and used total (> total 0))
+    (* 100.0 (/ (float used) total))))
+
+(defun slothbar-sysinfo--rate (current previous elapsed)
+  "Return per-second rate from PREVIOUS to CURRENT over ELAPSED."
+  (if (and current previous elapsed (> elapsed 0))
+      (max 0.0 (/ (float (- current previous)) elapsed))
+    0.0))
+
+(defun slothbar-sysinfo--read-system (_state _now)
+  "Read static system identity fields."
+  (let* ((os (slothbar-sysinfo-parse-os-release
+              (or (slothbar-sysinfo--read-file "/etc/os-release") "")))
+         (pretty (cdr (assoc "PRETTY_NAME" os)))
+         (name (cdr (assoc "NAME" os))))
+    `((:hostname . ,(system-name))
+      (:username . ,(user-login-name))
+      (:os . ,(or pretty name))
+      (:os-version . ,(or (cdr (assoc "VERSION_ID" os))
+                          (cdr (assoc "VERSION" os))))
+      (:kernel . ,(or (slothbar-sysinfo--command-output "uname" "-r")
+                      system-configuration))
+      (:architecture . ,(or (slothbar-sysinfo--command-output "uname" "-m")
+                            system-configuration))
+      (:desktop . ,(or (getenv "XDG_CURRENT_DESKTOP")
+                       (getenv "DESKTOP_SESSION")))
+      (:wm . ,(or (getenv "DESKTOP_SESSION")
+                  (getenv "XDG_CURRENT_DESKTOP"))))))
+
+(defun slothbar-sysinfo--read-cpu (state _now)
+  "Read CPU usage, model, frequency, and count."
+  (let* ((current (slothbar-sysinfo-parse-cpu-stat
+                   (or (slothbar-sysinfo--read-file "/proc/stat") "")))
+         (previous (slothbar-sysinfo-state-cpu-previous state))
+         (info (slothbar-sysinfo-parse-cpuinfo
+                (or (slothbar-sysinfo--read-file "/proc/cpuinfo") "")))
+         (usage (and previous current
+                     (slothbar-sysinfo-cpu-usage previous current))))
+    (setf (slothbar-sysinfo-state-cpu-previous state) current)
+    `((:cpu-usage . ,usage)
+      (:cpu-brand . ,(alist-get :cpu-brand info))
+      (:cpu-frequency . ,(alist-get :cpu-frequency info))
+      (:cpu-count . ,(alist-get :cpu-count info)))))
+
+(defun slothbar-sysinfo--read-memory (_state _now)
+  "Read memory and swap fields."
+  (let* ((mem (slothbar-sysinfo-parse-meminfo
+               (or (slothbar-sysinfo--read-file "/proc/meminfo") "")))
+         (total (alist-get :memory-total mem))
+         (free (alist-get :memory-free mem))
+         (available (or (alist-get :memory-available mem) free))
+         (used (and total available (max 0 (- total available))))
+         (swap-total (alist-get :swap-total mem))
+         (swap-free (alist-get :swap-free mem))
+         (swap-used (and swap-total swap-free
+                         (max 0 (- swap-total swap-free)))))
+    `((:memory-total . ,total)
+      (:memory-free . ,free)
+      (:memory-available . ,available)
+      (:memory-used . ,used)
+      (:memory-usage . ,(slothbar-sysinfo--percent used total))
+      (:swap-total . ,swap-total)
+      (:swap-used . ,swap-used)
+      (:swap-usage . ,(slothbar-sysinfo--percent swap-used swap-total)))))
+
+(defun slothbar-sysinfo--read-disk (_state _now)
+  "Read filesystem usage for `slothbar-sysinfo-disk-path'."
+  (let* ((info (ignore-errors (file-system-info slothbar-sysinfo-disk-path)))
+         (total (nth 0 info))
+         (free (nth 1 info))
+         (used (and total free (max 0 (- total free)))))
+    `((:disk-total . ,total)
+      (:disk-free . ,free)
+      (:disk-used . ,used)
+      (:disk-usage . ,(slothbar-sysinfo--percent used total)))))
+
+(defun slothbar-sysinfo--default-network-interface (interfaces)
+  "Return a non-loopback interface from INTERFACES, or the first one."
+  (or (car (seq-find (lambda (pair) (not (equal (car pair) "lo")))
+                     interfaces))
+      (caar interfaces)))
+
+(defun slothbar-sysinfo--read-network (state now)
+  "Read network rates and interface identity."
+  (let* ((interfaces (slothbar-sysinfo-parse-net-dev
+                      (or (slothbar-sysinfo--read-file "/proc/net/dev") "")))
+         (interface (or slothbar-sysinfo-network-interface
+                        (slothbar-sysinfo--default-network-interface interfaces)))
+         (stats (cdr (assoc interface interfaces))))
+    (when (and interface stats)
+      (let* ((previous (gethash interface
+                                (slothbar-sysinfo-state-net-previous state)))
+             (elapsed (and previous (- now (car previous))))
+             (old (cdr previous))
+             (down (slothbar-sysinfo--rate (alist-get :rx-bytes stats)
+                                          (alist-get :rx-bytes old)
+                                          elapsed))
+             (up (slothbar-sysinfo--rate (alist-get :tx-bytes stats)
+                                        (alist-get :tx-bytes old)
+                                        elapsed)))
+        (puthash interface (cons now stats)
+                 (slothbar-sysinfo-state-net-previous state))
+        `((:net-interface . ,interface)
+          (:net-ip . ,(ignore-errors
+                        (nth 0 (network-interface-info interface))))
+          (:net-down . ,down)
+          (:net-up . ,up))))))
+
+(defun slothbar-sysinfo--read-load (_state _now)
+  "Read load averages."
+  (let ((load (slothbar-sysinfo-parse-loadavg
+               (or (slothbar-sysinfo--read-file "/proc/loadavg") ""))))
+    `((:load-1 . ,(alist-get :load-1 load))
+      (:load-5 . ,(alist-get :load-5 load))
+      (:load-15 . ,(alist-get :load-15 load)))))
+
+(defun slothbar-sysinfo--read-uptime (_state _now)
+  "Read system uptime."
+  `((:uptime . ,(slothbar-sysinfo-parse-uptime
+                 (or (slothbar-sysinfo--read-file "/proc/uptime") "")))))
+
+(defun slothbar-sysinfo--read-process (_state _now)
+  "Read process and optionally thread counts."
+  (let* ((pids (ignore-errors
+                 (directory-files "/proc" nil "\\`[0-9]+\\'" t)))
+         (threads (when slothbar-sysinfo-count-threads
+                    (cl-loop for pid in pids
+                             sum (length
+                                  (ignore-errors
+                                    (directory-files
+                                     (expand-file-name pid "/proc")
+                                     nil "\\`[0-9]+\\'" t)))))))
+    `((:process-count . ,(and pids (length pids)))
+      (:thread-count . ,threads))))
+
+(defun slothbar-sysinfo--read-temperature (zone)
+  "Read temperature from thermal ZONE, in degrees Celsius."
+  (let ((text (slothbar-sysinfo--read-file (expand-file-name "temp" zone))))
+    (when text
+      (let ((value (string-to-number (string-trim text))))
+        (when (> value 0)
+          (/ value 1000.0))))))
+
+(defun slothbar-sysinfo--read-thermal (_state _now)
+  "Read the first available temperature and fan speed."
+  (let* ((zones (ignore-errors
+                  (directory-files "/sys/class/thermal" t
+                                   "\\`thermal_zone[0-9]+\\'" t)))
+         (temperature (car (delq nil (mapcar #'slothbar-sysinfo--read-temperature
+                                              zones))))
+         (fans (ignore-errors
+                 (file-expand-wildcards "/sys/class/hwmon/hwmon*/fan1_input")))
+         (fan (car (delq nil
+                         (mapcar (lambda (path)
+                                   (let ((text (slothbar-sysinfo--read-file path)))
+                                     (when text
+                                       (let ((value (string-to-number
+                                                     (string-trim text))))
+                                         (and (> value 0) value)))))
+                                 fans)))))
+    `((:temperature . ,temperature)
+      (:fan-speed . ,fan))))
+
+(defun slothbar-sysinfo--read-power (_state _now)
+  "Read battery percentage and state."
+  (let* ((batteries (ignore-errors
+                      (directory-files "/sys/class/power_supply" t
+                                       "\\`BAT" t)))
+         (battery (car batteries))
+         (capacity (and battery
+                        (slothbar-sysinfo--read-file
+                         (expand-file-name "capacity" battery))))
+         (status (and battery
+                      (slothbar-sysinfo--read-file
+                       (expand-file-name "status" battery)))))
+    `((:battery-percent . ,(and capacity
+                                (string-to-number (string-trim capacity))))
+      (:battery-state . ,(and status (string-trim status))))))
+
+(defvar slothbar-sysinfo--providers
+  '((system . slothbar-sysinfo--read-system)
+    (cpu . slothbar-sysinfo--read-cpu)
+    (memory . slothbar-sysinfo--read-memory)
+    (disk . slothbar-sysinfo--read-disk)
+    (network . slothbar-sysinfo--read-network)
+    (load . slothbar-sysinfo--read-load)
+    (uptime . slothbar-sysinfo--read-uptime)
+    (process . slothbar-sysinfo--read-process)
+    (thermal . slothbar-sysinfo--read-thermal)
+    (power . slothbar-sysinfo--read-power))
+  "Provider functions keyed by sysinfo category.")
+
+(defun slothbar-sysinfo--due-p (state category now)
+  "Return non-nil when CATEGORY is due at NOW."
+  (let ((last (gethash category (slothbar-sysinfo-state-timestamps state)))
+        (interval (alist-get category slothbar-sysinfo-intervals)))
+    (cond
+     ((null last) t)
+     ((null interval) nil)
+     (t (>= (- now last) interval)))))
+
+(defun slothbar-sysinfo-update (state &optional now force)
+  "Update STATE's cached values.
+NOW defaults to the current time.  FORCE updates every provider regardless
+of its interval."
+  (let ((now (or now (float-time))))
+    (dolist (entry slothbar-sysinfo--providers)
+      (let ((category (car entry))
+            (provider (cdr entry)))
+        (when (or force (slothbar-sysinfo--due-p state category now))
+          (let ((values
+                 (condition-case err
+                     (funcall provider state now)
+                   (error
+                    (message "Slothbar sysinfo %s provider failed: %S"
+                             category err)
+                    nil))))
+            (when values
+              (dolist (pair values)
+                (setf (alist-get (car pair)
+                                 (slothbar-sysinfo-state-values state))
+                      (cdr pair)))
+              (puthash category now
+                       (slothbar-sysinfo-state-timestamps state)))))))
+    state))
+
+(defun slothbar-sysinfo-collect (&optional state now force)
+  "Update and return sysinfo values.
+STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
+  (let ((state (or state (slothbar-sysinfo-state-create))))
+    (slothbar-sysinfo-update state now force)
+    (copy-sequence (slothbar-sysinfo-state-values state))))
 
 (provide 'slothbar-sysinfo)
 ;;; slothbar-sysinfo.el ends here
