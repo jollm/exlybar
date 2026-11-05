@@ -635,5 +635,32 @@
       (slothbar-module-update-status m))
     (should (equal (slothbar-module-text m) "12.3 12"))))
 
+(ert-deftest slothbar-unit-font-vertical-offset ()
+  "Vertical offset centers a line box in the bar."
+  (cl-letf (((symbol-function 'fontsloth-scale-horizontal-line-metrics)
+             (lambda (_font _px)
+               (fontsloth-line-metrics-create 10 2 0))))
+    (let ((slothbar-height 30))
+      (should (= (slothbar-font--vertical-offset 'font 12) -11.0)))
+    (let ((slothbar-height 8))
+      (should (= (slothbar-font--vertical-offset 'font 12) 0.0)))))
+
+(ert-deftest slothbar-unit-font-px-scale-watcher ()
+  "Changing the font scale recomputes pixel sizes."
+  (let ((slothbar-height 30)
+        (slothbar-font-px-scale 1.0)
+        (slothbar-font-px-size nil)
+        (heights nil))
+    (cl-letf (((symbol-function 'slothbar-font--precompute-px-sizes)
+               (lambda (height)
+                 (push height heights)
+                 :scaled))
+              ((symbol-function 'run-at-time)
+               (lambda (&rest _) nil)))
+      (slothbar-font--watch-px-scale
+       'slothbar-font-px-scale 0.5 'set nil)
+      (should (equal heights '(30)))
+      (should (eq slothbar-font-px-size :scaled)))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here

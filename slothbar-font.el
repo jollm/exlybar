@@ -132,7 +132,8 @@ With no FONT-MAP argument, the value of `slothbar-font--color-code-map' is used.
    #'vector
    (cl-loop for font-path across (or font-map slothbar-font--color-code-map) collect
             (when font-path
-	      (fontsloth-font-compute-px (fontsloth-load-font font-path) height)))))
+              (* slothbar-font-px-scale
+	         (fontsloth-font-compute-px (fontsloth-load-font font-path) height))))))
 
 (defvar slothbar-font-px-size nil
   "Precomputed font px size map.
@@ -140,7 +141,39 @@ With no FONT-MAP argument, the value of `slothbar-font--color-code-map' is used.
 There should be no need to recompute pixel sizes unless either the height or
 the fonts change.")
 
+(defcustom slothbar-font-px-scale 1.0
+  "A scale factor to apply to `slothbar-font-px-size'.
+Changing this recomputes the pixel sizes and refreshes the bar."
+  :type 'float
+  :group 'slothbar)
+
 (defvar slothbar-height)
+
+(defun slothbar-font--vertical-offset (font px)
+  "Return the layout Y offset that centers FONT at PX in the bar.
+PX should be the effective pixel size, including any per-font delta."
+  (let* ((metrics (fontsloth-scale-horizontal-line-metrics font px))
+         (line-height (fontsloth-line-metrics-new-line-size metrics)))
+    (- (/ (- slothbar-height line-height) 2.0))))
+
+(defun slothbar-font--watch-px-scale (_ nval oper where)
+  "Recompute font pixel sizes when the scale changes.
+NVAL is the new `slothbar-font-px-scale' value."
+  (when (and (not where)
+             (eq 'set oper)
+             (not (equal nval slothbar-font-px-scale))
+             (boundp 'slothbar-height)
+             slothbar-height)
+    (let ((slothbar-font-px-scale nval))
+      (setq slothbar-font-px-size
+            (slothbar-font--precompute-px-sizes slothbar-height)))
+    (when (fboundp 'slothbar-refresh-modules)
+      (run-at-time 0 nil #'(lambda ()
+                             (setq slothbar--geometry-changed? t)
+                             (slothbar-refresh-modules))))))
+
+(add-variable-watcher 'slothbar-font-px-scale
+                      #'slothbar-font--watch-px-scale)
 
 (defun slothbar-font--watch-px-size (sym nval oper where)
   "Update `slothbar-font-px-size' appropriately for NVAL.

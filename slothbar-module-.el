@@ -69,8 +69,10 @@ backend for the pixel resources it needs to draw."
 FIDX is the index into `slothbar-color-map-fg'."
   (let* ((l (fontsloth-layout-create)))
     (fontsloth-layout-reset
-     l (fontsloth-layout-settings-create :x x
-                                         :y (aref slothbar-font-y-delta fidx)))
+     l (fontsloth-layout-settings-create
+        :x x
+        :y (+ (aref slothbar-font-y-delta fidx)
+              (slothbar-font--vertical-offset font px))))
     (fontsloth-layout-append
      l `(,font) (fontsloth-layout-text-style-create
                  :text text :px px :font-index 0
