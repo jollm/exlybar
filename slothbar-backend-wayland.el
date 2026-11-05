@@ -119,6 +119,19 @@
       (and (eq feature 'ext-workspace)
            (slothbar-backend-ext-workspace-manager backend))))
 
+(defun slothbar-backend-wayland--pointer-motion (backend x y)
+  "Dispatch pointer motion at X,Y on BACKEND when over the bar."
+  (when (eq (slothbar-backend-wayland-pointer-surface backend)
+            (slothbar-backend-wayland-surface backend))
+    (condition-case err
+        (run-hook-with-args
+         'slothbar-backend-pointer-motion-hook
+         backend
+         (and x (round x))
+         (and y (round y)))
+      (error
+       (slothbar--log-debug* "pointer motion hook error: %S" err)))))
+
 (defun slothbar-backend-wayland--ensure-pointer (backend)
   "Create BACKEND's pointer when the seat advertises one."
   (let ((seat (slothbar-backend-wayland-seat backend)))
@@ -135,17 +148,26 @@
                  (slothbar-backend-wayland-pointer-x backend)
                  (alist-get 'surface-x arguments)
                  (slothbar-backend-wayland-pointer-y backend)
-                 (alist-get 'surface-y arguments))))
+                 (alist-get 'surface-y arguments))
+           (slothbar-backend-wayland--pointer-motion
+            backend
+            (slothbar-backend-wayland-pointer-x backend)
+            (slothbar-backend-wayland-pointer-y backend))))
         (elwl-object-add-listener
          (elwl-pointer-object pointer) 'motion
          (lambda (_object arguments)
            (setf (slothbar-backend-wayland-pointer-x backend)
                  (alist-get 'surface-x arguments)
                  (slothbar-backend-wayland-pointer-y backend)
-                 (alist-get 'surface-y arguments))))
+                 (alist-get 'surface-y arguments))
+           (slothbar-backend-wayland--pointer-motion
+            backend
+            (slothbar-backend-wayland-pointer-x backend)
+            (slothbar-backend-wayland-pointer-y backend))))
         (elwl-object-add-listener
          (elwl-pointer-object pointer) 'leave
          (lambda (_object _arguments)
+           (slothbar-backend-wayland--pointer-motion backend nil nil)
            (setf (slothbar-backend-wayland-pointer-surface backend) nil)))
         (elwl-object-add-listener
          (elwl-pointer-object pointer) 'button

@@ -560,6 +560,27 @@ DATA the event data"
                      (slothbar-xcb-connection) detail state)))
         (slothbar--log-debug* "keypress: %s" keysym)))))
 
+(defun slothbar-backend-xcb--on-MotionNotify (backend data _synthetic)
+  "Dispatch pointer motion on BACKEND."
+  (let ((event (make-instance 'xcb:MotionNotify)))
+    (xcb:unmarshal event data)
+    (with-slots (event-x event-y) event
+      (condition-case err
+          (run-hook-with-args 'slothbar-backend-pointer-motion-hook
+                              backend event-x event-y)
+        (error
+         (slothbar--log-debug*
+          "pointer motion hook error: %S" err))))))
+
+(defun slothbar-backend-xcb--on-LeaveNotify (backend _data _synthetic)
+  "Clear pointer hover state on BACKEND."
+  (condition-case err
+      (run-hook-with-args 'slothbar-backend-pointer-motion-hook
+                          backend nil nil)
+    (error
+     (slothbar--log-debug*
+      "pointer motion hook error: %S" err))))
+
 (defun slothbar-backend-xcb--on-ButtonPress (backend data _synthetic)
   "Dispatch a pointer button press on BACKEND."
   (let ((event (make-instance 'xcb:ButtonPress)))
@@ -641,6 +662,7 @@ DATA the event data"
                                              xcb:EventMask:KeyPress
                                              xcb:EventMask:ButtonPress
                                              xcb:EventMask:PointerMotion
+                                             xcb:EventMask:LeaveWindow
                                              xcb:EventMask:PropertyChange
                                              xcb:EventMask:SubstructureNotify)))
       ;; Set WM_NAME and WM_CLASS.
@@ -703,6 +725,14 @@ DATA the event data"
     (xcb:+event connection 'xcb:ButtonPress
                 (lambda (data synthetic)
                   (slothbar-backend-xcb--on-ButtonPress
+                   backend data synthetic)))
+    (xcb:+event connection 'xcb:MotionNotify
+                (lambda (data synthetic)
+                  (slothbar-backend-xcb--on-MotionNotify
+                   backend data synthetic)))
+    (xcb:+event connection 'xcb:LeaveNotify
+                (lambda (data synthetic)
+                  (slothbar-backend-xcb--on-LeaveNotify
                    backend data synthetic)))
     (xcb:+event connection 'xcb:Expose
                 #'slothbar-backend-xcb--on-Expose)

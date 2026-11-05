@@ -111,6 +111,11 @@ Functions are called with BACKEND, X, Y, and BUTTON.  BUTTON is one of
 `:left', `:middle', or `:right'.  X and Y are surface-local logical
 coordinates.")
 
+(defvar slothbar-backend-pointer-motion-hook nil
+  "Hook run when the pointer moves over the bar.
+Functions are called with BACKEND, X, and Y.  X and Y are nil when the
+pointer leaves the bar.")
+
 (declare-function slothbar-backend-xcb-create "slothbar-backend-xcb" ())
 (declare-function slothbar-backend-wayland-create "slothbar-backend-wayland" ())
 
