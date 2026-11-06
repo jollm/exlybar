@@ -187,6 +187,14 @@ HOVER-INDEX is the workspace index currently under the pointer."
                   end (if end (max end right) right)))))))
     (nreverse regions)))
 
+(defmacro slothbar-workspaces--with-bar (m &rest body)
+  "Evaluate BODY with M's bar and backend as the current context."
+  (declare (indent 1) (debug t))
+  `(let ((slothbar--bar (or (slothbar-module--bar ,m) slothbar--bar))
+         (slothbar--backend (or (slothbar-module--backend ,m)
+                                slothbar--backend)))
+     ,@body))
+
 (defun slothbar-workspaces--activate-ext-workspace (index)
   "Activate workspace INDEX through ext-workspace.
 Return non-nil when an activation request was sent."
@@ -242,16 +250,17 @@ Return non-nil when an activation request was sent."
   ((m slothbar-workspaces) x _y button)
   "Activate the workspace extent at X in M when BUTTON is :left."
   (when (eq button :left)
-    (let* ((region
-            (cl-find-if (lambda (region)
-                          (and (>= x (nth 1 region))
-                               (< x (nth 2 region))))
-                        (slothbar-workspaces--click-regions m)))
-           (index (and region
-                       (slothbar-workspaces--extent-tag-index (car region)))))
-      (when index
-        (slothbar-workspaces--activate index)
-        t))))
+    (slothbar-workspaces--with-bar m
+      (let* ((region
+              (cl-find-if (lambda (region)
+                            (and (>= x (nth 1 region))
+                                 (< x (nth 2 region))))
+                          (slothbar-workspaces--click-regions m)))
+             (index (and region
+                         (slothbar-workspaces--extent-tag-index (car region)))))
+        (when index
+          (slothbar-workspaces--activate index)
+          t)))))
 
 (cl-defmethod slothbar-module-hover
   ((m slothbar-workspaces) x y)
@@ -273,12 +282,13 @@ Return non-nil when an activation request was sent."
 
 (defun slothbar-workspaces-format-format (m)
   "Format M's format string."
-  (let ((ws-list (or (map-elt (slothbar-module-cache m) 'ws-list)
-                     (funcall slothbar-workspaces-generate-list-fn))))
-    (format-spec (slothbar-module-format m)
-                 (slothbar-workspaces--format-fn-spec
-                  ws-list (slothbar-workspaces-hover-index m))
-                 'ignore)))
+  (slothbar-workspaces--with-bar m
+    (let ((ws-list (or (map-elt (slothbar-module-cache m) 'ws-list)
+                       (funcall slothbar-workspaces-generate-list-fn))))
+      (format-spec (slothbar-module-format m)
+                   (slothbar-workspaces--format-fn-spec
+                    ws-list (slothbar-workspaces-hover-index m))
+                   'ignore))))
 
 (defun slothbar-workspaces--format-spec (icon)
   "Build the `format-spec' spec used to generate module text given ICON."
@@ -286,16 +296,18 @@ Return non-nil when an activation request was sent."
 
 (cl-defmethod slothbar-module-update-status ((m slothbar-workspaces))
   "Update M's text and format spec."
-  (let* ((format-spec (slothbar-workspaces--format-spec (slothbar-module-icon m)))
-         (ws-list (funcall slothbar-workspaces-generate-list-fn))
-         (txt (format-spec (slothbar-module-format m) format-spec t))
-         (cache (slothbar-module-cache m)))
-    (unless (equal ws-list (map-elt cache 'ws-list))
-      (when cache
-        (map-put! cache 'ws-list ws-list))
-      (setf (slothbar-module-format-spec m) format-spec
-            (slothbar-module-text m) txt
-            (slothbar-module-needs-refresh? m) t))))
+  (slothbar-workspaces--with-bar m
+    (let* ((format-spec (slothbar-workspaces--format-spec
+                         (slothbar-module-icon m)))
+           (ws-list (funcall slothbar-workspaces-generate-list-fn))
+           (txt (format-spec (slothbar-module-format m) format-spec t))
+           (cache (slothbar-module-cache m)))
+      (unless (equal ws-list (map-elt cache 'ws-list))
+        (when cache
+          (map-put! cache 'ws-list ws-list))
+        (setf (slothbar-module-format-spec m) format-spec
+              (slothbar-module-text m) txt
+              (slothbar-module-needs-refresh? m) t)))))
 
 (defun slothbar-workspaces--refresh-hook-fn (&rest _)
   "Refresh all workspaces modules, suitable for hooks."
