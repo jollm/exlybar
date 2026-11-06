@@ -639,11 +639,12 @@ VISIBLE non-nil reserves the bar's exclusive zone."
             (elwl-output-watch
              registry
              (lambda (_action _output)
+               ;; Never dispatch recursively from this callback.  Let the
+               ;; registry finish delivering output events, then reconcile.
                (run-at-time
-                0 nil
+                0.1 nil
                 (lambda ()
                   (when (slothbar-backend-wayland-connection backend)
-                    (elwl-roundtrip connection)
                     (setf (slothbar-backend-wayland-outputs backend)
                           (elwl-output-list registry))
                     (run-hook-with-args
