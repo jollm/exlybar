@@ -247,6 +247,12 @@
   (let ((output (and slothbar--bar (slothbar-output slothbar--bar))))
     (and output (elwl-output-object output))))
 
+(cl-defmethod slothbar-backend-output-names ((backend slothbar-backend-wayland))
+  "Return the names of BACKEND's connected outputs."
+  (delq nil
+        (mapcar #'elwl-output-name
+                (slothbar-backend-wayland-outputs backend))))
+
 ;;; Colors and pixels
 
 (defun slothbar-backend-wayland--color-vector (color)
@@ -629,7 +635,19 @@ VISIBLE non-nil reserves the bar's exclusive zone."
             ;; Names and scale arrive as events.
             (elwl-roundtrip connection)
             (slothbar-backend-wayland--ensure-pointer backend)
-            (setf (slothbar-backend-wayland-outputs backend) outputs))
+            (setf (slothbar-backend-wayland-outputs backend) outputs)
+            (elwl-output-watch
+             registry
+             (lambda (_action _output)
+               (run-at-time
+                0 nil
+                (lambda ()
+                  (when (slothbar-backend-wayland-connection backend)
+                    (elwl-roundtrip connection)
+                    (setf (slothbar-backend-wayland-outputs backend)
+                          (elwl-output-list registry))
+                    (run-hook-with-args
+                     'slothbar-backend-output-change-hook backend)))))))
           (when (elwl-registry-find registry 'zwlr-foreign-toplevel-manager-v1)
             (let ((manager
                    (elwl-foreign-toplevel-manager-bind

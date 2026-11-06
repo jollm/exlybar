@@ -196,6 +196,36 @@
                    '((5 3 :right))))
     (should-not (slothbar--click 100 3 :left))))
 
+(cl-defstruct (slothbar-unit-output-backend
+               (:include slothbar-unit-backend))
+  "A test backend with named outputs."
+  outputs)
+
+(cl-defmethod slothbar-backend-output-names
+  ((backend slothbar-unit-output-backend))
+  "Return the fake output names for BACKEND."
+  (slothbar-unit-output-backend-outputs backend))
+
+(ert-deftest slothbar-unit-bar-output-specs ()
+  "Bar definitions expand per output, named output, or default output."
+  (let ((backend (make-slothbar-unit-output-backend
+                  :kind 'test :outputs '("A" "B")))
+        (slothbar-bars
+         (list (list :id 'each :output :each)
+               (list :id 'listed :output '("B" "C"))
+               (list :id 'named :output "A")
+               (list :id 'default))))
+    (should
+     (equal
+      (mapcar (lambda (spec)
+                (list (plist-get (plist-get spec :config) :id)
+                      (plist-get spec :output)))
+              (slothbar--desired-bar-specs backend))
+      '((each "A") (each "B")
+        (listed "B")
+        (named "A")
+        (default nil))))))
+
 (ert-deftest slothbar-unit-multi-bar-pointer-routing ()
   "Pointer clicks are routed to the bar that received the event."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))

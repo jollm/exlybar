@@ -137,6 +137,12 @@
   "The xcb backend has no Wayland output."
   nil)
 
+(cl-defmethod slothbar-backend-output-names ((_backend slothbar-backend-xcb))
+  "Return the X monitor names reported by Emacs."
+  (delq nil
+        (mapcar (lambda (monitor) (alist-get 'name monitor))
+                (display-monitor-attributes-list))))
+
 (cl-defmethod slothbar-backend-focused-window ((backend slothbar-backend-xcb))
   "Return the active EWMH window's title and class."
   (let ((connection (slothbar-backend-xcb-connection backend))

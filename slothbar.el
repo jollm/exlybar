@@ -545,9 +545,10 @@ NVAL is check against the existing value for any changes."
   "Return the configured bar definitions, or one default definition."
   (or slothbar-bars (list nil)))
 
-(defun slothbar--make-bar (backend config index geometry)
-  "Create a bar from CONFIG for BACKEND.
-INDEX identifies it among the bars.  GEOMETRY supplies fallback offsets."
+(defun slothbar--make-bar (backend config index geometry &optional output)
+  "Create a bar from CONFIG for BACKEND on OUTPUT.
+INDEX identifies CONFIG among the bar definitions.  GEOMETRY supplies
+fallback offsets."
   (let* ((height (or (plist-get config :height) slothbar-height))
          (bottom (if (plist-member config :bottom)
                      (plist-get config :bottom)
@@ -561,16 +562,103 @@ INDEX identifies it among the bars.  GEOMETRY supplies fallback offsets."
                               height)
                          (alist-get 'y-offset geometry)))))
     (slothbar-create
-     :id (or (plist-get config :id) index)
+     :id (list (or (plist-get config :id) index) output)
      :config config
      :display-backend backend
-     :output (plist-get config :output)
+     :output output
      :pixel-width (or (plist-get config :width)
                       (alist-get 'width geometry))
      :pixel-height height
      :x-offset x-offset
      :y-offset y-offset
      :bottom bottom)))
+
+(defun slothbar--desired-bar-specs (backend)
+  "Return desired bar specs for BACKEND from `slothbar-bars'."
+  (let ((outputs (slothbar-backend-output-names backend)))
+    (cl-loop
+     for config in (slothbar--bar-configs)
+     for index from 0
+     for output = (plist-get config :output)
+     append
+     (cond
+      ((null output)
+       (list (list :config config :index index :output nil)))
+      ((eq output :each)
+       (mapcar (lambda (name) (list :config config :index index :output name))
+               outputs))
+      ((listp output)
+       (cl-loop for name in output
+                when (member name outputs)
+                collect (list :config config :index index :output name)))
+      ((stringp output)
+       (when (member output outputs)
+         (list (list :config config :index index :output output))))
+      (t nil)))))
+
+(defun slothbar--bar-by-id (id bars)
+  "Return the bar in BARS whose id is ID."
+  (cl-find id bars :key #'slothbar-id :test #'equal))
+
+(defun slothbar--reconcile-bars ()
+  "Create and destroy bars to match the current outputs and configuration."
+  (when slothbar--backend
+    (let* ((backend slothbar--backend)
+           (specs (slothbar--desired-bar-specs backend))
+           (desired-ids (mapcar (lambda (spec)
+                                  (list (or (plist-get (plist-get spec :config)
+                                                       :id)
+                                            (plist-get spec :index))
+                                        (plist-get spec :output)))
+                                specs))
+           (existing slothbar--bars)
+           (kept nil))
+      ;; Remove bars whose output or configuration disappeared.
+      (dolist (bar existing)
+        (if (member (slothbar-id bar) desired-ids)
+            (push bar kept)
+          (slothbar--with-bar bar
+            (dolist (m (slothbar-module-list bar))
+              (when (slothbar-module-p m)
+                (slothbar-module-exit m)))
+            (ignore-errors (slothbar-backend-destroy-bar backend bar)))))
+      (setq kept (nreverse kept))
+      ;; Add bars for new specs.
+      (dolist (spec specs)
+        (let* ((config (plist-get spec :config))
+               (index (plist-get spec :index))
+               (output (plist-get spec :output))
+               (id (list (or (plist-get config :id) index) output)))
+          (unless (slothbar--bar-by-id id kept)
+            (let* ((geom (slothbar--find-display-geometry
+                          (or output slothbar-preferred-display)))
+                   (bar (slothbar--make-bar backend config index geom output)))
+              (setq kept (append kept (list bar)))
+              (slothbar--with-bar bar
+                (setq slothbar-font-px-size
+                      (slothbar-font--precompute-px-sizes
+                       (slothbar-pixel-height bar)
+                       slothbar-font--color-code-map))
+                (slothbar-backend-create-bar backend bar)
+                (slothbar--construct-modules bar)
+                (dolist (m (slothbar-module-list bar))
+                  (when (slothbar-module-p m)
+                    (slothbar-module-init m)))
+                (when slothbar--enabled
+                  (slothbar-backend-show backend bar)
+                  (setf (slothbar-visible bar) t)))))))
+      (let ((changed (not (equal (mapcar #'slothbar-id existing)
+                                 (mapcar #'slothbar-id kept)))))
+        (setq slothbar--bars kept
+              slothbar--bar (car kept)
+              slothbar--modules (and kept (slothbar-module-list (car kept))))
+        (when (and changed slothbar--enabled)
+          (run-at-time 0 nil #'slothbar-refresh-modules))))))
+
+(defun slothbar--on-output-change (backend)
+  "Reconcile bars after BACKEND reports an output change."
+  (when (and (eq backend slothbar--backend) slothbar--enabled)
+    (run-at-time 0 nil #'slothbar--reconcile-bars)))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
   "(Re)construct modules when `slothbar-modules' is modified.
@@ -605,26 +693,10 @@ NVAL is check against the existing value for any changes."
            slothbar-height slothbar-font--color-code-map))
     (setq slothbar--backend (slothbar-backend-create slothbar-backend))
     (slothbar-backend-open slothbar--backend)
-    (setq slothbar--bars
-          (cl-loop for config in (slothbar--bar-configs)
-                   for index from 0
-                   collect (slothbar--make-bar
-                            slothbar--backend config index geom)))
     (run-hooks 'slothbar-before-module-init-hook)
-    (dolist (bar slothbar--bars)
-      (slothbar--with-bar bar
-        (setq slothbar-font-px-size
-              (slothbar-font--precompute-px-sizes
-               (slothbar-pixel-height bar)
-               slothbar-font--color-code-map))
-        (slothbar-backend-create-bar slothbar--backend bar)
-        (slothbar--construct-modules bar)
-        (dolist (m (slothbar-module-list bar))
-          (when (slothbar-module-p m)
-            (slothbar-module-init m)))))
-    (setq slothbar--bar (car slothbar--bars)
-          slothbar--modules (and slothbar--bars
-                                 (slothbar-module-list (car slothbar--bars))))
+    (slothbar--reconcile-bars)
+    (add-hook 'slothbar-backend-output-change-hook
+              #'slothbar--on-output-change)
     (add-hook 'slothbar-backend-pointer-button-hook
               #'slothbar--on-pointer-button)
     (add-hook 'slothbar-backend-pointer-motion-hook
@@ -673,6 +745,8 @@ NVAL is check against the existing value for any changes."
   (when slothbar--module-refresh-timer
     (cancel-timer slothbar--module-refresh-timer)
     (setq slothbar--module-refresh-timer nil))
+  (remove-hook 'slothbar-backend-output-change-hook
+               #'slothbar--on-output-change)
   (remove-hook 'slothbar-backend-pointer-button-hook
                #'slothbar--on-pointer-button)
   (remove-hook 'slothbar-backend-pointer-motion-hook
