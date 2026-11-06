@@ -358,47 +358,56 @@ It will remap colors and refresh the display."
 Cleared by `slothbar-refresh-modules' after the change is processed.")
 
 (cl-defun slothbar-refresh-modules (&optional modules)
-  "Refresh every bar's modules and present its layout.
+  "Refresh bars whose modules or geometry changed, and present them.
 MODULES, when non-nil, is used instead of each bar's module list."
-  (when slothbar--geometry-changed?
-    (setq slothbar--geometry-changed? nil)
-    (dolist (bar slothbar--bars)
-      (slothbar--with-bar bar
-        (dolist (m (slothbar-module-list bar))
-          (when (slothbar-module-p m)
-            (setf (slothbar-module-needs-refresh? m) t
-                  (slothbar-module-cache m) (make-hash-table :test 'equal))
-            (when (slothbar-display-backend bar)
-              (slothbar-backend-reset-module-cache
-               (slothbar-display-backend bar) m))))))
-    (slothbar--refresh))
-  (dolist (bar (or slothbar--bars (list slothbar--bar)))
-    (when bar
-      (slothbar--with-bar bar
-        (let* ((modules (or modules
-                            (slothbar-module-list bar)
-                            slothbar--modules))
-               (width (slothbar-pixel-width bar))
-               (backend (slothbar-display-backend bar))
-               (prev-extents
-                (slothbar-layout-extents
-                 (slothbar-layout-coordinate
-                  (slothbar-layout modules) 0 0 width))))
-          (dolist (m modules)
+  (let ((geometry-changed slothbar--geometry-changed?))
+    (when geometry-changed
+      (setq slothbar--geometry-changed? nil)
+      (dolist (bar slothbar--bars)
+        (slothbar--with-bar bar
+          (dolist (m (slothbar-module-list bar))
             (when (slothbar-module-p m)
-              (slothbar-module-refresh m)))
-          (let* ((new-layout
-                  (slothbar-layout-coordinate
-                   (slothbar-layout modules) 0 0 width))
-                 (new-extents (slothbar-layout-extents new-layout))
-                 (damage (unless (equal prev-extents new-extents)
-                           (slothbar-layout-subtract-extents
-                            new-extents prev-extents))))
-            (setq slothbar--last-layout new-layout)
-            (setf (slothbar-placements bar) new-layout)
-            (when backend
-              (slothbar-backend-present
-               backend bar new-layout damage))))))))
+              (setf (slothbar-module-needs-refresh? m) t
+                    (slothbar-module-cache m) (make-hash-table :test 'equal))
+              (when (slothbar-display-backend bar)
+                (slothbar-backend-reset-module-cache
+                 (slothbar-display-backend bar) m))))))
+      (slothbar--refresh))
+    (dolist (bar (or slothbar--bars (list slothbar--bar)))
+      (when bar
+        (slothbar--with-bar bar
+          (let* ((modules (or modules
+                              (slothbar-module-list bar)
+                              slothbar--modules))
+                 (width (slothbar-pixel-width bar))
+                 (backend (slothbar-display-backend bar))
+                 (dirty
+                  (or geometry-changed
+                      (cl-some (lambda (m)
+                                 (and (slothbar-module-p m)
+                                      (slothbar-module-needs-refresh? m)))
+                               modules)))
+                 (first (null (slothbar-placements bar))))
+            (when (or dirty first)
+              (let ((prev-extents
+                     (slothbar-layout-extents
+                      (slothbar-layout-coordinate
+                       (slothbar-layout modules) 0 0 width))))
+                (dolist (m modules)
+                  (when (slothbar-module-p m)
+                    (slothbar-module-refresh m)))
+                (let* ((new-layout
+                        (slothbar-layout-coordinate
+                         (slothbar-layout modules) 0 0 width))
+                       (new-extents (slothbar-layout-extents new-layout))
+                       (damage (unless (equal prev-extents new-extents)
+                                 (slothbar-layout-subtract-extents
+                                  new-extents prev-extents))))
+                  (setq slothbar--last-layout new-layout)
+                  (setf (slothbar-placements bar) new-layout)
+                  (when backend
+                    (slothbar-backend-present
+                     backend bar new-layout damage)))))))))))
 
 (defun slothbar--module-placement-at (x y &optional bar)
   "Return BAR's layout placement containing X and Y, or nil."
@@ -542,8 +551,15 @@ NVAL is check against the existing value for any changes."
     built))
 
 (defun slothbar--bar-configs ()
-  "Return the configured bar definitions, or one default definition."
-  (or slothbar-bars (list nil)))
+  "Return the configured bar definitions.
+
+A non-nil `slothbar-bars' is authoritative.  Otherwise, a non-nil
+`slothbar-modules' creates the legacy single default bar.  With neither
+configured, no bars are created."
+  (cond
+   (slothbar-bars slothbar-bars)
+   (slothbar-modules (list nil))
+   (t nil)))
 
 (defun slothbar--make-bar (backend config index geometry &optional output)
   "Create a bar from CONFIG for BACKEND on OUTPUT.
@@ -572,6 +588,15 @@ fallback offsets."
      :x-offset x-offset
      :y-offset y-offset
      :bottom bottom)))
+
+(defvar slothbar--output-change-timer nil
+  "Debounce timer for output changes.")
+
+(defvar slothbar--reconciling nil
+  "Non-nil while `slothbar--reconcile-bars' is running.")
+
+(defvar slothbar--reconcile-pending nil
+  "Non-nil when another reconciliation is needed.")
 
 (defun slothbar--desired-bar-specs (backend)
   "Return desired bar specs for BACKEND from `slothbar-bars'."
@@ -602,8 +627,13 @@ fallback offsets."
 
 (defun slothbar--reconcile-bars ()
   "Create and destroy bars to match the current outputs and configuration."
-  (when slothbar--backend
-    (let* ((backend slothbar--backend)
+  (when slothbar--reconciling
+    (setq slothbar--reconcile-pending t))
+  (unless slothbar--reconciling
+    (setq slothbar--reconciling t)
+    (unwind-protect
+        (when slothbar--backend
+          (let* ((backend slothbar--backend)
            (specs (slothbar--desired-bar-specs backend))
            (desired-ids (mapcar (lambda (spec)
                                   (list (or (plist-get (plist-get spec :config)
@@ -653,12 +683,22 @@ fallback offsets."
               slothbar--bar (car kept)
               slothbar--modules (and kept (slothbar-module-list (car kept))))
         (when (and changed slothbar--enabled)
-          (run-at-time 0 nil #'slothbar-refresh-modules))))))
+          (run-at-time 0 nil #'slothbar-refresh-modules)))))
+      (setq slothbar--reconciling nil)
+      (when slothbar--reconcile-pending
+        (setq slothbar--reconcile-pending nil)
+        (run-at-time 0 nil #'slothbar--reconcile-bars)))))
 
 (defun slothbar--on-output-change (backend)
   "Reconcile bars after BACKEND reports an output change."
   (when (and (eq backend slothbar--backend) slothbar--enabled)
-    (run-at-time 0 nil #'slothbar--reconcile-bars)))
+    (when slothbar--output-change-timer
+      (cancel-timer slothbar--output-change-timer))
+    (setq slothbar--output-change-timer
+          (run-at-time 0.1 nil
+                       (lambda ()
+                         (setq slothbar--output-change-timer nil)
+                         (slothbar--reconcile-bars))))))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
   "(Re)construct modules when `slothbar-modules' is modified.
@@ -745,6 +785,9 @@ NVAL is check against the existing value for any changes."
   (when slothbar--module-refresh-timer
     (cancel-timer slothbar--module-refresh-timer)
     (setq slothbar--module-refresh-timer nil))
+  (when slothbar--output-change-timer
+    (cancel-timer slothbar--output-change-timer)
+    (setq slothbar--output-change-timer nil))
   (remove-hook 'slothbar-backend-output-change-hook
                #'slothbar--on-output-change)
   (remove-hook 'slothbar-backend-pointer-button-hook

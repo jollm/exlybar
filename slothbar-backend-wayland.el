@@ -290,6 +290,17 @@
       (dotimes (_ height) (insert row))
       (buffer-string))))
 
+(defun slothbar-backend-wayland--clear-frame (surface frame)
+  "Clear FRAME in place with SURFACE's background color."
+  (let* ((width (slothbar-backend-wayland-surface-frame-width surface))
+         (height (slothbar-backend-wayland-surface-frame-height surface))
+         (stride (slothbar-backend-wayland-surface-frame-stride surface))
+         (row (slothbar-backend-wayland--row
+               width (slothbar--background-color))))
+    (dotimes (y height)
+      (store-substring frame (* y stride) row))
+    frame))
+
 (defun slothbar-backend-wayland--fill-rect
     (frame stride x y width height color)
   "Fill a rectangle in FRAME with COLOR.
@@ -428,14 +439,16 @@ placement."
      placement-x placement-y)))
 
 (defun slothbar-backend-wayland--compose-frame (surface layout)
-  "Return a new frame for SURFACE with LAYOUT drawn."
-  (let ((frame (slothbar-backend-wayland--blank-frame surface)))
-    (setf (slothbar-backend-wayland-surface-frame surface) frame)
+  "Clear and redraw SURFACE's frame with LAYOUT."
+  (let ((frame (or (slothbar-backend-wayland-surface-frame surface)
+                   (slothbar-backend-wayland--blank-frame surface))))
+    (slothbar-backend-wayland--clear-frame surface frame)
     (dolist (placement layout)
       (pcase-let ((`((,x ,y) ,module) placement))
         (when (slothbar-module-p module)
           (slothbar-backend-wayland--draw-module surface module x y))))
-    (slothbar-backend-wayland-surface-frame surface)))
+    (setf (slothbar-backend-wayland-surface-frame surface) frame)
+    frame))
 
 ;;; Shm buffers
 

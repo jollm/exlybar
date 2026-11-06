@@ -206,6 +206,18 @@
   "Return the fake output names for BACKEND."
   (slothbar-unit-output-backend-outputs backend))
 
+(ert-deftest slothbar-unit-default-bar-config ()
+  "An explicit bar list replaces the legacy default bar."
+  (let ((slothbar-bars nil)
+        (slothbar-modules nil))
+    (should-not (slothbar--bar-configs)))
+  (let ((slothbar-bars nil)
+        (slothbar-modules '(slothbar-date-create)))
+    (should (equal (slothbar--bar-configs) '(nil))))
+  (let ((slothbar-bars '((:id one)))
+        (slothbar-modules '(slothbar-date-create)))
+    (should (equal (slothbar--bar-configs) '((:id one))))))
+
 (ert-deftest slothbar-unit-bar-output-specs ()
   "Bar definitions expand per output, named output, or default output."
   (let ((backend (make-slothbar-unit-output-backend
