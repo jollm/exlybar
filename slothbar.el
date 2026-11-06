@@ -490,6 +490,11 @@ NVAL is check against the existing value for any changes."
                                 val))))
                    slothbar-modules)))
     (when slothbar--bar
+      (dolist (m slothbar--modules)
+        (when (slothbar-module-p m)
+          (setf (slothbar-module-backend m)
+                (slothbar-display-backend slothbar--bar)))))
+    (when slothbar--bar
       (setf (slothbar-module-list slothbar--bar) slothbar--modules)))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)

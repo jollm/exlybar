@@ -86,7 +86,12 @@
   (width slothbar-module-min-width :type 'fixed)
   (initialized nil :type 'boolean)
   (needs-refresh? nil :type 'boolean)
-  (update-timer nil :type 'timer))
+  (update-timer nil :type 'timer)
+  backend)
+
+(defun slothbar-module--backend (m)
+  "Return M's owning display backend, or the current backend."
+  (or (slothbar-module-backend m) slothbar--backend))
 
 (cl-defgeneric slothbar-module-init (m) "Initialize module M.")
 

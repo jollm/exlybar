@@ -820,7 +820,7 @@ are honored."
           (slothbar-module-text m) text)
     (when changed
       (setf (slothbar-module-needs-refresh? m) t)
-      (when (and slothbar--backend (slothbar-enabled-p))
+      (when (and (slothbar-module--backend m) (slothbar-enabled-p))
         (slothbar-refresh-modules)))
     text))
 

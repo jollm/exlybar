@@ -115,8 +115,9 @@
 
 (cl-defmethod slothbar-module-update-status ((m slothbar-focus))
   "Update M from the backend's focused window."
-  (let* ((focus (and slothbar--backend
-                     (slothbar-backend-focused-window slothbar--backend)))
+  (let* ((backend (slothbar-module--backend m))
+         (focus (and backend
+                     (slothbar-backend-focused-window backend)))
          (spec (slothbar-focus--format-values focus))
          (text (slothbar-focus--render (slothbar-module-format m) focus))
          (changed (not (equal text (slothbar-module-text m)))))
@@ -124,7 +125,7 @@
           (slothbar-module-text m) text)
     (when changed
       (setf (slothbar-module-needs-refresh? m) t)
-      (when (and slothbar--backend (slothbar-enabled-p))
+      (when (and backend (slothbar-enabled-p))
         (slothbar-refresh-modules)))
     text))
 

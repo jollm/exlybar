@@ -61,8 +61,10 @@ This default primary method gives M a cache and asks the active display
 backend for the pixel resources it needs to draw."
   (slothbar--log-debug* "slothbar-module-init %s" (slothbar-module-name m))
   (setf (slothbar-module-cache m) (make-hash-table :test 'equal))
-  (when slothbar--backend
-    (slothbar-backend-add-module slothbar--backend m)))
+  (let ((backend (slothbar-module--backend m)))
+    (setf (slothbar-module-backend m) backend)
+    (when backend
+      (slothbar-backend-add-module backend m))))
 
 (defun slothbar-module--create-layout (text font fidx px x)
   "Create a `fontsloth-layout' for TEXT, FONT, at size PX and offset x.
@@ -150,8 +152,8 @@ This default primary method uses a result from fontsloth-layout to set
       (setf (slothbar-module-update-timer m)
             (run-at-time nil 10 #'slothbar-module-update-status m))))
   (when (slothbar-module-format m)
-    (when slothbar--backend
-      (slothbar-backend-draw-module slothbar--backend m)))
+    (when-let ((backend (slothbar-module--backend m)))
+      (slothbar-backend-draw-module backend m)))
   (setf (slothbar-module-initialized m) t))
 
 (cl-defmethod slothbar-module-refresh :before ((m slothbar-module))
@@ -163,8 +165,8 @@ This default primary method uses a result from fontsloth-layout to set
   "Refresh module M.
 This default primary method redraws M through the display backend."
   (when (slothbar-module-needs-refresh? m)
-    (when slothbar--backend
-      (slothbar-backend-draw-module slothbar--backend m))))
+    (when-let ((backend (slothbar-module--backend m)))
+      (slothbar-backend-draw-module backend m))))
 
 (cl-defmethod slothbar-module-refresh :after ((m slothbar-module))
   "After refresh update M's needs-refresh?."
@@ -184,9 +186,10 @@ This default primary method redraws M through the display backend."
 (cl-defmethod slothbar-module-exit ((m slothbar-module))
   "Tear down module M."
   (slothbar--log-debug* "slothbar-module-exit %s" (slothbar-module-name m))
-  (when slothbar--backend
-    (slothbar-backend-remove-module slothbar--backend m))
-  (setf (slothbar-module-cache m) nil
+  (when-let ((backend (slothbar-module--backend m)))
+    (slothbar-backend-remove-module backend m))
+  (setf (slothbar-module-backend m) nil
+        (slothbar-module-cache m) nil
         (slothbar-module-text m) nil))
 
 (defsubst slothbar-module--find-by-name (module-name)
