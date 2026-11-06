@@ -108,20 +108,27 @@
      (:constructor slothbar-create)
      (:copier nil))
   "A rendered status bar instance."
+  id
+  config
   display-backend
   output
   surface
   module-list
   placements
+  hovered-module
   (pixel-width 0 :type 'integer)
   (pixel-height 0 :type 'integer)
   (x-offset 0 :type 'integer)
   (y-offset 0 :type 'integer)
   (scale 1 :type 'integer)
+  (bottom nil :type 'boolean)
   visible)
 
+(defvar slothbar--bars nil
+  "The active list of `slothbar' instances.")
+
 (defvar slothbar--bar nil
-  "The current `slothbar' instance.")
+  "The current `slothbar' instance during a scoped operation.")
 
 (defcustom slothbar-width (display-pixel-width)
   "Slothbar width.
@@ -196,6 +203,15 @@ choose explicitly."
   :type '(choice (const :tag "Automatic" auto)
                  (const :tag "X11 (xcb)" xcb)
                  (const :tag "Wayland" wayland))
+  :group 'slothbar)
+
+(defcustom slothbar-bars nil
+  "Additional bar definitions.
+
+Each entry is a plist with any of :id, :output, :modules, :height,
+:offset-x, :offset-y, and :bottom.  When nil, one bar is created from
+`slothbar-modules' and the global geometry settings."
+  :type '(repeat plist)
   :group 'slothbar)
 
 (defcustom slothbar-before-init-hook nil
@@ -286,26 +302,26 @@ If DISPLAY is not found, the value chosen is the first found in
       (height . ,(cadddr geom)))))
 
 (defun slothbar-show ()
-  "Show slothbar."
-  (let ((backend (if slothbar--bar
-                     (slothbar-display-backend slothbar--bar)
-                   slothbar--backend)))
-    (when backend
-      (slothbar-backend-show backend slothbar--bar)
-      (setq slothbar--visible t)
-      (when slothbar--bar
-        (setf (slothbar-visible slothbar--bar) t)))))
+  "Show every active bar."
+  (dolist (bar (or slothbar--bars (list slothbar--bar)))
+    (when bar
+      (slothbar--with-bar bar
+        (let ((backend (slothbar-display-backend bar)))
+          (when backend
+            (slothbar-backend-show backend bar)
+            (setf (slothbar-visible bar) t))))))
+  (setq slothbar--visible t))
 
 (defun slothbar-hide ()
-  "Hide slothbar."
-  (let ((backend (if slothbar--bar
-                     (slothbar-display-backend slothbar--bar)
-                   slothbar--backend)))
-    (when backend
-      (slothbar-backend-hide backend slothbar--bar)
-      (setq slothbar--visible nil)
-      (when slothbar--bar
-        (setf (slothbar-visible slothbar--bar) nil)))))
+  "Hide every active bar."
+  (dolist (bar (or slothbar--bars (list slothbar--bar)))
+    (when bar
+      (slothbar--with-bar bar
+        (let ((backend (slothbar-display-backend bar)))
+          (when backend
+            (slothbar-backend-hide backend bar)
+            (setf (slothbar-visible bar) nil))))))
+  (setq slothbar--visible nil))
 
 (defun slothbar-hide-show ()
   "Hide slothbar if visible and show if hidden."
@@ -342,90 +358,100 @@ It will remap colors and refresh the display."
 Cleared by `slothbar-refresh-modules' after the change is processed.")
 
 (cl-defun slothbar-refresh-modules (&optional modules)
-  "Ask the modules to refresh and see whether the layout has changed.
-MODULES optional modules to refresh and compare with prev-extents."
-  (let* ((bar slothbar--bar)
-         (modules (or modules
-                      (and bar (slothbar-module-list bar))
-                      slothbar--modules))
-         (width (if bar (slothbar-pixel-width bar) slothbar-width))
-         (backend (if bar (slothbar-display-backend bar) slothbar--backend)))
-    (when slothbar--geometry-changed?
-      (setq slothbar--geometry-changed? nil)
-      (dolist (m modules)
-        (when (slothbar-module-p m)
-          (setf (slothbar-module-needs-refresh? m) t
-                (slothbar-module-cache m) (make-hash-table :test 'equal))
-          (when backend
-            (slothbar-backend-reset-module-cache backend m))))
-      (slothbar--refresh))
-    ;; refresh modules to update to latest dimensions
-    (let ((prev-extents
-           (slothbar-layout-extents
-            (slothbar-layout-coordinate
-             (slothbar-layout modules) 0 0 width))))
-      (dolist (m modules)
-        (when (slothbar-module-p m)
-          (slothbar-module-refresh m)))
-      (let* ((new-layout
-              (slothbar-layout-coordinate
-               (slothbar-layout modules) 0 0 width))
-             (new-extents (slothbar-layout-extents new-layout))
-             (damage (unless (equal prev-extents new-extents)
-                       (slothbar-layout-subtract-extents
-                        new-extents prev-extents))))
-        (setq slothbar--last-layout new-layout)
-        (when bar
-          (setf (slothbar-placements bar) new-layout))
-        (when backend
-          (slothbar-backend-present backend bar new-layout damage))))))
+  "Refresh every bar's modules and present its layout.
+MODULES, when non-nil, is used instead of each bar's module list."
+  (when slothbar--geometry-changed?
+    (setq slothbar--geometry-changed? nil)
+    (dolist (bar slothbar--bars)
+      (slothbar--with-bar bar
+        (dolist (m (slothbar-module-list bar))
+          (when (slothbar-module-p m)
+            (setf (slothbar-module-needs-refresh? m) t
+                  (slothbar-module-cache m) (make-hash-table :test 'equal))
+            (when (slothbar-display-backend bar)
+              (slothbar-backend-reset-module-cache
+               (slothbar-display-backend bar) m))))))
+    (slothbar--refresh))
+  (dolist (bar (or slothbar--bars (list slothbar--bar)))
+    (when bar
+      (slothbar--with-bar bar
+        (let* ((modules (or modules
+                            (slothbar-module-list bar)
+                            slothbar--modules))
+               (width (slothbar-pixel-width bar))
+               (backend (slothbar-display-backend bar))
+               (prev-extents
+                (slothbar-layout-extents
+                 (slothbar-layout-coordinate
+                  (slothbar-layout modules) 0 0 width))))
+          (dolist (m modules)
+            (when (slothbar-module-p m)
+              (slothbar-module-refresh m)))
+          (let* ((new-layout
+                  (slothbar-layout-coordinate
+                   (slothbar-layout modules) 0 0 width))
+                 (new-extents (slothbar-layout-extents new-layout))
+                 (damage (unless (equal prev-extents new-extents)
+                           (slothbar-layout-subtract-extents
+                            new-extents prev-extents))))
+            (setq slothbar--last-layout new-layout)
+            (setf (slothbar-placements bar) new-layout)
+            (when backend
+              (slothbar-backend-present
+               backend bar new-layout damage))))))))
 
-(defun slothbar--module-placement-at (x y)
-  "Return the layout placement containing X and Y, or nil."
-  (cl-find-if
-   (lambda (placement)
-     (pcase-let ((`((,px ,py) ,m) placement))
-       (and (>= x px)
-            (< x (+ px (slothbar-module-width m)))
-            (>= y py)
-            (< y (+ py (if slothbar--bar
-                            (slothbar-pixel-height slothbar--bar)
-                          slothbar-height))))))
-   (or (and slothbar--bar (slothbar-placements slothbar--bar))
-       slothbar--last-layout)))
+(defun slothbar--module-placement-at (x y &optional bar)
+  "Return BAR's layout placement containing X and Y, or nil."
+  (let ((bar (or bar slothbar--bar)))
+    (cl-find-if
+     (lambda (placement)
+       (pcase-let ((`((,px ,py) ,m) placement))
+         (and (>= x px)
+              (< x (+ px (slothbar-module-width m)))
+              (>= y py)
+              (< y (+ py (if bar
+                              (slothbar-pixel-height bar)
+                            slothbar-height))))))
+     (or (and bar (slothbar-placements bar))
+         slothbar--last-layout))))
 
-(defun slothbar--click (x y button)
-  "Dispatch a click at X,Y with BUTTON to the module under it.
+(defun slothbar--click (x y button &optional bar)
+  "Dispatch a click at X,Y with BUTTON to BAR's module under it.
 X and Y are bar-local logical coordinates."
-  (let ((placement (slothbar--module-placement-at x y)))
+  (let ((placement (slothbar--module-placement-at x y bar)))
     (when placement
       (pcase-let ((`((,px ,py) ,m) placement))
         (slothbar-module-click m (- x px) (- y py) button)))))
 
-(defun slothbar--clear-hover ()
-  "Tell the hovered module that the pointer has left it."
-  (when slothbar--hovered-module
-    (slothbar-module-hover slothbar--hovered-module nil nil)
-    (setq slothbar--hovered-module nil)))
+(defun slothbar--clear-hover (&optional bar)
+  "Tell BAR's hovered module that the pointer has left it."
+  (let ((bar (or bar slothbar--bar)))
+    (when bar
+      (let ((hovered (slothbar-hovered-module bar)))
+        (when hovered
+          (slothbar-module-hover hovered nil nil)
+          (setf (slothbar-hovered-module bar) nil))))))
 
-(defun slothbar--on-pointer-motion (backend x y)
-  "Route pointer motion on BACKEND at X,Y to the module under it."
-  (when (and slothbar--enabled
-             (eq backend slothbar--backend))
-    (let ((placement (and x y (slothbar--module-placement-at x y))))
-      (if (null placement)
-          (slothbar--clear-hover)
-        (pcase-let ((`((,px ,py) ,m) placement))
-          (unless (eq m slothbar--hovered-module)
-            (slothbar--clear-hover)
-            (setq slothbar--hovered-module m))
-          (slothbar-module-hover m (- x px) (- y py)))))))
+(defun slothbar--on-pointer-motion (backend bar x y)
+  "Route pointer motion on BAR's BACKEND at X,Y to the module under it."
+  (when (and slothbar--enabled bar
+             (eq backend (slothbar-display-backend bar)))
+    (slothbar--with-bar bar
+      (let ((placement (and x y (slothbar--module-placement-at x y bar))))
+        (if (null placement)
+            (slothbar--clear-hover bar)
+          (pcase-let ((`((,px ,py) ,m) placement))
+            (unless (eq m (slothbar-hovered-module bar))
+              (slothbar--clear-hover bar)
+              (setf (slothbar-hovered-module bar) m))
+            (slothbar-module-hover m (- x px) (- y py))))))))
 
-(defun slothbar--on-pointer-button (backend x y button)
-  "Route a pointer BUTTON press on BACKEND at X,Y to a module."
-  (when (and slothbar--enabled
-             (eq backend slothbar--backend))
-    (slothbar--click x y button)))
+(defun slothbar--on-pointer-button (backend bar x y button)
+  "Route a pointer BUTTON press on BAR's BACKEND at X,Y to a module."
+  (when (and slothbar--enabled bar
+             (eq backend (slothbar-display-backend bar)))
+    (slothbar--with-bar bar
+      (slothbar--click x y button bar))))
 
 (defun slothbar--watch-modules (_ nval oper where)
   "With OPER eq \\='set and nil WHERE, refresh `slothbar--modules' with NVAL."
@@ -464,19 +490,36 @@ NVAL is check against the existing value for any changes."
 
 (add-variable-watcher 'slothbar-height #'slothbar--watch-height)
 
-(defun slothbar--construct-modules ()
-  "Construct modules from layout given in `slothbar-modules'."
-    (setq slothbar--modules
+(defmacro slothbar--with-bar (bar &rest body)
+  "Evaluate BODY with BAR as the current bar and geometry."
+  (declare (indent 1) (debug t))
+  `(let* ((,bar ,bar)
+          (slothbar--bar ,bar)
+          (slothbar-width (slothbar-pixel-width ,bar))
+          (slothbar-height (slothbar-pixel-height ,bar))
+          (slothbar-offset-x (slothbar-x-offset ,bar))
+          (slothbar-offset-y (slothbar-y-offset ,bar))
+          (slothbar-is-bottom (slothbar-bottom ,bar)))
+     ,@body))
+
+(defun slothbar--construct-modules (&optional bar modules)
+  "Construct modules for BAR, or the current environment when BAR is nil."
+  (let* ((config (and bar (slothbar-config bar)))
+         (constructors (or modules
+                           (and config (plist-get config :modules))
+                           slothbar-modules))
+         (backend (if bar (slothbar-display-backend bar) slothbar--backend))
+         (built
           (seq-filter
            (lambda (m)
              (or (not (slothbar-module-p m))
-                 (null slothbar--backend)
-                 (if (slothbar-module-supported-p m slothbar--backend)
+                 (null backend)
+                 (if (slothbar-module-supported-p m backend)
                      t
                    (message
                     "Slothbar: skipping %s; not supported on the %s backend"
                     (slothbar-module-name m)
-                    (slothbar-backend-kind slothbar--backend))
+                    (slothbar-backend-kind backend))
                    nil)))
            (mapcar (lambda (val)
                      (cond
@@ -486,17 +529,48 @@ NVAL is check against the existing value for any changes."
                        (funcall val))
                       ((and (listp val) (functionp (car val)))
                        (apply (car val) (cdr val)))
-                      (t (error "Unsupported type in slothbar-modules: %s"
+                      (t (error "Unsupported type in slothbar-bars: %s"
                                 val))))
-                   slothbar-modules)))
-    (when slothbar--bar
-      (dolist (m slothbar--modules)
-        (when (slothbar-module-p m)
-          (setf (slothbar-module-backend m)
-                (slothbar-display-backend slothbar--bar)
-                (slothbar-module-bar m) slothbar--bar))))
-    (when slothbar--bar
-      (setf (slothbar-module-list slothbar--bar) slothbar--modules)))
+                   constructors))))
+    (dolist (m built)
+      (when (slothbar-module-p m)
+        (setf (slothbar-module-backend m) backend
+              (slothbar-module-bar m) bar)))
+    (if bar
+        (setf (slothbar-module-list bar) built)
+      (setq slothbar--modules built))
+    built))
+
+(defun slothbar--bar-configs ()
+  "Return the configured bar definitions, or one default definition."
+  (or slothbar-bars (list nil)))
+
+(defun slothbar--make-bar (backend config index geometry)
+  "Create a bar from CONFIG for BACKEND.
+INDEX identifies it among the bars.  GEOMETRY supplies fallback offsets."
+  (let* ((height (or (plist-get config :height) slothbar-height))
+         (bottom (if (plist-member config :bottom)
+                     (plist-get config :bottom)
+                   slothbar-is-bottom))
+         (x-offset (or (plist-get config :offset-x)
+                       (alist-get 'x-offset geometry)))
+         (y-offset (or (plist-get config :offset-y)
+                       (if bottom
+                           (- (+ (alist-get 'y-offset geometry)
+                                 (alist-get 'height geometry))
+                              height)
+                         (alist-get 'y-offset geometry)))))
+    (slothbar-create
+     :id (or (plist-get config :id) index)
+     :config config
+     :display-backend backend
+     :output (plist-get config :output)
+     :pixel-width (or (plist-get config :width)
+                      (alist-get 'width geometry))
+     :pixel-height height
+     :x-offset x-offset
+     :y-offset y-offset
+     :bottom bottom)))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
   "(Re)construct modules when `slothbar-modules' is modified.
@@ -505,11 +579,16 @@ Do this only when OPER eq \\='set and WHERE is nil.
 NVAL is check against the existing value for any changes."
   (when (and (not where) (eq 'set oper)
              (not (equal nval slothbar-modules)))
-    (run-at-time 0 nil #'slothbar--construct-modules)))
+    (run-at-time
+     0 nil
+     (lambda ()
+       (if slothbar--bars
+           (dolist (bar slothbar--bars)
+             (slothbar--construct-modules bar))
+         (slothbar--construct-modules))))))
 
 (defun slothbar--start ()
-  "Start slothbar.
-Initialize the display backend, window, and modules."
+  "Start slothbar: open the backend, create bars, and initialize modules."
   (run-hook-with-args 'slothbar-before-init-hook)
   (cl-assert (not slothbar--backend))
   (slothbar--log-enable-logging)
@@ -520,54 +599,63 @@ Initialize the display backend, window, and modules."
                                      (alist-get 'height geom))
                                   slothbar-height)
                              (alist-get 'y-offset geom))
-	  slothbar-width (alist-get 'width geom)))
-  (setq slothbar-font-px-size
-        (slothbar-font--precompute-px-sizes
-         slothbar-height slothbar-font--color-code-map))
-  (setq slothbar--backend (slothbar-backend-create slothbar-backend))
-  (setq slothbar--bar
-        (slothbar-create :display-backend slothbar--backend
-                         :pixel-width slothbar-width
-                         :pixel-height slothbar-height
-                         :x-offset slothbar-offset-x
-                         :y-offset slothbar-offset-y))
-  (slothbar-backend-open slothbar--backend)
-  (slothbar-backend-create-bar slothbar--backend slothbar--bar)
-  (add-hook 'slothbar-backend-pointer-button-hook
-            #'slothbar--on-pointer-button)
-  (add-hook 'slothbar-backend-pointer-motion-hook
-            #'slothbar--on-pointer-motion)
-  ;; initialize modules
-  (slothbar--construct-modules)
-  (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
-  (run-hooks 'slothbar-before-module-init-hook)
-  (dolist (m slothbar--modules)
-    (when (slothbar-module-p m)
-      (slothbar-module-init m)))
-  (slothbar-show)
-  (slothbar-refresh-modules)
-  (setq slothbar--enabled t)
-  (slothbar--start-module-refresh-timer)
-  (run-hook-with-args 'slothbar-after-init-hook))
+	  slothbar-width (alist-get 'width geom))
+    (setq slothbar-font-px-size
+          (slothbar-font--precompute-px-sizes
+           slothbar-height slothbar-font--color-code-map))
+    (setq slothbar--backend (slothbar-backend-create slothbar-backend))
+    (slothbar-backend-open slothbar--backend)
+    (setq slothbar--bars
+          (cl-loop for config in (slothbar--bar-configs)
+                   for index from 0
+                   collect (slothbar--make-bar
+                            slothbar--backend config index geom)))
+    (run-hooks 'slothbar-before-module-init-hook)
+    (dolist (bar slothbar--bars)
+      (slothbar--with-bar bar
+        (setq slothbar-font-px-size
+              (slothbar-font--precompute-px-sizes
+               (slothbar-pixel-height bar)
+               slothbar-font--color-code-map))
+        (slothbar-backend-create-bar slothbar--backend bar)
+        (slothbar--construct-modules bar)
+        (dolist (m (slothbar-module-list bar))
+          (when (slothbar-module-p m)
+            (slothbar-module-init m)))))
+    (setq slothbar--bar (car slothbar--bars)
+          slothbar--modules (and slothbar--bars
+                                 (slothbar-module-list (car slothbar--bars))))
+    (add-hook 'slothbar-backend-pointer-button-hook
+              #'slothbar--on-pointer-button)
+    (add-hook 'slothbar-backend-pointer-motion-hook
+              #'slothbar--on-pointer-motion)
+    (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
+    (slothbar-show)
+    (slothbar-refresh-modules)
+    (setq slothbar--enabled t)
+    (slothbar--start-module-refresh-timer)
+    (run-hook-with-args 'slothbar-after-init-hook)))
 
 (defun slothbar-refresh ()
-  "Refresh slothbar according to geometry and settings."
+  "Refresh bar geometry and modules."
   (interactive)
-  (let ((geom (slothbar--find-display-geometry slothbar-preferred-display)))
-    (setq slothbar-offset-x (alist-get 'x-offset geom)
-	  slothbar-offset-y (if slothbar-is-bottom
-                                (- (+ (alist-get 'y-offset geom)
-                                      (alist-get 'height geom))
-                                   slothbar-height)
-                              (alist-get 'y-offset geom))
-	  slothbar-width (alist-get 'width geom)
-          slothbar--geometry-changed? t)
-    (when slothbar--bar
-      (setf (slothbar-pixel-width slothbar--bar) slothbar-width
-            (slothbar-pixel-height slothbar--bar) slothbar-height
-            (slothbar-x-offset slothbar--bar) slothbar-offset-x
-            (slothbar-y-offset slothbar--bar) slothbar-offset-y))
-    (run-at-time 0 nil #'slothbar-refresh-modules)))
+  (dolist (bar (or slothbar--bars (list slothbar--bar)))
+    (when bar
+      (let* ((config (slothbar-config bar))
+             (display (or (plist-get config :output)
+                          slothbar-preferred-display))
+             (geom (slothbar--find-display-geometry display))
+             (height (slothbar-pixel-height bar)))
+        (setf (slothbar-pixel-width bar) (alist-get 'width geom)
+              (slothbar-x-offset bar) (alist-get 'x-offset geom)
+              (slothbar-y-offset bar)
+              (if (slothbar-bottom bar)
+                  (- (+ (alist-get 'y-offset geom)
+                        (alist-get 'height geom))
+                     height)
+                (alist-get 'y-offset geom))))))
+  (setq slothbar--geometry-changed? t)
+  (run-at-time 0 nil #'slothbar-refresh-modules))
 
 ;;;###autoload
 (defun slothbar ()
@@ -582,7 +670,6 @@ Initialize the display backend, window, and modules."
 (defun slothbar-exit ()
   "Exit slothbar."
   (run-hook-with-args 'slothbar-before-exit-hook)
-  ;; exit modules
   (when slothbar--module-refresh-timer
     (cancel-timer slothbar--module-refresh-timer)
     (setq slothbar--module-refresh-timer nil))
@@ -590,23 +677,26 @@ Initialize the display backend, window, and modules."
                #'slothbar--on-pointer-button)
   (remove-hook 'slothbar-backend-pointer-motion-hook
                #'slothbar--on-pointer-motion)
-  (slothbar--clear-hover)
+  (dolist (bar slothbar--bars)
+    (slothbar--clear-hover bar)
+    (dolist (m (slothbar-module-list bar))
+      (when (slothbar-module-p m)
+        (slothbar-module-exit m))))
   (setq slothbar--last-layout nil)
   (setq slothbar--enabled nil)
-  (dolist (m slothbar--modules)
-    (when (slothbar-module-p m)
-      (slothbar-module-exit m)))
   (remove-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
-  (when (and slothbar--backend slothbar--bar)
-    (ignore-errors
-      (slothbar-backend-destroy-bar slothbar--backend slothbar--bar)))
+  (dolist (bar slothbar--bars)
+    (when slothbar--backend
+      (ignore-errors
+        (slothbar-backend-destroy-bar slothbar--backend bar))))
   (when slothbar--backend
     (slothbar-backend-close slothbar--backend)
-    (setq slothbar--backend nil
-          slothbar--bar nil
-          slothbar--visible nil)
     (run-hook-with-args 'slothbar-after-exit-hook))
-  (setq slothbar--bar nil))
+  (setq slothbar--backend nil
+        slothbar--bars nil
+        slothbar--bar nil
+        slothbar--modules nil
+        slothbar--visible nil))
 
 ;;;###autoload
 (define-minor-mode slothbar-mode

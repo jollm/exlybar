@@ -196,6 +196,27 @@
                    '((5 3 :right))))
     (should-not (slothbar--click 100 3 :left))))
 
+(ert-deftest slothbar-unit-multi-bar-pointer-routing ()
+  "Pointer clicks are routed to the bar that received the event."
+  (let* ((backend (make-slothbar-unit-backend :kind 'test))
+         (bar-a (slothbar-create :id "a" :display-backend backend
+                                 :pixel-width 100 :pixel-height 30))
+         (bar-b (slothbar-create :id "b" :display-backend backend
+                                 :pixel-width 100 :pixel-height 30))
+         (module-a (slothbar-unit-clickable-create :name "a" :width 10))
+         (module-b (slothbar-unit-clickable-create :name "b" :width 10))
+         (slothbar--bars (list bar-a bar-b))
+         (slothbar--bar bar-a)
+         (slothbar--enabled t))
+    (setf (slothbar-placements bar-a)
+          (list (list (list 0 0) module-a))
+          (slothbar-placements bar-b)
+          (list (list (list 0 0) module-b)))
+    (should (slothbar--on-pointer-button backend bar-b 4 5 :left))
+    (should (equal (slothbar-unit-clickable-clicks module-b)
+                   '((4 5 :left))))
+    (should (null (slothbar-unit-clickable-clicks module-a)))))
+
 (ert-deftest slothbar-unit-module-gating ()
   "Unsupported modules are dropped during module construction."
   (let ((slothbar--backend (make-slothbar-unit-backend :kind 'test))

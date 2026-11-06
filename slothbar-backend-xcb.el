@@ -633,44 +633,60 @@ DATA the event data"
                      (slothbar-xcb-connection) detail state)))
         (slothbar--log-debug* "keypress: %s" keysym)))))
 
+(defun slothbar-backend-xcb--bar-for-window (backend window)
+  "Return BACKEND's bar whose X window is WINDOW."
+  (cl-find-if
+   (lambda (bar)
+     (let ((surface (slothbar-surface bar)))
+       (and surface
+            (eql window (slothbar-backend-xcb-surface-window surface)))))
+   (slothbar-backend-bars backend)))
+
 (defun slothbar-backend-xcb--on-MotionNotify (backend data _synthetic)
   "Dispatch pointer motion on BACKEND."
   (let ((event (make-instance 'xcb:MotionNotify)))
     (xcb:unmarshal event data)
-    (with-slots (event-x event-y) event
-      (condition-case err
-          (run-hook-with-args 'slothbar-backend-pointer-motion-hook
-                              backend event-x event-y)
-        (error
-         (slothbar--log-debug*
-          "pointer motion hook error: %S" err))))))
+    (let ((bar (slothbar-backend-xcb--bar-for-window
+                backend (slot-value event 'event))))
+      (when bar
+        (with-slots (event-x event-y) event
+          (condition-case err
+              (run-hook-with-args 'slothbar-backend-pointer-motion-hook
+                                  backend bar event-x event-y)
+            (error
+             (slothbar--log-debug*
+              "pointer motion hook error: %S" err))))))))
 
 (defun slothbar-backend-xcb--on-LeaveNotify (backend _data _synthetic)
   "Clear pointer hover state on BACKEND."
-  (condition-case err
-      (run-hook-with-args 'slothbar-backend-pointer-motion-hook
-                          backend nil nil)
-    (error
-     (slothbar--log-debug*
-      "pointer motion hook error: %S" err))))
+  (dolist (bar (slothbar-backend-bars backend))
+    (condition-case err
+        (run-hook-with-args 'slothbar-backend-pointer-motion-hook
+                            backend bar nil nil)
+      (error
+       (slothbar--log-debug*
+        "pointer motion hook error: %S" err)))))
 
 (defun slothbar-backend-xcb--on-ButtonPress (backend data _synthetic)
   "Dispatch a pointer button press on BACKEND."
   (let ((event (make-instance 'xcb:ButtonPress)))
     (xcb:unmarshal event data)
-    (with-slots (event-x event-y detail) event
-      (let ((button (pcase detail
-                      (1 :left)
-                      (2 :middle)
-                      (3 :right))))
-        (when button
-          (condition-case err
-              (run-hook-with-args
-               'slothbar-backend-pointer-button-hook
-               backend event-x event-y button)
-            (error
-             (slothbar--log-debug*
-              "pointer button hook error: %S" err))))))))
+    (let ((bar (slothbar-backend-xcb--bar-for-window
+                backend (slot-value event 'event))))
+      (when bar
+        (with-slots (event-x event-y detail) event
+          (let ((button (pcase detail
+                          (1 :left)
+                          (2 :middle)
+                          (3 :right))))
+            (when button
+              (condition-case err
+                  (run-hook-with-args
+                   'slothbar-backend-pointer-button-hook
+                   backend bar event-x event-y button)
+                (error
+                 (slothbar--log-debug*
+                  "pointer button hook error: %S" err))))))))))
 
 (defun slothbar-backend-xcb--on-Expose (data _synthetic)
   "Can draw things after Expose.
@@ -747,6 +763,7 @@ DATA the event data"
                                                :drawable parent))
                             'depth)))
     (setf (slothbar-surface bar) surface)
+    (push bar (slothbar-backend-bars backend))
     (slothbar--log-debug* "Slothbar window id: %s" id)
     (xcb:+request connection
         (make-instance 'xcb:CreateWindow
@@ -834,7 +851,9 @@ DATA the event data"
               (make-instance 'xcb:DestroyWindow :window window))))
       (clrhash (slothbar-backend-xcb-surface-module-surfaces surface))
       (xcb:flush connection))
-    (setf (slothbar-surface bar) nil)))
+    (setf (slothbar-surface bar) nil
+          (slothbar-backend-bars backend)
+          (delq bar (slothbar-backend-bars backend)))))
 
 (cl-defmethod slothbar-backend-close ((backend slothbar-backend-xcb))
   "Tear down BACKEND's connection."

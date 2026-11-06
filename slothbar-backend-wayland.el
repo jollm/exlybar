@@ -135,21 +135,27 @@
              (and manager
                   (not (elwl-foreign-toplevel-manager-dead-p manager)))))))
 
+(defun slothbar-backend-wayland--bar-for-pointer (backend)
+  "Return BACKEND's bar under the pointer, if any."
+  (cl-find-if
+   (lambda (bar)
+     (let ((state (slothbar-surface bar)))
+       (and state
+            (eq (slothbar-backend-wayland-pointer-surface backend)
+                (slothbar-backend-wayland-surface-surface state)))))
+   (slothbar-backend-bars backend)))
+
 (defun slothbar-backend-wayland--pointer-motion (backend x y)
-  "Dispatch pointer motion at X,Y on BACKEND when over the bar."
-  (let* ((bar slothbar--bar)
-         (state (and bar (slothbar-surface bar))))
-    (when (and state
-               (eq (slothbar-backend-wayland-pointer-surface backend)
-                   (slothbar-backend-wayland-surface-surface state)))
+  "Dispatch pointer motion at X,Y on BACKEND when over a bar."
+  (when-let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
     (condition-case err
         (run-hook-with-args
          'slothbar-backend-pointer-motion-hook
-         backend
+         backend bar
          (and x (round x))
          (and y (round y)))
       (error
-       (slothbar--log-debug* "pointer motion hook error: %S" err))))))
+       (slothbar--log-debug* "pointer motion hook error: %S" err)))))
 
 (defun slothbar-backend-wayland--ensure-pointer (backend)
   "Create BACKEND's pointer when the seat advertises one."
@@ -196,13 +202,10 @@
 
 (defun slothbar-backend-wayland--pointer-button (backend arguments)
   "Dispatch a pointer button event from ARGUMENTS on BACKEND."
-  (let* ((bar slothbar--bar)
-         (state (and bar (slothbar-surface bar))))
-    (when (and state
+  (let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
+    (when (and bar
                (or (eq (alist-get 'state arguments) 'pressed)
-                   (eql (alist-get 'state arguments) 1))
-               (eq (slothbar-backend-wayland-pointer-surface backend)
-                   (slothbar-backend-wayland-surface-surface state)))
+                   (eql (alist-get 'state arguments) 1)))
     (let ((button (pcase (alist-get 'button arguments)
                     (272 :left)
                     (273 :right)
@@ -211,7 +214,7 @@
         (condition-case err
             (run-hook-with-args
              'slothbar-backend-pointer-button-hook
-             backend
+             backend bar
              (round (or (slothbar-backend-wayland-pointer-x backend) 0))
              (round (or (slothbar-backend-wayland-pointer-y backend) 0))
              button)
@@ -671,9 +674,16 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-create-bar
     ((backend slothbar-backend-wayland) (bar slothbar))
   "Create BAR's layer surface on BACKEND."
-  (let* ((output (or (slothbar-output bar)
-                     (slothbar-backend-wayland--select-output
-                      (slothbar-backend-wayland-outputs backend))))
+  (let* ((outputs (slothbar-backend-wayland-outputs backend))
+         (requested (slothbar-output bar))
+         (output (cond
+                  ((and (stringp requested)
+                        (cl-find requested outputs
+                                 :key #'elwl-output-name :test #'equal))
+                   (cl-find requested outputs
+                            :key #'elwl-output-name :test #'equal))
+                  ((elwl-output-p requested) requested)
+                  (t (slothbar-backend-wayland--select-output outputs))))
          (scale (or (and output (elwl-output-scale output)) 1))
          (surface (elwl-compositor-create-surface
                    (slothbar-backend-wayland-compositor backend)))
@@ -696,6 +706,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                                             slothbar-height)))))
     (setf (slothbar-output bar) output
           (slothbar-surface bar) state)
+    (push bar (slothbar-backend-bars backend))
     (when (>= (elwl-object-version surface) 3)
       (elwl-surface-set-buffer-scale surface scale))
     (elwl-object-add-listener
@@ -714,7 +725,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     state))
 
 (cl-defmethod slothbar-backend-destroy-bar
-    ((_backend slothbar-backend-wayland) (bar slothbar))
+    ((backend slothbar-backend-wayland) (bar slothbar))
   "Destroy BAR's layer surface and buffers on BACKEND."
   (let ((surface (slothbar-surface bar)))
     (when surface
@@ -735,7 +746,9 @@ VISIBLE non-nil reserves the bar's exclusive zone."
           (let ((pair (pop retired)))
             (ignore-errors
               (slothbar-backend-wayland--destroy-pool (car pair) (cdr pair)))))))
-    (setf (slothbar-surface bar) nil)))
+    (setf (slothbar-surface bar) nil
+          (slothbar-backend-bars backend)
+          (delq bar (slothbar-backend-bars backend)))))
 
 (cl-defmethod slothbar-backend-close ((backend slothbar-backend-wayland))
   "Tear down BACKEND's shared Wayland objects and connection."

@@ -55,7 +55,8 @@
      (:constructor slothbar-backend--make)
      (:copier nil))
   "Base type for slothbar display backends."
-  (kind nil :type 'symbol))
+  (kind nil :type 'symbol)
+  bars)
 
 (defvar slothbar--backend nil
   "The active `slothbar-backend', or nil when slothbar is stopped.")

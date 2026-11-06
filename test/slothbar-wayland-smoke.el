@@ -139,7 +139,7 @@
             (setf (slothbar-backend-wayland-pointer-surface backend) surface
                   (slothbar-backend-wayland-pointer-x backend) 12
                   (slothbar-backend-wayland-pointer-y backend) 7)
-            (let ((function (lambda (_backend _x _y _button)
+            (let ((function (lambda (_backend _bar _x _y _button)
                               (push (list _x _y _button) clicks))))
               (add-hook 'slothbar-backend-pointer-button-hook function)
               (unwind-protect
@@ -323,11 +323,26 @@
             slothbar--bar nil)))
 
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
-  (setq slothbar-modules
-        (list (lambda ()
-                (slothbar-module-create
-                 :name "live" :format "live" :lpad 2 :rpad 2))))
+  (setq slothbar-bars
+        (list (list :id "one"
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "live-one" :format "one"
+                             :lpad 2 :rpad 2))))
+              (list :id "two"
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "live-two" :format "two"
+                             :lpad 2 :rpad 2))))))
   (slothbar--start)
+  (slothbar-wayland-check
+   "core start created two bars"
+   (= 2 (length slothbar--bars)))
+  (slothbar-wayland-check
+   "every bar has a Wayland surface"
+   (cl-every (lambda (bar) (slothbar-surface bar)) slothbar--bars))
   (slothbar-wayland-check "core start enabled slothbar"
                           (slothbar-enabled-p))
   (slothbar-wayland-check
@@ -343,6 +358,8 @@
                           (not (slothbar-enabled-p)))
   (slothbar-wayland-check "core exit cleared the backend"
                           (null slothbar--backend))
+  (slothbar-wayland-check "core exit cleared the bars"
+                          (null slothbar--bars))
   (let ((auto (slothbar-backend-create 'auto)))
     (slothbar-wayland-check
      "auto selects the Wayland backend when available"
