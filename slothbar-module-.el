@@ -192,14 +192,22 @@ This default primary method redraws M through the display backend."
         (slothbar-module-cache m) nil
         (slothbar-module-text m) nil))
 
+(defvar slothbar--bars)
+
 (defsubst slothbar-module--find-by-name (module-name)
-  "Find all instances of modules with names equivalent to MODULE-NAME."
-  (cl-remove-if-not
-   (lambda (m)
-     (equal module-name
-            (when (slothbar-module-p m)
-              (slothbar-module-name m))))
-   slothbar--modules))
+  "Find all instances of modules with names equivalent to MODULE-NAME.
+
+Search every active bar, not just the legacy global module list."
+  (let ((modules (if (bound-and-true-p slothbar--bars)
+                     (cl-loop for bar in slothbar--bars
+                              append (slothbar-module-list bar))
+                   slothbar--modules)))
+    (cl-remove-if-not
+     (lambda (m)
+       (equal module-name
+              (when (slothbar-module-p m)
+                (slothbar-module-name m))))
+     modules)))
 
 (defun slothbar-module--refresh-all-by-name (module-name)
   "Refresh all instances of modules with names equivalent to MODULE-NAME.
