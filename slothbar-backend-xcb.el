@@ -69,7 +69,15 @@
      (:constructor slothbar-backend-xcb--make)
      (:copier nil))
   "An xcb display backend."
-  connection
+  connection)
+
+(cl-defstruct
+    (slothbar-backend-xcb-surface
+     (:constructor slothbar-backend-xcb-surface--make)
+     (:copier nil))
+  "Per-bar X window and pixel resources."
+  backend
+  bar
   window
   gc
   pixmap
@@ -85,6 +93,31 @@
   gs
   cache
   width)
+
+(defun slothbar-backend-xcb--current-surface ()
+  "Return the current bar's xcb surface, if any."
+  (let ((bar slothbar--bar))
+    (and bar (slothbar-surface bar))))
+
+(defun slothbar-backend-xcb-window (_backend)
+  "Return BACKEND's current bar window id."
+  (let ((surface (slothbar-backend-xcb--current-surface)))
+    (and surface (slothbar-backend-xcb-surface-window surface))))
+
+(defun slothbar-backend-xcb-gc (_backend)
+  "Return BACKEND's current bar GC id."
+  (let ((surface (slothbar-backend-xcb--current-surface)))
+    (and surface (slothbar-backend-xcb-surface-gc surface))))
+
+(defun slothbar-backend-xcb-pixmap (_backend)
+  "Return BACKEND's current bar background pixmap id."
+  (let ((surface (slothbar-backend-xcb--current-surface)))
+    (and surface (slothbar-backend-xcb-surface-pixmap surface))))
+
+(defun slothbar-backend-xcb-module-surfaces (_backend)
+  "Return BACKEND's current bar module-surface table."
+  (let ((surface (slothbar-backend-xcb--current-surface)))
+    (and surface (slothbar-backend-xcb-surface-module-surfaces surface))))
 
 (defun slothbar-backend-xcb-create ()
   "Create an unopened xcb backend."
@@ -153,8 +186,8 @@
 
 (defun slothbar-xcb-window ()
   "Return the active slothbar X window, or nil."
-  (when (slothbar-backend-xcb-p slothbar--backend)
-    (slothbar-backend-xcb-window slothbar--backend)))
+  (let ((surface (and slothbar--bar (slothbar-surface slothbar--bar))))
+    (and surface (slothbar-backend-xcb-surface-window surface))))
 
 (defun slothbar-xcb-root-window-id ()
   "Return the root window id of the active xcb connection, or nil."
@@ -657,11 +690,8 @@ DATA the event data"
 ;;; Backend lifecycle
 
 (cl-defmethod slothbar-backend-open ((backend slothbar-backend-xcb))
-  "Open BACKEND's connection and dock window."
-  (let* ((background-pixel (slothbar-backend-xcb--background-pixel))
-         (y slothbar-offset-y)
-         connection parent depth)
-    (setq connection (xcb:connect))
+  "Open BACKEND's X connection.  Bar windows are created separately."
+  (let ((connection (xcb:connect)))
     (setf (slothbar-backend-xcb-connection backend) connection)
     ;; apparently ewmh initializes icccm automatically
     (xcb:ewmh:init connection)
@@ -669,86 +699,6 @@ DATA the event data"
      backend (slothbar-backend-xcb--root-window-id backend)
      xcb:EventMask:PropertyChange)
     (set-process-query-on-exit-flag (slot-value connection 'process) nil)
-    ;; initialize the bar window
-    (let ((id (xcb:generate-id connection)))
-      (setf (slothbar-backend-xcb-window backend) id)
-      (slothbar--log-debug* "Slothbar window id: %s" id)
-      (setq parent (slothbar-backend-xcb--root-window-id backend)
-            depth (slot-value (xcb:+request-unchecked+reply
-                                  connection
-                                  (make-instance 'xcb:GetGeometry
-                                                 :drawable parent))
-                              'depth))
-      (xcb:+request connection
-          (make-instance 'xcb:CreateWindow
-                         :depth depth
-                         :wid id
-                         :parent parent
-                         :override-redirect 1
-                         :x slothbar-offset-x
-                         :y y
-                         :width 1
-                         :height slothbar-height
-                         :border-width 1
-                         :class xcb:WindowClass:InputOutput
-                         :visual 0
-                         :value-mask (logior xcb:CW:BackPixmap
-                                             (if background-pixel
-                                                 xcb:CW:BackPixel 0)
-                                             xcb:CW:EventMask)
-                         :background-pixmap xcb:BackPixmap:ParentRelative
-                         :background-pixel background-pixel
-                         :event-mask (logior xcb:EventMask:Exposure
-                                             xcb:EventMask:KeyPress
-                                             xcb:EventMask:ButtonPress
-                                             xcb:EventMask:PointerMotion
-                                             xcb:EventMask:LeaveWindow
-                                             xcb:EventMask:PropertyChange
-                                             xcb:EventMask:SubstructureNotify)))
-      ;; Set WM_NAME and WM_CLASS.
-      (xcb:+request connection
-          (make-instance 'xcb:icccm:set-WM_NAME
-                         :window id
-                         :data "slothbar"))
-      (xcb:+request connection
-          (make-instance 'xcb:icccm:set-WM_CLASS
-                         :window id
-                         :instance-name "slothbar"
-                         :class-name "Slothbar"))
-      ;; dock the window
-      (xcb:+request connection
-          (make-instance 'xcb:ewmh:set-_NET_WM_WINDOW_TYPE
-                         :window id
-                         :data `(,xcb:Atom:_NET_WM_WINDOW_TYPE_DOCK)))
-      ;; state is sticky and above
-      (xcb:+request connection
-          (make-instance 'xcb:ewmh:set-_NET_WM_STATE
-                         :window id
-                         :data `(,xcb:Atom:_NET_WM_STATE_STICKY
-                                 ,xcb:Atom:_NET_WM_STATE_ABOVE))))
-    ;; create gc and background pixmap
-    (setf (slothbar-backend-xcb-gc backend) (xcb:generate-id connection))
-    (setf (slothbar-backend-xcb-pixmap backend) (xcb:generate-id connection))
-    (slothbar-render-create-pixmap connection
-                                   (slothbar-backend-xcb-pixmap backend)
-                                   slothbar-width slothbar-height)
-    (let ((egc
-           (xcb:+request-checked+request-check connection
-               (make-instance 'xcb:CreateGC
-                              :cid (slothbar-backend-xcb-gc backend)
-                              :drawable (slothbar-backend-xcb-window backend)
-                              :value-mask (logior xcb:GC:Background
-                                                  xcb:GC:Foreground)
-                              :background
-                              (slothbar-backend-xcb--background-pixel)
-                              :foreground
-                              (slothbar-backend-xcb--foreground-pixel)))))
-      (slothbar--log-debug* "slothbar init create gc errors: %s" egc))
-    (slothbar-render-fill-rectangle connection
-                                    (slothbar-backend-xcb-gc backend)
-                                    (slothbar-backend-xcb-pixmap backend)
-                                    slothbar-width slothbar-height)
-    (xcb:flush connection)
     ;; Attach event listeners.
     (xcb:+event connection 'xcb:DestroyNotify
                 #'slothbar-backend-xcb--on-DestroyNotify)
@@ -778,28 +728,120 @@ DATA the event data"
                 #'slothbar-backend-xcb--on-Expose)
     backend))
 
+(cl-defmethod slothbar-backend-create-bar
+    ((backend slothbar-backend-xcb) (bar slothbar))
+  "Create BAR's dock window and pixel resources on BACKEND."
+  (let* ((connection (slothbar-backend-xcb-connection backend))
+         (background-pixel (slothbar-backend-xcb--background-pixel))
+         (id (xcb:generate-id connection))
+         (surface (slothbar-backend-xcb-surface--make
+                   :backend backend
+                   :bar bar
+                   :window id
+                   :gc (xcb:generate-id connection)
+                   :pixmap (xcb:generate-id connection)))
+         (parent (slothbar-backend-xcb--root-window-id backend))
+         (depth (slot-value (xcb:+request-unchecked+reply
+                                connection
+                                (make-instance 'xcb:GetGeometry
+                                               :drawable parent))
+                            'depth)))
+    (setf (slothbar-surface bar) surface)
+    (slothbar--log-debug* "Slothbar window id: %s" id)
+    (xcb:+request connection
+        (make-instance 'xcb:CreateWindow
+                       :depth depth
+                       :wid id
+                       :parent parent
+                       :override-redirect 1
+                       :x slothbar-offset-x
+                       :y slothbar-offset-y
+                       :width 1
+                       :height slothbar-height
+                       :border-width 1
+                       :class xcb:WindowClass:InputOutput
+                       :visual 0
+                       :value-mask (logior xcb:CW:BackPixmap
+                                           (if background-pixel
+                                               xcb:CW:BackPixel 0)
+                                           xcb:CW:EventMask)
+                       :background-pixmap xcb:BackPixmap:ParentRelative
+                       :background-pixel background-pixel
+                       :event-mask (logior xcb:EventMask:Exposure
+                                           xcb:EventMask:KeyPress
+                                           xcb:EventMask:ButtonPress
+                                           xcb:EventMask:PointerMotion
+                                           xcb:EventMask:LeaveWindow
+                                           xcb:EventMask:PropertyChange
+                                           xcb:EventMask:SubstructureNotify)))
+    (xcb:+request connection
+        (make-instance 'xcb:icccm:set-WM_NAME
+                       :window id
+                       :data "slothbar"))
+    (xcb:+request connection
+        (make-instance 'xcb:icccm:set-WM_CLASS
+                       :window id
+                       :instance-name "slothbar"
+                       :class-name "Slothbar"))
+    (xcb:+request connection
+        (make-instance 'xcb:ewmh:set-_NET_WM_WINDOW_TYPE
+                       :window id
+                       :data `(,xcb:Atom:_NET_WM_WINDOW_TYPE_DOCK)))
+    (xcb:+request connection
+        (make-instance 'xcb:ewmh:set-_NET_WM_STATE
+                       :window id
+                       :data `(,xcb:Atom:_NET_WM_STATE_STICKY
+                               ,xcb:Atom:_NET_WM_STATE_ABOVE)))
+    (slothbar-render-create-pixmap connection
+                                   (slothbar-backend-xcb-surface-pixmap surface)
+                                   slothbar-width slothbar-height)
+    (let ((egc
+           (xcb:+request-checked+request-check connection
+               (make-instance 'xcb:CreateGC
+                              :cid (slothbar-backend-xcb-surface-gc surface)
+                              :drawable id
+                              :value-mask (logior xcb:GC:Background
+                                                  xcb:GC:Foreground)
+                              :background
+                              (slothbar-backend-xcb--background-pixel)
+                              :foreground
+                              (slothbar-backend-xcb--foreground-pixel)))))
+      (slothbar--log-debug* "slothbar init create gc errors: %s" egc))
+    (slothbar-render-fill-rectangle
+     connection
+     (slothbar-backend-xcb-surface-gc surface)
+     (slothbar-backend-xcb-surface-pixmap surface)
+     slothbar-width slothbar-height)
+    (xcb:flush connection)
+    surface))
+
+(cl-defmethod slothbar-backend-destroy-bar
+    ((backend slothbar-backend-xcb) (bar slothbar))
+  "Destroy BAR's window and pixel resources on BACKEND."
+  (let* ((connection (slothbar-backend-xcb-connection backend))
+         (surface (slothbar-surface bar)))
+    (when (and connection surface)
+      (let ((window (slothbar-backend-xcb-surface-window surface))
+            (gc (slothbar-backend-xcb-surface-gc surface)))
+        (when window
+          (xcb:+request connection
+              (make-instance 'xcb:UnmapWindow :window window)))
+        (when gc
+          (xcb:+request connection
+              (make-instance 'xcb:FreeGC :gc gc)))
+        (when window
+          (xcb:+request-checked+request-check connection
+              (make-instance 'xcb:DestroyWindow :window window))))
+      (clrhash (slothbar-backend-xcb-surface-module-surfaces surface))
+      (xcb:flush connection))
+    (setf (slothbar-surface bar) nil)))
+
 (cl-defmethod slothbar-backend-close ((backend slothbar-backend-xcb))
-  "Tear down BACKEND's connection and window."
-  (let ((connection (slothbar-backend-xcb-connection backend))
-        (window (slothbar-backend-xcb-window backend))
-        (gc (slothbar-backend-xcb-gc backend)))
+  "Tear down BACKEND's connection."
+  (let ((connection (slothbar-backend-xcb-connection backend)))
     (when connection
-      (when window
-        (xcb:+request connection
-            (make-instance 'xcb:UnmapWindow :window window)))
-      (when gc
-        (xcb:+request connection
-            (make-instance 'xcb:FreeGC :gc gc)))
-      (when window
-        (xcb:+request-checked+request-check connection
-            (make-instance 'xcb:DestroyWindow :window window)))
-      (xcb:flush connection)
       (xcb:disconnect connection)
-      (setf (slothbar-backend-xcb-connection backend) nil
-            (slothbar-backend-xcb-window backend) nil
-            (slothbar-backend-xcb-gc backend) nil
-            (slothbar-backend-xcb-pixmap backend) nil)
-      (clrhash (slothbar-backend-xcb-module-surfaces backend))))
+      (setf (slothbar-backend-xcb-connection backend) nil)))
   nil)
 
 (provide 'slothbar-backend-xcb)

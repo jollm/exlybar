@@ -126,12 +126,17 @@ Return VALUE."
 
   ;; Direct backend and module lifecycle.
   (let* ((backend (slothbar-backend-create 'xcb))
+         (bar (slothbar-create :display-backend backend
+                               :pixel-width slothbar-width
+                               :pixel-height slothbar-height))
          (module (slothbar-module-create
                   :name "smoke" :format "hello" :lpad 2 :rpad 2)))
-    (setq slothbar--backend backend)
+    (setq slothbar--backend backend
+          slothbar--bar bar)
     (unwind-protect
         (progn
           (slothbar-backend-open backend)
+          (slothbar-backend-create-bar backend bar)
           (slothbar-smoke--check "opened an xcb connection"
                                  (slothbar-xcb-connection))
           (slothbar-smoke--check "created the bar window"
@@ -188,18 +193,20 @@ Return VALUE."
              (< (slothbar-smoke--pixmap-non-background backend module)
                 before)))
           (slothbar-backend-present
-           backend nil
+           backend bar
            (list (list (list 0 0) module))
            '((0 100)))
-          (slothbar-backend-show backend nil)
-          (slothbar-backend-hide backend nil)
+          (slothbar-backend-show backend bar)
+          (slothbar-backend-hide backend bar)
           (slothbar-module-exit module)
           (slothbar-smoke--check
            "module exit removed its surface"
            (null (gethash module
                           (slothbar-backend-xcb-module-surfaces backend)))))
+      (ignore-errors (slothbar-backend-destroy-bar backend bar))
       (slothbar-backend-close backend)
-      (setq slothbar--backend nil))
+      (setq slothbar--backend nil
+            slothbar--bar nil))
     (slothbar-smoke--check "closed the connection"
                            (null (slothbar-backend-xcb-connection backend))))
 
