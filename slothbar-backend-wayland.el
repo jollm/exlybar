@@ -81,9 +81,7 @@
   compositor
   shm
   layer-shell
-  surface
-  layer-surface
-  output
+  outputs
   ext-workspace-manager
   foreign-toplevel-manager
   seat
@@ -91,6 +89,18 @@
   pointer-surface
   pointer-x
   pointer-y
+  (glyph-cache (make-hash-table :test 'equal) :type 'hash-table))
+
+(cl-defstruct
+    (slothbar-backend-wayland-surface
+     (:constructor slothbar-backend-wayland-surface--make)
+     (:copier nil))
+  "Per-bar Wayland layer surface and frame state."
+  backend
+  bar
+  output
+  surface
+  layer-surface
   (scale 1 :type 'integer)
   (logical-width 0 :type 'integer)
   (logical-height 0 :type 'integer)
@@ -105,8 +115,7 @@
   buffers
   retired
   frame
-  (module-ops (make-hash-table :test 'eq) :type 'hash-table)
-  (glyph-cache (make-hash-table :test 'equal) :type 'hash-table))
+  (module-ops (make-hash-table :test 'eq) :type 'hash-table))
 
 (defun slothbar-backend-wayland-create ()
   "Create an unopened Wayland backend."
@@ -128,8 +137,11 @@
 
 (defun slothbar-backend-wayland--pointer-motion (backend x y)
   "Dispatch pointer motion at X,Y on BACKEND when over the bar."
-  (when (eq (slothbar-backend-wayland-pointer-surface backend)
-            (slothbar-backend-wayland-surface backend))
+  (let* ((bar slothbar--bar)
+         (state (and bar (slothbar-surface bar))))
+    (when (and state
+               (eq (slothbar-backend-wayland-pointer-surface backend)
+                   (slothbar-backend-wayland-surface-surface state)))
     (condition-case err
         (run-hook-with-args
          'slothbar-backend-pointer-motion-hook
@@ -137,7 +149,7 @@
          (and x (round x))
          (and y (round y)))
       (error
-       (slothbar--log-debug* "pointer motion hook error: %S" err)))))
+       (slothbar--log-debug* "pointer motion hook error: %S" err))))))
 
 (defun slothbar-backend-wayland--ensure-pointer (backend)
   "Create BACKEND's pointer when the seat advertises one."
@@ -184,10 +196,13 @@
 
 (defun slothbar-backend-wayland--pointer-button (backend arguments)
   "Dispatch a pointer button event from ARGUMENTS on BACKEND."
-  (when (and (or (eq (alist-get 'state arguments) 'pressed)
-                 (eql (alist-get 'state arguments) 1))
-             (eq (slothbar-backend-wayland-pointer-surface backend)
-                 (slothbar-backend-wayland-surface backend)))
+  (let* ((bar slothbar--bar)
+         (state (and bar (slothbar-surface bar))))
+    (when (and state
+               (or (eq (alist-get 'state arguments) 'pressed)
+                   (eql (alist-get 'state arguments) 1))
+               (eq (slothbar-backend-wayland-pointer-surface backend)
+                   (slothbar-backend-wayland-surface-surface state)))
     (let ((button (pcase (alist-get 'button arguments)
                     (272 :left)
                     (273 :right)
@@ -202,7 +217,7 @@
              button)
           (error
            (slothbar--log-debug*
-            "pointer button hook error: %S" err)))))))
+            "pointer button hook error: %S" err))))))))
 
 (cl-defmethod slothbar-backend-focused-window
   ((backend slothbar-backend-wayland))
@@ -224,9 +239,9 @@
          (not (elwl-workspace-manager-dead manager))
          manager)))
 
-(cl-defmethod slothbar-backend-output ((backend slothbar-backend-wayland))
+(cl-defmethod slothbar-backend-output ((_backend slothbar-backend-wayland))
   "Return BACKEND's selected Wayland output object."
-  (let ((output (slothbar-backend-wayland-output backend)))
+  (let ((output (and slothbar--bar (slothbar-output slothbar--bar))))
     (and output (elwl-output-object output))))
 
 ;;; Colors and pixels
@@ -255,10 +270,10 @@
       (dotimes (_ width) (insert pixel))
       (buffer-string))))
 
-(defun slothbar-backend-wayland--blank-frame (backend)
-  "Return a background-filled frame for BACKEND."
-  (let* ((width (slothbar-backend-wayland-frame-width backend))
-         (height (slothbar-backend-wayland-frame-height backend))
+(defun slothbar-backend-wayland--blank-frame (surface)
+  "Return a background-filled frame for SURFACE."
+  (let* ((width (slothbar-backend-wayland-surface-frame-width surface))
+         (height (slothbar-backend-wayland-surface-frame-height surface))
          (row (slothbar-backend-wayland--row
                width (slothbar--background-color))))
     (with-temp-buffer
@@ -346,13 +361,15 @@ placement."
      (round (* scale glyph-y))
      raster-height))
 
-(defun slothbar-backend-wayland--draw-ops (backend module ops module-x module-y)
-  "Draw MODULE's OPS into BACKEND's frame at MODULE-X, MODULE-Y."
-  (let* ((scale (slothbar-backend-wayland-scale backend))
-         (frame (slothbar-backend-wayland-frame backend))
-         (stride (slothbar-backend-wayland-frame-stride backend))
-         (frame-width (slothbar-backend-wayland-frame-width backend))
-         (frame-height (slothbar-backend-wayland-frame-height backend))
+(defun slothbar-backend-wayland--draw-ops
+    (surface module ops module-x module-y)
+  "Draw MODULE's OPS into SURFACE at MODULE-X, MODULE-Y."
+  (let* ((backend (slothbar-backend-wayland-surface-backend surface))
+         (scale (slothbar-backend-wayland-surface-scale surface))
+         (frame (slothbar-backend-wayland-surface-frame surface))
+         (stride (slothbar-backend-wayland-surface-frame-stride surface))
+         (frame-width (slothbar-backend-wayland-surface-frame-width surface))
+         (frame-height (slothbar-backend-wayland-surface-frame-height surface))
          (colors (slothbar-module-colors module))
          (bg (slothbar-backend-wayland--color-vector
               (or (slothbar-module-rgb-background-color colors)
@@ -383,63 +400,63 @@ placement."
                    left top pixmap width height))))))))))
 
 (defun slothbar-backend-wayland--draw-module
-    (backend module placement-x placement-y)
-  "Draw MODULE into BACKEND's frame at PLACEMENT-X, PLACEMENT-Y."
-  (let* ((scale (slothbar-backend-wayland-scale backend))
+    (surface module placement-x placement-y)
+  "Draw MODULE into SURFACE at PLACEMENT-X, PLACEMENT-Y."
+  (let* ((scale (slothbar-backend-wayland-surface-scale surface))
          (width (* scale (slothbar-module-width module)))
-         (height (* scale (slothbar-backend-wayland-logical-height backend)))
+         (height (* scale (slothbar-backend-wayland-surface-logical-height surface)))
          (colors (slothbar-module-colors module))
          (background (or (slothbar-module-rgb-background-color colors)
                          (slothbar--background-color))))
     (slothbar-backend-wayland--fill-rect
-     (slothbar-backend-wayland-frame backend)
-     (slothbar-backend-wayland-frame-stride backend)
+     (slothbar-backend-wayland-surface-frame surface)
+     (slothbar-backend-wayland-surface-frame-stride surface)
      (* scale placement-x) (* scale placement-y)
      width height background)
     (slothbar-backend-wayland--draw-ops
-     backend module
-     (gethash module (slothbar-backend-wayland-module-ops backend))
+     surface module
+     (gethash module (slothbar-backend-wayland-surface-module-ops surface))
      placement-x placement-y)))
 
-(defun slothbar-backend-wayland--compose-frame (backend layout)
-  "Return a new frame for BACKEND with LAYOUT drawn."
-  (let ((frame (slothbar-backend-wayland--blank-frame backend)))
-    (setf (slothbar-backend-wayland-frame backend) frame)
+(defun slothbar-backend-wayland--compose-frame (surface layout)
+  "Return a new frame for SURFACE with LAYOUT drawn."
+  (let ((frame (slothbar-backend-wayland--blank-frame surface)))
+    (setf (slothbar-backend-wayland-surface-frame surface) frame)
     (dolist (placement layout)
       (pcase-let ((`((,x ,y) ,module) placement))
         (when (slothbar-module-p module)
-          (slothbar-backend-wayland--draw-module backend module x y))))
-    (slothbar-backend-wayland-frame backend)))
+          (slothbar-backend-wayland--draw-module surface module x y))))
+    (slothbar-backend-wayland-surface-frame surface)))
 
 ;;; Shm buffers
 
-(defun slothbar-backend-wayland--release-listener (backend)
-  "Return a buffer-release listener for BACKEND."
+(defun slothbar-backend-wayland--release-listener (surface)
+  "Return a buffer-release listener for SURFACE."
   (lambda (_object _arguments)
-    (when (and (eq slothbar--backend backend)
-               (slothbar-backend-wayland-pending backend))
-      (setf (slothbar-backend-wayland-pending backend) nil)
+    (when (slothbar-backend-wayland-surface-pending surface)
+      (setf (slothbar-backend-wayland-surface-pending surface) nil)
       (run-at-time
        0 nil
        (lambda ()
-         (when (eq slothbar--backend backend)
+         (when (slothbar-enabled-p)
            (slothbar-refresh-modules)))))))
 
-(defun slothbar-backend-wayland--rebuild-frame (backend)
-  "Create a pool, two buffers, and a blank frame for BACKEND."
-  (let* ((scale (slothbar-backend-wayland-scale backend))
-         (logical-width (slothbar-backend-wayland-logical-width backend))
-         (logical-height (slothbar-backend-wayland-logical-height backend))
+(defun slothbar-backend-wayland--rebuild-frame (surface)
+  "Create a pool, two buffers, and a blank frame for SURFACE."
+  (let* ((backend (slothbar-backend-wayland-surface-backend surface))
+         (scale (slothbar-backend-wayland-surface-scale surface))
+         (logical-width (slothbar-backend-wayland-surface-logical-width surface))
+         (logical-height (slothbar-backend-wayland-surface-logical-height surface))
          (width (* logical-width scale))
          (height (* logical-height scale))
          (stride (* width 4))
          (bytes (* stride height))
-         (old-pool (slothbar-backend-wayland-pool backend))
-         (old-buffers (slothbar-backend-wayland-buffers backend))
+         (old-pool (slothbar-backend-wayland-surface-pool surface))
+         (old-buffers (slothbar-backend-wayland-surface-buffers surface))
          (shm (slothbar-backend-wayland-shm backend)))
     (when old-pool
       (push (cons old-pool old-buffers)
-            (slothbar-backend-wayland-retired backend)))
+            (slothbar-backend-wayland-surface-retired surface)))
     (let* ((pool (elwl-shm-create-pool shm (* bytes 2)))
            (buffers (list (elwl-shm-pool-create-buffer
                            pool width height 'argb8888 0)
@@ -448,18 +465,18 @@ placement."
       (dolist (buffer buffers)
         (elwl-object-add-listener
          (elwl-shm-buffer-object buffer) 'release
-         (slothbar-backend-wayland--release-listener backend)))
-      (setf (slothbar-backend-wayland-pool backend) pool
-            (slothbar-backend-wayland-buffers backend) buffers
-            (slothbar-backend-wayland-frame-width backend) width
-            (slothbar-backend-wayland-frame-height backend) height
-            (slothbar-backend-wayland-frame-stride backend) stride
-            (slothbar-backend-wayland-frame backend)
-            (slothbar-backend-wayland--blank-frame backend)
-            (slothbar-backend-wayland-rendered backend) nil
-            (slothbar-backend-wayland-presented backend) nil
-            (slothbar-backend-wayland-pending backend) nil))
-    backend))
+         (slothbar-backend-wayland--release-listener surface)))
+      (setf (slothbar-backend-wayland-surface-pool surface) pool
+            (slothbar-backend-wayland-surface-buffers surface) buffers
+            (slothbar-backend-wayland-surface-frame-width surface) width
+            (slothbar-backend-wayland-surface-frame-height surface) height
+            (slothbar-backend-wayland-surface-frame-stride surface) stride
+            (slothbar-backend-wayland-surface-frame surface)
+            (slothbar-backend-wayland--blank-frame surface)
+            (slothbar-backend-wayland-surface-rendered surface) nil
+            (slothbar-backend-wayland-surface-presented surface) nil
+            (slothbar-backend-wayland-surface-pending surface) nil))
+    surface))
 
 (defun slothbar-backend-wayland--destroy-pool (pool buffers)
   "Destroy BUFFERS and POOL."
@@ -469,39 +486,39 @@ placement."
   (when (elwl-shm-pool-p pool)
     (elwl-shm-pool-destroy pool)))
 
-(defun slothbar-backend-wayland--cleanup-retired (backend)
-  "Destroy BACKEND's retired pools after their buffers are no longer needed."
-  (let ((retired (slothbar-backend-wayland-retired backend)))
+(defun slothbar-backend-wayland--cleanup-retired (surface)
+  "Destroy SURFACE's retired pools after their buffers are no longer needed."
+  (let ((retired (slothbar-backend-wayland-surface-retired surface)))
     (while retired
       (let ((pair (pop retired)))
         (slothbar-backend-wayland--destroy-pool (car pair) (cdr pair))))
-    (setf (slothbar-backend-wayland-retired backend) nil)))
+    (setf (slothbar-backend-wayland-surface-retired surface) nil)))
 
-(defun slothbar-backend-wayland--present-frame (backend frame)
-  "Attach and commit FRAME on BACKEND's surface.
+(defun slothbar-backend-wayland--present-frame (surface frame)
+  "Attach and commit FRAME on SURFACE.
 Return non-nil if a buffer was presented."
   (let ((buffer (cl-find-if #'elwl-shm-buffer-free-p
-                            (slothbar-backend-wayland-buffers backend))))
+                            (slothbar-backend-wayland-surface-buffers surface))))
     (if (not buffer)
         (progn
-          (setf (slothbar-backend-wayland-pending backend) t)
+          (setf (slothbar-backend-wayland-surface-pending surface) t)
           nil)
       (elwl-shm-buffer-acquire buffer)
       (condition-case err
           (progn
             (elwl-shm-buffer-write buffer frame)
-            (elwl-surface-attach (slothbar-backend-wayland-surface backend)
+            (elwl-surface-attach (slothbar-backend-wayland-surface-surface surface)
                                  (elwl-shm-buffer-object buffer))
             (elwl-surface-damage
-             (slothbar-backend-wayland-surface backend)
+             (slothbar-backend-wayland-surface-surface surface)
              0 0
-             (slothbar-backend-wayland-logical-width backend)
-             (slothbar-backend-wayland-logical-height backend))
-            (elwl-surface-commit (slothbar-backend-wayland-surface backend))
+             (slothbar-backend-wayland-surface-logical-width surface)
+             (slothbar-backend-wayland-surface-logical-height surface))
+            (elwl-surface-commit (slothbar-backend-wayland-surface-surface surface))
             (elwl-shm-buffer-submit buffer)
-            (slothbar-backend-wayland--cleanup-retired backend)
-            (setf (slothbar-backend-wayland-pending backend) nil
-                  (slothbar-backend-wayland-presented backend) t)
+            (slothbar-backend-wayland--cleanup-retired surface)
+            (setf (slothbar-backend-wayland-surface-pending surface) nil
+                  (slothbar-backend-wayland-surface-presented surface) t)
             t)
         (error
          (when (elwl-shm-buffer-leased-p buffer)
@@ -510,17 +527,17 @@ Return non-nil if a buffer was presented."
 
 ;;; Layer-shell configuration
 
-(defun slothbar-backend-wayland--exclusive-zone (backend)
-  "Return BACKEND's exclusive zone."
-  (+ (slothbar-backend-wayland-logical-height backend)
+(defun slothbar-backend-wayland--exclusive-zone (surface)
+  "Return SURFACE's exclusive zone."
+  (+ (slothbar-backend-wayland-surface-logical-height surface)
      slothbar-margin-y))
 
-(defun slothbar-backend-wayland--apply-layer-state (backend visible)
-  "Apply size, anchors, margins, and zone to BACKEND's layer surface.
+(defun slothbar-backend-wayland--apply-layer-state (surface visible)
+  "Apply size, anchors, margins, and zone to SURFACE's layer surface.
 VISIBLE non-nil reserves the bar's exclusive zone."
-  (let ((layer (slothbar-backend-wayland-layer-surface backend)))
+  (let ((layer (slothbar-backend-wayland-surface-layer-surface surface)))
     (elwl-layer-surface-set-size
-     layer 0 (slothbar-backend-wayland-logical-height backend))
+     layer 0 (slothbar-backend-wayland-surface-logical-height surface))
     (elwl-layer-surface-set-anchor
      layer (if slothbar-is-bottom '(bottom left right) '(top left right)))
     (elwl-layer-surface-set-margin
@@ -531,33 +548,35 @@ VISIBLE non-nil reserves the bar's exclusive zone."
      0)
     (elwl-layer-surface-set-keyboard-interactivity layer 'none)
     (elwl-layer-surface-set-exclusive-zone
-     layer (if visible (slothbar-backend-wayland--exclusive-zone backend) 0))
+     layer (if visible (slothbar-backend-wayland--exclusive-zone surface) 0))
     layer))
 
-(defun slothbar-backend-wayland--on-configure (backend arguments)
-  "Handle a layer-surface configure for BACKEND."
-  (let* ((serial (alist-get 'serial arguments))
+(defun slothbar-backend-wayland--on-configure (surface arguments)
+  "Handle a layer-surface configure for SURFACE."
+  (let* ((bar (slothbar-backend-wayland-surface-bar surface))
+         (serial (alist-get 'serial arguments))
          (width (alist-get 'width arguments))
          (height (alist-get 'height arguments))
-         (initial (null (slothbar-backend-wayland-configured-serial backend)))
+         (initial (null (slothbar-backend-wayland-surface-configured-serial surface)))
          (new-width (if (and (integerp width) (> width 0))
                         width
-                      (slothbar-backend-wayland-logical-width backend))))
+                      (slothbar-backend-wayland-surface-logical-width surface))))
     (elwl-layer-surface-ack-configure
-     (slothbar-backend-wayland-layer-surface backend) serial)
-    (setf (slothbar-backend-wayland-configured-serial backend) serial)
+     (slothbar-backend-wayland-surface-layer-surface surface) serial)
+    (setf (slothbar-backend-wayland-surface-configured-serial surface) serial)
     (when (and height (> height 0)
-               (/= height (slothbar-backend-wayland-logical-height backend)))
+               (/= height (slothbar-backend-wayland-surface-logical-height surface)))
       (slothbar--log-debug*
        "wayland configure height %s differs from slothbar-height %s"
-       height (slothbar-backend-wayland-logical-height backend)))
+       height (slothbar-backend-wayland-surface-logical-height surface)))
     (when (or initial
-              (/= new-width (slothbar-backend-wayland-logical-width backend)))
-      (setf (slothbar-backend-wayland-logical-width backend) new-width)
-      (when (and slothbar--backend
-                 (eq slothbar--backend backend))
+              (/= new-width (slothbar-backend-wayland-surface-logical-width surface)))
+      (setf (slothbar-backend-wayland-surface-logical-width surface) new-width)
+      (when bar
+        (setf (slothbar-pixel-width bar) new-width))
+      (when (eq bar slothbar--bar)
         (setq slothbar-width new-width))
-      (slothbar-backend-wayland--rebuild-frame backend)
+      (slothbar-backend-wayland--rebuild-frame surface)
       (unless initial
         (run-at-time 0 nil #'slothbar-refresh-modules)))))
 
@@ -578,7 +597,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 ;;; Backend protocol
 
 (cl-defmethod slothbar-backend-open ((backend slothbar-backend-wayland))
-  "Open BACKEND's Wayland connection and layer surface."
+  "Open BACKEND's shared Wayland connection and protocol managers."
   (condition-case err
       (let* ((protocols (list (elwl-protocol-load-wayland)
                               (elwl-protocol-load-layer-shell)
@@ -607,10 +626,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
             ;; Names and scale arrive as events.
             (elwl-roundtrip connection)
             (slothbar-backend-wayland--ensure-pointer backend)
-            (let* ((output (slothbar-backend-wayland--select-output outputs))
-                   (scale (or (and output (elwl-output-scale output)) 1)))
-              (setf (slothbar-backend-wayland-output backend) output
-                    (slothbar-backend-wayland-scale backend) scale)))
+            (setf (slothbar-backend-wayland-outputs backend) outputs))
           (when (elwl-registry-find registry 'zwlr-foreign-toplevel-manager-v1)
             (let ((manager
                    (elwl-foreign-toplevel-manager-bind
@@ -647,44 +663,82 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                        2)
                 (slothbar--log-debug*
                  "ext-workspace initial sync timed out"))))
-          (let* ((surface (elwl-compositor-create-surface
-                           (slothbar-backend-wayland-compositor backend)))
-                 (output (slothbar-backend-wayland-output backend))
-                 (layer (elwl-layer-shell-create
-                         (slothbar-backend-wayland-layer-shell backend)
-                         surface
-                         :layer 'top
-                         :namespace "slothbar"
-                         :output (and output (elwl-output-object output)))))
-            (setf (slothbar-backend-wayland-surface backend) surface
-                  (slothbar-backend-wayland-layer-surface backend) layer
-                  (slothbar-backend-wayland-logical-width backend)
-                  (max 1 (or slothbar-width 1))
-                  (slothbar-backend-wayland-logical-height backend)
-                  (max 1 slothbar-height))
-            (when (>= (elwl-object-version surface) 3)
-              (elwl-surface-set-buffer-scale
-               surface (slothbar-backend-wayland-scale backend)))
-            (elwl-object-add-listener
-             layer 'configure
-             (lambda (_object arguments)
-               (slothbar-backend-wayland--on-configure backend arguments)))
-            (slothbar-backend-wayland--rebuild-frame backend)
-            (slothbar-backend-wayland--apply-layer-state backend nil)
-            (elwl-surface-commit surface)
-            (unless (slothbar-backend-wayland--wait-for
-                     backend
-                     (lambda ()
-                       (slothbar-backend-wayland-configured-serial backend))
-                     5)
-              (error "Timed out waiting for a layer-surface configure"))))
-        backend)
+          backend))
     (error
      (ignore-errors (slothbar-backend-close backend))
      (signal (car err) (cdr err)))))
 
+(cl-defmethod slothbar-backend-create-bar
+    ((backend slothbar-backend-wayland) (bar slothbar))
+  "Create BAR's layer surface on BACKEND."
+  (let* ((output (or (slothbar-output bar)
+                     (slothbar-backend-wayland--select-output
+                      (slothbar-backend-wayland-outputs backend))))
+         (scale (or (and output (elwl-output-scale output)) 1))
+         (surface (elwl-compositor-create-surface
+                   (slothbar-backend-wayland-compositor backend)))
+         (layer (elwl-layer-shell-create
+                 (slothbar-backend-wayland-layer-shell backend)
+                 surface
+                 :layer 'top
+                 :namespace "slothbar"
+                 :output (and output (elwl-output-object output))))
+         (state (slothbar-backend-wayland-surface--make
+                 :backend backend
+                 :bar bar
+                 :output output
+                 :surface surface
+                 :layer-surface layer
+                 :scale scale
+                 :logical-width (max 1 (or (slothbar-pixel-width bar)
+                                           slothbar-width 1))
+                 :logical-height (max 1 (or (slothbar-pixel-height bar)
+                                            slothbar-height)))))
+    (setf (slothbar-output bar) output
+          (slothbar-surface bar) state)
+    (when (>= (elwl-object-version surface) 3)
+      (elwl-surface-set-buffer-scale surface scale))
+    (elwl-object-add-listener
+     layer 'configure
+     (lambda (_object arguments)
+       (slothbar-backend-wayland--on-configure state arguments)))
+    (slothbar-backend-wayland--rebuild-frame state)
+    (slothbar-backend-wayland--apply-layer-state state nil)
+    (elwl-surface-commit surface)
+    (unless (slothbar-backend-wayland--wait-for
+             backend
+             (lambda ()
+               (slothbar-backend-wayland-surface-configured-serial state))
+             5)
+      (error "Timed out waiting for a layer-surface configure"))
+    state))
+
+(cl-defmethod slothbar-backend-destroy-bar
+    ((_backend slothbar-backend-wayland) (bar slothbar))
+  "Destroy BAR's layer surface and buffers on BACKEND."
+  (let ((surface (slothbar-surface bar)))
+    (when surface
+      (when (slothbar-backend-wayland-surface-layer-surface surface)
+        (ignore-errors
+          (elwl-layer-surface-destroy
+           (slothbar-backend-wayland-surface-layer-surface surface))))
+      (when (slothbar-backend-wayland-surface-surface surface)
+        (ignore-errors
+          (elwl-surface-destroy
+           (slothbar-backend-wayland-surface-surface surface))))
+      (ignore-errors
+        (slothbar-backend-wayland--destroy-pool
+         (slothbar-backend-wayland-surface-pool surface)
+         (slothbar-backend-wayland-surface-buffers surface)))
+      (let ((retired (slothbar-backend-wayland-surface-retired surface)))
+        (while retired
+          (let ((pair (pop retired)))
+            (ignore-errors
+              (slothbar-backend-wayland--destroy-pool (car pair) (cdr pair)))))))
+    (setf (slothbar-surface bar) nil)))
+
 (cl-defmethod slothbar-backend-close ((backend slothbar-backend-wayland))
-  "Tear down BACKEND's Wayland objects and connection."
+  "Tear down BACKEND's shared Wayland objects and connection."
   (when (slothbar-backend-wayland-ext-workspace-manager backend)
     (ignore-errors
       (elwl-workspace-manager-stop
@@ -699,26 +753,6 @@ VISIBLE non-nil reserves the bar's exclusive zone."
   (when (slothbar-backend-wayland-seat backend)
     (ignore-errors
       (elwl-seat-release (slothbar-backend-wayland-seat backend))))
-  (when (slothbar-backend-wayland-layer-surface backend)
-    (ignore-errors
-      (elwl-layer-surface-destroy
-       (slothbar-backend-wayland-layer-surface backend))))
-  (when (slothbar-backend-wayland-surface backend)
-    (ignore-errors
-      (elwl-surface-destroy (slothbar-backend-wayland-surface backend))))
-  (when (slothbar-backend-wayland-pool backend)
-    (ignore-errors
-      (slothbar-backend-wayland--destroy-pool
-       (slothbar-backend-wayland-pool backend)
-       (slothbar-backend-wayland-buffers backend))))
-  (let ((retired (slothbar-backend-wayland-retired backend)))
-    (while retired
-      (let ((pair (pop retired)))
-        (ignore-errors
-          (slothbar-backend-wayland--destroy-pool (car pair) (cdr pair))))))
-  (when (slothbar-backend-wayland-output backend)
-    (ignore-errors
-      (elwl-output-release (slothbar-backend-wayland-output backend))))
   (when (slothbar-backend-wayland-connection backend)
     (ignore-errors
       (elwl-disconnect (slothbar-backend-wayland-connection backend))))
@@ -727,71 +761,85 @@ VISIBLE non-nil reserves the bar's exclusive zone."
         (slothbar-backend-wayland-compositor backend) nil
         (slothbar-backend-wayland-shm backend) nil
         (slothbar-backend-wayland-layer-shell backend) nil
-        (slothbar-backend-wayland-surface backend) nil
-        (slothbar-backend-wayland-layer-surface backend) nil
-        (slothbar-backend-wayland-output backend) nil
+        (slothbar-backend-wayland-outputs backend) nil
         (slothbar-backend-wayland-ext-workspace-manager backend) nil
         (slothbar-backend-wayland-foreign-toplevel-manager backend) nil
         (slothbar-backend-wayland-seat backend) nil
         (slothbar-backend-wayland-pointer backend) nil
         (slothbar-backend-wayland-pointer-surface backend) nil
         (slothbar-backend-wayland-pointer-x backend) nil
-        (slothbar-backend-wayland-pointer-y backend) nil
-        (slothbar-backend-wayland-pool backend) nil
-        (slothbar-backend-wayland-buffers backend) nil
-        (slothbar-backend-wayland-retired backend) nil
-        (slothbar-backend-wayland-frame backend) nil)
+        (slothbar-backend-wayland-pointer-y backend) nil)
   nil)
 
-(cl-defmethod slothbar-backend-show ((backend slothbar-backend-wayland))
-  "Show BACKEND's bar and reserve its exclusive zone."
-  (slothbar-backend-wayland--apply-layer-state backend t)
-  (if (and (slothbar-backend-wayland-rendered backend)
-           (slothbar-backend-wayland-frame backend))
-      (slothbar-backend-wayland--present-frame
-       backend (slothbar-backend-wayland-frame backend))
-    (elwl-surface-commit (slothbar-backend-wayland-surface backend))))
+(cl-defmethod slothbar-backend-show
+    ((_backend slothbar-backend-wayland) (bar slothbar))
+  "Show BAR and reserve its exclusive zone."
+  (when-let ((surface (slothbar-surface bar)))
+    (slothbar-backend-wayland--apply-layer-state surface t)
+    (if (and (slothbar-backend-wayland-surface-rendered surface)
+             (slothbar-backend-wayland-surface-frame surface))
+        (slothbar-backend-wayland--present-frame
+         surface (slothbar-backend-wayland-surface-frame surface))
+      (elwl-surface-commit
+       (slothbar-backend-wayland-surface-surface surface)))))
 
-(cl-defmethod slothbar-backend-hide ((backend slothbar-backend-wayland))
-  "Hide BACKEND's bar and release its exclusive zone."
-  (setf (slothbar-backend-wayland-pending backend) nil
-        (slothbar-backend-wayland-presented backend) nil)
-  (elwl-layer-surface-set-exclusive-zone
-   (slothbar-backend-wayland-layer-surface backend) 0)
-  (elwl-surface-attach (slothbar-backend-wayland-surface backend) nil)
-  (elwl-surface-commit (slothbar-backend-wayland-surface backend)))
+(cl-defmethod slothbar-backend-hide
+    ((_backend slothbar-backend-wayland) (bar slothbar))
+  "Hide BAR and release its exclusive zone."
+  (when-let ((surface (slothbar-surface bar)))
+    (setf (slothbar-backend-wayland-surface-pending surface) nil
+          (slothbar-backend-wayland-surface-presented surface) nil)
+    (elwl-layer-surface-set-exclusive-zone
+     (slothbar-backend-wayland-surface-layer-surface surface) 0)
+    (elwl-surface-attach
+     (slothbar-backend-wayland-surface-surface surface) nil)
+    (elwl-surface-commit
+     (slothbar-backend-wayland-surface-surface surface))))
+
+(defun slothbar-backend-wayland--module-surface (module)
+  "Return the Wayland surface state owning MODULE."
+  (let ((bar (slothbar-module--bar module)))
+    (and bar (slothbar-surface bar))))
 
 (cl-defmethod slothbar-backend-add-module
-    ((backend slothbar-backend-wayland) (module slothbar-module))
+    ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Register MODULE with BACKEND."
-  (puthash module nil (slothbar-backend-wayland-module-ops backend))
+  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+    (puthash module nil
+             (slothbar-backend-wayland-surface-module-ops surface)))
   module)
 
 (cl-defmethod slothbar-backend-remove-module
-    ((backend slothbar-backend-wayland) (module slothbar-module))
+    ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Forget MODULE in BACKEND."
-  (remhash module (slothbar-backend-wayland-module-ops backend)))
+  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+    (remhash module
+             (slothbar-backend-wayland-surface-module-ops surface))))
 
 (cl-defmethod slothbar-backend-draw-module
-    ((backend slothbar-backend-wayland) (module slothbar-module))
+    ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Compute MODULE's draw operations for BACKEND."
-  (puthash module
-           (slothbar-text-draw-ops (slothbar-module-text-layout module))
-           (slothbar-backend-wayland-module-ops backend)))
+  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+    (puthash module
+             (slothbar-text-draw-ops (slothbar-module-text-layout module))
+             (slothbar-backend-wayland-surface-module-ops surface))))
 
 (cl-defmethod slothbar-backend-reset-module-cache
-    ((backend slothbar-backend-wayland) (module slothbar-module))
+    ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Forget MODULE's cached draw operations in BACKEND."
-  (remhash module (slothbar-backend-wayland-module-ops backend)))
+  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+    (remhash module
+             (slothbar-backend-wayland-surface-module-ops surface))))
 
 (cl-defmethod slothbar-backend-present
-    ((backend slothbar-backend-wayland) layout damage)
-  "Compose LAYOUT into BACKEND's frame and present it when visible."
+    ((_backend slothbar-backend-wayland) (bar slothbar) layout damage)
+  "Compose LAYOUT into BAR's frame and present it when visible."
   (ignore damage)
-  (let ((frame (slothbar-backend-wayland--compose-frame backend layout)))
-    (setf (slothbar-backend-wayland-rendered backend) t)
-    (when slothbar--visible
-      (slothbar-backend-wayland--present-frame backend frame))))
+  (when-let ((surface (slothbar-surface bar)))
+    (let ((frame (slothbar-backend-wayland--compose-frame surface layout)))
+      (setf (slothbar-backend-wayland-surface-rendered surface) t)
+      (when (slothbar-visible bar)
+        (slothbar-backend-wayland--present-frame surface frame)))))
 
 (provide 'slothbar-backend-wayland)
 ;;; slothbar-backend-wayland.el ends here

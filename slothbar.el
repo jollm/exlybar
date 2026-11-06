@@ -110,6 +110,7 @@
   "A rendered status bar instance."
   display-backend
   output
+  surface
   module-list
   placements
   (pixel-width 0 :type 'integer)
@@ -290,7 +291,7 @@ If DISPLAY is not found, the value chosen is the first found in
                      (slothbar-display-backend slothbar--bar)
                    slothbar--backend)))
     (when backend
-      (slothbar-backend-show backend)
+      (slothbar-backend-show backend slothbar--bar)
       (setq slothbar--visible t)
       (when slothbar--bar
         (setf (slothbar-visible slothbar--bar) t)))))
@@ -301,7 +302,7 @@ If DISPLAY is not found, the value chosen is the first found in
                      (slothbar-display-backend slothbar--bar)
                    slothbar--backend)))
     (when backend
-      (slothbar-backend-hide backend)
+      (slothbar-backend-hide backend slothbar--bar)
       (setq slothbar--visible nil)
       (when slothbar--bar
         (setf (slothbar-visible slothbar--bar) nil)))))
@@ -377,7 +378,7 @@ MODULES optional modules to refresh and compare with prev-extents."
         (when bar
           (setf (slothbar-placements bar) new-layout))
         (when backend
-          (slothbar-backend-present backend new-layout damage))))))
+          (slothbar-backend-present backend bar new-layout damage))))))
 
 (defun slothbar--module-placement-at (x y)
   "Return the layout placement containing X and Y, or nil."
@@ -390,9 +391,8 @@ MODULES optional modules to refresh and compare with prev-extents."
             (< y (+ py (if slothbar--bar
                             (slothbar-pixel-height slothbar--bar)
                           slothbar-height))))))
-   (if slothbar--bar
-       (slothbar-placements slothbar--bar)
-     slothbar--last-layout)))
+   (or (and slothbar--bar (slothbar-placements slothbar--bar))
+       slothbar--last-layout)))
 
 (defun slothbar--click (x y button)
   "Dispatch a click at X,Y with BUTTON to the module under it.
@@ -493,7 +493,8 @@ NVAL is check against the existing value for any changes."
       (dolist (m slothbar--modules)
         (when (slothbar-module-p m)
           (setf (slothbar-module-backend m)
-                (slothbar-display-backend slothbar--bar)))))
+                (slothbar-display-backend slothbar--bar)
+                (slothbar-module-bar m) slothbar--bar))))
     (when slothbar--bar
       (setf (slothbar-module-list slothbar--bar) slothbar--modules)))
 
@@ -531,6 +532,7 @@ Initialize the display backend, window, and modules."
                          :x-offset slothbar-offset-x
                          :y-offset slothbar-offset-y))
   (slothbar-backend-open slothbar--backend)
+  (slothbar-backend-create-bar slothbar--backend slothbar--bar)
   (add-hook 'slothbar-backend-pointer-button-hook
             #'slothbar--on-pointer-button)
   (add-hook 'slothbar-backend-pointer-motion-hook
@@ -595,6 +597,9 @@ Initialize the display backend, window, and modules."
     (when (slothbar-module-p m)
       (slothbar-module-exit m)))
   (remove-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
+  (when (and slothbar--backend slothbar--bar)
+    (ignore-errors
+      (slothbar-backend-destroy-bar slothbar--backend slothbar--bar)))
   (when slothbar--backend
     (slothbar-backend-close slothbar--backend)
     (setq slothbar--backend nil

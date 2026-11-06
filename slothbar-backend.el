@@ -66,13 +66,27 @@
 (cl-defgeneric slothbar-backend-close (backend)
   "Tear down BACKEND's surface and connection.")
 
-(cl-defgeneric slothbar-backend-show (backend)
-  "Map BACKEND's bar and reserve its space.")
+(cl-defgeneric slothbar-backend-create-bar (backend bar)
+  "Create BACKEND's per-bar surface for BAR.")
 
-(cl-defgeneric slothbar-backend-hide (backend)
-  "Unmap BACKEND's bar and release its reserved space.")
+(cl-defmethod slothbar-backend-create-bar ((_backend t) (_bar t))
+  "Default: backends without per-bar surfaces need no setup."
+  nil)
 
-(cl-defgeneric slothbar-backend-present (backend layout damage)
+(cl-defgeneric slothbar-backend-destroy-bar (backend bar)
+  "Destroy BACKEND's per-bar surface for BAR.")
+
+(cl-defmethod slothbar-backend-destroy-bar ((_backend t) (_bar t))
+  "Default: backends without per-bar surfaces need no teardown."
+  nil)
+
+(cl-defgeneric slothbar-backend-show (backend bar)
+  "Map BACKEND's BAR and reserve its space.")
+
+(cl-defgeneric slothbar-backend-hide (backend bar)
+  "Unmap BACKEND's BAR and release its reserved space.")
+
+(cl-defgeneric slothbar-backend-present (backend bar layout damage)
   "Draw LAYOUT with BACKEND and update the bar.
 LAYOUT is a list of ((X Y) . MODULE) placements as produced by
 `slothbar-layout-coordinate'.  DAMAGE is a list of (LEFT RIGHT) segments

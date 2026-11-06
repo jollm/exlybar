@@ -188,11 +188,11 @@ Return VALUE."
              (< (slothbar-smoke--pixmap-non-background backend module)
                 before)))
           (slothbar-backend-present
-           backend
+           backend nil
            (list (list (list 0 0) module))
            '((0 100)))
-          (slothbar-backend-show backend)
-          (slothbar-backend-hide backend)
+          (slothbar-backend-show backend nil)
+          (slothbar-backend-hide backend nil)
           (slothbar-module-exit module)
           (slothbar-smoke--check
            "module exit removed its surface"

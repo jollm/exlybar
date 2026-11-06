@@ -87,11 +87,16 @@
   (initialized nil :type 'boolean)
   (needs-refresh? nil :type 'boolean)
   (update-timer nil :type 'timer)
-  backend)
+  backend
+  bar)
 
 (defun slothbar-module--backend (m)
   "Return M's owning display backend, or the current backend."
   (or (slothbar-module-backend m) slothbar--backend))
+
+(defun slothbar-module--bar (m)
+  "Return M's owning `slothbar' bar, or the current bar."
+  (or (slothbar-module-bar m) slothbar--bar))
 
 (cl-defgeneric slothbar-module-init (m) "Initialize module M.")
 

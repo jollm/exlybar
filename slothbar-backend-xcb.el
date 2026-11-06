@@ -323,7 +323,7 @@ The default color is from `slothbar-util--find-background-color'."
 
 ;;; Showing and hiding
 
-(cl-defmethod slothbar-backend-show ((backend slothbar-backend-xcb))
+(cl-defmethod slothbar-backend-show ((backend slothbar-backend-xcb) _bar)
   "Map BACKEND's bar and reserve its space."
   (slothbar-backend-xcb--configure-geom backend)
   (slothbar-backend-xcb--change-background backend)
@@ -336,7 +336,7 @@ The default color is from `slothbar-util--find-background-color'."
     (slothbar-backend-xcb--configure-pos backend)
     (xcb:flush connection)))
 
-(cl-defmethod slothbar-backend-hide ((backend slothbar-backend-xcb))
+(cl-defmethod slothbar-backend-hide ((backend slothbar-backend-xcb) _bar)
   "Unmap BACKEND's bar and release its reserved space."
   (slothbar-backend-xcb--configure-struts backend t)
   (let ((connection (slothbar-backend-xcb-connection backend)))
@@ -348,7 +348,7 @@ The default color is from `slothbar-util--find-background-color'."
 ;;; Presentation
 
 (cl-defmethod slothbar-backend-present
-    ((backend slothbar-backend-xcb) layout damage)
+    ((backend slothbar-backend-xcb) _bar layout damage)
   "Draw LAYOUT with BACKEND and update the X window."
   (let ((connection (slothbar-backend-xcb-connection backend))
         (window (slothbar-backend-xcb-window backend))

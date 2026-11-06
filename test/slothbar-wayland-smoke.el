@@ -96,22 +96,28 @@
 
   ;; Direct backend and module lifecycle.
   (let* ((backend (slothbar-backend-create 'wayland))
+         (bar (slothbar-create :display-backend backend
+                               :pixel-width slothbar-width
+                               :pixel-height slothbar-height))
+         state
          (module (slothbar-module-create
                   :name "smoke" :format "hello" :lpad 2 :rpad 2)))
-    (setq slothbar--backend backend)
+    (setq slothbar--backend backend
+          slothbar--bar bar)
     (unwind-protect
         (progn
           (slothbar-backend-open backend)
+          (setq state (slothbar-backend-create-bar backend bar))
           (slothbar-wayland-check
            "layer configure supplied a width"
-           (> (slothbar-backend-wayland-logical-width backend) 0))
+           (> (slothbar-backend-wayland-surface-logical-width state) 0))
           (slothbar-wayland-check
            "surface and layer surface exist"
-           (and (slothbar-backend-wayland-surface backend)
-                (slothbar-backend-wayland-layer-surface backend)))
+           (and (slothbar-backend-wayland-surface-surface state)
+                (slothbar-backend-wayland-surface-layer-surface state)))
           (slothbar-wayland-check
            "layer configure was acknowledged"
-           (slothbar-backend-wayland-configured-serial backend))
+           (slothbar-backend-wayland-surface-configured-serial state))
           (slothbar-wayland-check
            "Wayland has no system tray support"
            (not (slothbar-backend-supports-p backend 'system-tray)))
@@ -129,7 +135,7 @@
                "Wayland supports pointer input"
                (slothbar-backend-supports-p backend 'pointer-input))))
           (let ((clicks nil)
-                (surface (slothbar-backend-wayland-surface backend)))
+                (surface (slothbar-backend-wayland-surface-surface state)))
             (setf (slothbar-backend-wayland-pointer-surface backend) surface
                   (slothbar-backend-wayland-pointer-x backend) 12
                   (slothbar-backend-wayland-pointer-y backend) 7)
@@ -175,7 +181,7 @@
               (slothbar-wayland-check
                "ext-workspace lists a group" groups)
               (let* ((group (car groups))
-                     (output (slothbar-backend-wayland-output backend)))
+                     (output (slothbar-output bar)))
                 (slothbar-wayland-check
                  "workspace group includes the bar output"
                  (and output
@@ -230,35 +236,35 @@
           (slothbar-wayland-check
            "randr mode disables itself on Wayland"
            (not slothbar-randr-mode))
-          (let* ((scale (slothbar-backend-wayland-scale backend))
-                 (width (slothbar-backend-wayland-logical-width backend))
-                 (height (slothbar-backend-wayland-logical-height backend)))
+          (let* ((scale (slothbar-backend-wayland-surface-scale state))
+                 (width (slothbar-backend-wayland-surface-logical-width state))
+                 (height (slothbar-backend-wayland-surface-logical-height state)))
             (slothbar-wayland-record
              (format "width=%s height=%s scale=%s output=%S\n"
                      width height scale
-                     (and (slothbar-backend-wayland-output backend)
+                     (and (slothbar-output bar)
                           (elwl-output-name
-                           (slothbar-backend-wayland-output backend)))))
+                           (slothbar-output bar)))))
             (slothbar-wayland-check "output scale is positive"
                                     (>= scale 1))
             (slothbar-wayland-check "two shm buffers"
                                     (= (length
-                                        (slothbar-backend-wayland-buffers
-                                         backend))
+                                        (slothbar-backend-wayland-surface-buffers
+                                         state))
                                        2))
             (slothbar-wayland-check
              "frame dimensions follow scale"
-             (and (= (slothbar-backend-wayland-frame-width backend)
+             (and (= (slothbar-backend-wayland-surface-frame-width state)
                      (* width scale))
-                  (= (slothbar-backend-wayland-frame-height backend)
+                  (= (slothbar-backend-wayland-surface-frame-height state)
                      (* height scale)))))
           (slothbar-module-init module)
           (slothbar-backend-present
-           backend (list (list (list 0 0) module)) '((0 100)))
+           backend bar (list (list (list 0 0) module)) '((0 100)))
           (slothbar-wayland-check
            "module draw operations were recorded"
            (gethash module
-                    (slothbar-backend-wayland-module-ops backend)))
+                    (slothbar-backend-wayland-surface-module-ops state)))
           (slothbar-wayland-check
            "glyphs were rasterized"
            (> (hash-table-count
@@ -266,11 +272,11 @@
               0))
           (slothbar-wayland-check
            "frame was composed"
-           (slothbar-backend-wayland-frame backend))
-          (let* ((frame (slothbar-backend-wayland-frame backend))
-                 (width (slothbar-backend-wayland-frame-width backend))
-                 (height (slothbar-backend-wayland-frame-height backend))
-                 (stride (slothbar-backend-wayland-frame-stride backend))
+           (slothbar-backend-wayland-surface-frame state))
+          (let* ((frame (slothbar-backend-wayland-surface-frame state))
+                 (width (slothbar-backend-wayland-surface-frame-width state))
+                 (height (slothbar-backend-wayland-surface-frame-height state))
+                 (stride (slothbar-backend-wayland-surface-frame-stride state))
                  (background (list (aref frame 0)
                                    (aref frame 1)
                                    (aref frame 2)))
@@ -297,21 +303,24 @@
             (slothbar-wayland-check
              "glyphs are not clipped at the bottom"
              (and max-y (< max-y (1- height)))))
-          (slothbar-backend-show backend)
+          (slothbar-backend-show backend bar)
           (slothbar-wayland-check
            "presented buffer was submitted in-flight"
            (cl-some #'elwl-shm-buffer-in-flight-p
-                    (slothbar-backend-wayland-buffers backend)))
+                    (slothbar-backend-wayland-surface-buffers state)))
           (elwl-dispatch (slothbar-backend-wayland-connection backend) 0.1)
           (slothbar-wayland-check
            "frame was presented"
-           (slothbar-backend-wayland-presented backend))
-          (slothbar-backend-hide backend)
+           (slothbar-backend-wayland-surface-presented state))
+          (slothbar-backend-hide backend bar)
           (slothbar-module-exit module)
+          (slothbar-backend-destroy-bar backend bar)
           (slothbar-backend-close backend)
-          (setq slothbar--backend nil))
+          (setq slothbar--backend nil
+                slothbar--bar nil))
       (ignore-errors (slothbar-backend-close backend))
-      (setq slothbar--backend nil)))
+      (setq slothbar--backend nil
+            slothbar--bar nil)))
 
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-modules
