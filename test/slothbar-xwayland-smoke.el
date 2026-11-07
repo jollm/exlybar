@@ -101,6 +101,16 @@ Return VALUE."
                                 :plane-mask #xffffffff))))
     (vconcat (slot-value reply 'data))))
 
+(defun slothbar-smoke--window-geometry (window)
+  "Return WINDOW's X/Y/WIDTH/HEIGHT geometry."
+  (let ((reply (xcb:+request-unchecked+reply
+                   (slothbar-xcb-connection)
+                 (make-instance 'xcb:GetGeometry :drawable window))))
+    (list (slot-value reply 'x)
+          (slot-value reply 'y)
+          (slot-value reply 'width)
+          (slot-value reply 'height))))
+
 (defun slothbar-smoke--module-pixmap-data (_backend module)
   "Return MODULE's live X pixmap bytes."
   (let* ((table (slothbar-backend-xcb--module-surface-table module))
@@ -583,6 +593,53 @@ Return VALUE."
      (equal (mapcar #'slothbar-module-name
                     (slothbar-module-list bar-b))
             '("runtime-b"))))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
+  ;; Geometry refresh must resize the live X window.
+  (setq slothbar-bars
+        (list (list :id "geometry"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 10
+                    :offset-y 10
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "geometry" :format "geometry"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar (car slothbar--bars))
+         (window (slothbar-backend-xcb-surface-window
+                  (slothbar-surface bar))))
+    (slothbar-smoke--check
+     "X geometry refresh starts at the configured geometry"
+     (equal (slothbar-smoke--window-geometry window) '(10 10 300 20)))
+    (let ((config (copy-sequence (slothbar-config bar))))
+      (aset bar (cl-struct-slot-offset 'slothbar 'config)
+            (plist-put (plist-put config :width 320) :height 30)))
+    (slothbar-refresh)
+    (slothbar-refresh-modules)
+    (slothbar-smoke--check
+     "X geometry refresh updates the bar model"
+     (slothbar-smoke--wait-for
+      (lambda ()
+        (and (= 320 (slothbar-pixel-width bar))
+             (= 30 (slothbar-pixel-height bar))))
+      3))
+    (slothbar-smoke--check
+     "X geometry refresh preserves configured offsets"
+     (and (= 10 (slothbar-x-offset bar))
+          (= 10 (slothbar-y-offset bar))))
+    (slothbar-smoke--check
+     "X geometry refresh resizes the X window"
+     (slothbar-smoke--wait-for
+      (lambda ()
+        (let ((geometry (slothbar-smoke--window-geometry window)))
+          (equal (list (nth 2 geometry) (nth 3 geometry))
+                 '(320 30))))
+      3)))
   (slothbar-exit)
   (setq slothbar-bars nil)
 
