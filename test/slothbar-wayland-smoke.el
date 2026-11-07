@@ -68,6 +68,26 @@
   (unless value (kill-emacs 1))
   value)
 
+(defun slothbar-wayland--swaymsg (&rest args)
+  "Run swaymsg with ARGS against the harness sway instance."
+  (let ((sock (or (getenv "SWAYSOCK")
+                  (car (file-expand-wildcards
+                        (expand-file-name "sway-ipc.*.sock"
+                                          (or (getenv "XDG_RUNTIME_DIR")
+                                              "/tmp")))))))
+    (unless sock
+      (error "No sway IPC socket found"))
+    (setenv "SWAYSOCK" sock)
+    (apply #'call-process (or (getenv "SWAYMSG") "swaymsg")
+           nil nil nil "-s" sock args)))
+
+(defun slothbar-wayland--wait-for (predicate &optional seconds)
+  "Wait up to SECONDS for PREDICATE while processing Wayland events."
+  (let ((deadline (+ (float-time) (or seconds 5))))
+    (while (and (not (funcall predicate)) (< (float-time) deadline))
+      (sit-for 0.1))
+    (funcall predicate)))
+
 (defun slothbar-wayland--run ()
   "Exercise the Wayland backend and the core lifecycle against sway."
   (require 'slothbar)
@@ -180,13 +200,16 @@
                        (length (elwl-workspace-manager-workspaces manager))))
               (slothbar-wayland-check
                "ext-workspace lists a group" groups)
-              (let* ((group (car groups))
-                     (output (slothbar-output bar)))
+              (let* ((output (slothbar-output bar))
+                     (group (cl-find-if
+                             (lambda (group)
+                               (and output
+                                    (memq (elwl-output-object output)
+                                          (elwl-workspace-group-outputs group))))
+                             groups)))
                 (slothbar-wayland-check
                  "workspace group includes the bar output"
-                 (and output
-                      (memq (elwl-output-object output)
-                            (elwl-workspace-group-outputs group)))))
+                 group))
               (slothbar-wayland-check
                "ext-workspace lists a workspace"
                (> (length (elwl-workspace-manager-workspaces manager)) 0))))
@@ -357,6 +380,45 @@
       (ignore-errors (slothbar-backend-close backend))
       (setq slothbar--backend nil
             slothbar--bar nil)))
+
+  ;; Wayland output hotplug: one bar per output via :each.
+  (setq slothbar-bars
+        (list (list :id "each"
+                    :output :each
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "hotplug" :format "hotplug"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (slothbar-wayland-check
+   "hotplug: one bar per connected output"
+   (= 2 (length slothbar--bars)))
+  (slothbar-wayland-check
+   "hotplug: both headless outputs are known"
+   (equal (sort (copy-sequence
+                 (slothbar-backend-output-names slothbar--backend))
+                #'string<)
+          '("HEADLESS-1" "HEADLESS-2")))
+  (slothbar-wayland--swaymsg "output" "HEADLESS-2" "disable")
+  (slothbar-wayland-check
+   "disabling a Wayland output removes its bar"
+   (slothbar-wayland--wait-for
+    (lambda () (= 1 (length slothbar--bars))) 5))
+  (slothbar-wayland--swaymsg "output" "HEADLESS-2" "enable")
+  (slothbar-wayland-check
+   "re-enabling a Wayland output restores its bar"
+   (slothbar-wayland--wait-for
+    (lambda () (= 2 (length slothbar--bars))) 5))
+  (slothbar-exit)
+  (slothbar-wayland-check
+   "hotplug: exit cleared the bars"
+   (null slothbar--bars))
+  (setq slothbar-bars nil)
 
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-bars

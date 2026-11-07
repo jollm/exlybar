@@ -21,13 +21,14 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 EMACS=${EMACS:-emacs}
 SWAY=${SWAY:-sway}
+SWAYMSG=${SWAYMSG:-swaymsg}
 ELWL_DIR=${ELWL_DIR:-"$ROOT/../elwl"}
 FONTSLOTH_DIR=${FONTSLOTH_DIR:-"$ROOT/../fontsloth"}
 FD_FAIRY_DIR=${FD_FAIRY_DIR:-"$ROOT/../process-send-message"}
 FD_FAIRY_MODULE=${FD_FAIRY_MODULE:-"$FD_FAIRY_DIR/target/debug/libfd_fairy.so"}
 TEST_ELISP="$ROOT/test/slothbar-wayland-smoke.el"
 
-for tool in "$EMACS" "$SWAY" fc-match timeout; do
+for tool in "$EMACS" "$SWAY" "$SWAYMSG" fc-match timeout; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "SKIP: required tool not found: $tool"
     exit 77
@@ -53,7 +54,7 @@ RUNTIME=$(mktemp -d "${TMPDIR:-/tmp}/slothbar-wl-xdg-XXXXXX") || exit 1
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/slothbar-wayland-XXXXXX") || exit 1
 chmod 700 "$RUNTIME"
 
-printf 'xwayland disable\noutput HEADLESS-1 resolution 1280x720 scale 2\n' \
+printf 'xwayland disable\noutput HEADLESS-1 resolution 1280x720 scale 2\noutput HEADLESS-2 resolution 1280x720 scale 1\n' \
   > "$WORK/sway.conf"
 
 sway_pid=
@@ -67,6 +68,7 @@ trap cleanup EXIT
 
 XDG_RUNTIME_DIR="$RUNTIME" \
 WLR_BACKENDS=headless \
+WLR_HEADLESS_OUTPUTS=2 \
 WLR_LIBINPUT_NO_DEVICES=1 \
 WLR_RENDERER=pixman \
   "$SWAY" -c "$WORK/sway.conf" > "$WORK/sway.log" 2>&1 &
@@ -111,6 +113,7 @@ echo "Wayland display $WAYLAND_DISPLAY is up"
 XDG_RUNTIME_DIR="$RUNTIME" \
 WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 FD_FAIRY_MODULE="$FD_FAIRY_MODULE" \
+SWAYMSG="$SWAYMSG" \
 SLOTHBAR_TEST_FONT="$FONT" \
 SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
 SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
