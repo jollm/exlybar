@@ -236,7 +236,8 @@ config index and output.
 The XEmbed tray is single-instance: if it appears in more than one bar,
 the first configured bar keeps it and later instances are skipped."
   :type '(repeat plist)
-  :group 'slothbar)
+  :group 'slothbar
+  :require 'slothbar-module-requires)
 
 (defcustom slothbar-before-init-hook nil
   "Functions to run when before slothbar is initialized."
