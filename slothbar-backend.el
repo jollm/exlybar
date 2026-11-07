@@ -116,6 +116,13 @@ Known features include `system-tray', `ewmh', `randr', `layer-shell',
 (cl-defgeneric slothbar-backend-output (backend)
   "Return BACKEND's selected output object, or nil.")
 
+(cl-defgeneric slothbar-backend-output-name (backend output)
+  "Return OUTPUT's name for BACKEND.")
+
+(cl-defmethod slothbar-backend-output-name ((_backend t) output)
+  "Default: OUTPUT is already a name."
+  output)
+
 (cl-defgeneric slothbar-backend-output-names (backend)
   "Return the names of BACKEND's currently connected outputs.")
 

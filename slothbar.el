@@ -804,7 +804,6 @@ changes.  Recreate only the backend surface/modules that actually changed."
          (old-config (slothbar-config bar))
          (old-output (slothbar-output bar))
          (old-height (slothbar-pixel-height bar))
-         (old-width (slothbar-pixel-width bar))
          (old-x (slothbar-x-offset bar))
          (old-y (slothbar-y-offset bar))
          (old-bottom (slothbar-bottom bar))
@@ -814,13 +813,23 @@ changes.  Recreate only the backend surface/modules that actually changed."
          (new-modules (if (plist-member config :modules)
                           (list (plist-get config :modules))
                         :inherit))
+         (output-changed
+          (or (not (equal (plist-get old-config :output)
+                          (plist-get config :output)))
+              (and output
+                   (not (equal
+                         (slothbar-backend-output-name backend output)
+                         (slothbar-backend-output-name backend old-output))))))
+         (width-changed
+          (not (equal (plist-get old-config :width)
+                      (plist-get config :width))))
          (surface-changed
-          (not (and (equal output old-output)
-                    (equal height old-height)
-                    (equal width old-width)
-                    (equal x-offset old-x)
-                    (equal y-offset old-y)
-                    (equal bottom old-bottom))))
+          (or output-changed
+              width-changed
+              (not (equal height old-height))
+              (not (equal x-offset old-x))
+              (not (equal y-offset old-y))
+              (not (equal bottom old-bottom))))
          (modules-changed (not (equal old-modules new-modules)))
          (changed (or surface-changed
                       modules-changed

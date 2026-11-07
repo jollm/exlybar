@@ -247,6 +247,14 @@
   (let ((output (and slothbar--bar (slothbar-output slothbar--bar))))
     (and output (elwl-output-object output))))
 
+(cl-defmethod slothbar-backend-output-name
+    ((_backend slothbar-backend-wayland) output)
+  "Return OUTPUT's wl_output name."
+  (cond
+   ((elwl-output-p output) (elwl-output-name output))
+   ((stringp output) output)
+   (t nil)))
+
 (cl-defmethod slothbar-backend-output-names ((backend slothbar-backend-wayland))
   "Return the names of BACKEND's connected outputs."
   (delq nil

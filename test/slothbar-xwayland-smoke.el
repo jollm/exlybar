@@ -422,6 +422,81 @@ Return VALUE."
                          (null slothbar--backend))
   (setq slothbar-bars nil)
 
+  ;; Runtime reconfiguration must update one X bar in place, not its neighbor.
+  (setq slothbar-bars
+        (list (list :id "runtime-a"
+                    :output "HEADLESS-1"
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "runtime-a-old" :format "a"
+                             :lpad 2 :rpad 2))))
+              (list :id "runtime-b"
+                    :output "HEADLESS-1"
+                    :height 24
+                    :offset-x 0
+                    :offset-y 24
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "runtime-b" :format "b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars))
+         (surface-a (slothbar-surface bar-a))
+         (surface-b (slothbar-surface bar-b))
+         (configs slothbar-bars)
+         (new-a (copy-sequence (car configs))))
+    (setq slothbar-bars
+          (list (plist-put
+                 (plist-put new-a :height 30)
+                 :modules
+                 (list (lambda ()
+                         (slothbar-module-create
+                          :name "runtime-a-new" :format "aa"
+                          :lpad 2 :rpad 2))))
+                (cadr configs)))
+    (slothbar-smoke--check
+     "X runtime reconfiguration applies through the bar watcher"
+     (slothbar-smoke--wait-for
+      (lambda ()
+        (and (= 30 (slothbar-pixel-height bar-a))
+             (equal (mapcar #'slothbar-module-name
+                            (slothbar-module-list bar-a))
+                    '("runtime-a-new"))))
+      5))
+    (slothbar-smoke--check
+     "X runtime reconfiguration keeps both bar identities"
+     (and (= 2 (length slothbar--bars))
+          (eq bar-a (car slothbar--bars))
+          (eq bar-b (cadr slothbar--bars))))
+    (slothbar-smoke--check
+     "X runtime reconfiguration recreates only the changed surface"
+     (and (not (eq surface-a (slothbar-surface bar-a)))
+          (eq surface-b (slothbar-surface bar-b))))
+    (slothbar-smoke--check
+     "X runtime reconfiguration updates the changed bar height"
+     (= 30 (slothbar-pixel-height bar-a)))
+    (slothbar-smoke--check
+     "X runtime reconfiguration leaves the other bar height alone"
+     (= 24 (slothbar-pixel-height bar-b)))
+    (slothbar-smoke--check
+     "X runtime reconfiguration replaces the changed bar modules"
+     (equal (mapcar #'slothbar-module-name
+                    (slothbar-module-list bar-a))
+            '("runtime-a-new")))
+    (slothbar-smoke--check
+     "X runtime reconfiguration leaves the other bar modules alone"
+     (equal (mapcar #'slothbar-module-name
+                    (slothbar-module-list bar-b))
+            '("runtime-b"))))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-modules
         (list (lambda ()
