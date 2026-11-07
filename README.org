@@ -131,7 +131,8 @@ the bar inherits `slothbar-modules`; an explicit `:modules nil` creates
 an empty bar.  `:height`, `:width`, `:offset-x`, `:offset-y`, and
 `:bottom` override the corresponding global settings for that bar.
 
-The XEmbed tray is single-instance.  Include it in at most one bar.
+The XEmbed tray is single-instance.  If it is included in more than one
+bar, the first configured bar keeps it and later instances are skipped.
 
 ** Workspaces
 

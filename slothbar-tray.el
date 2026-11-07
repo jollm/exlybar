@@ -38,6 +38,8 @@
 ;;; Commentary:
 
 ;; This is an implementation of `slothbar-module' for a system tray.
+;; Only one tray instance can be active across all bars; later instances are
+;; skipped during module construction.
 
 ;; To use this module, add it to `slothbar-modules' with any desired layout
 ;; insructions.
@@ -77,6 +79,10 @@
   ((_m slothbar-tray) (backend slothbar-backend))
   "System tray requires the XEmbed system tray protocol."
   (slothbar-backend-supports-p backend 'system-tray))
+
+(cl-defmethod slothbar-module-singleton-id ((_m slothbar-tray))
+  "There can be only one XEmbed tray across all bars."
+  'system-tray)
 
 ;;; We need this extension to handle client message
 (defclass slothbar-tray--ClientMessage

@@ -244,6 +244,32 @@
   "Return the fake output names for BACKEND."
   (slothbar-unit-output-backend-outputs backend))
 
+(cl-defstruct (slothbar-unit-singleton
+               (:include slothbar-module))
+  "A module that may only appear once across all bars.")
+
+(cl-defmethod slothbar-module-singleton-id
+  ((_m slothbar-unit-singleton))
+  "A test singleton identifier."
+  'unit-singleton)
+
+(ert-deftest slothbar-unit-singleton-bar-modules ()
+  "Singleton modules are only constructed on the first bar that claims them."
+  (let* ((bar-a (slothbar-create :config '(:modules nil)))
+         (bar-b (slothbar-create :config '(:modules nil)))
+         (one (make-slothbar-unit-singleton :name "one"))
+         (two (make-slothbar-unit-singleton :name "two")))
+    (setf (slothbar-module-list bar-a) (list one)
+          (slothbar-config bar-b) (list :modules (list two)))
+    (let ((slothbar--bars (list bar-a bar-b)))
+      (slothbar--construct-modules bar-b)
+      (should-not (slothbar-module-list bar-b)))
+    (let ((bar-c (slothbar-create
+                  :config (list :modules (list one two))))
+          (slothbar--bars nil))
+      (slothbar--construct-modules bar-c)
+      (should (equal (slothbar-module-list bar-c) (list one))))))
+
 (ert-deftest slothbar-unit-default-bar-config ()
   "An explicit bar list replaces the legacy default bar."
   (let ((slothbar-bars nil)

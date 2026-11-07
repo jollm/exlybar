@@ -228,7 +228,8 @@ Each entry is a plist with the following keys:
 - `:height', `:width', `:offset-x', `:offset-y', and `:bottom' override
   the corresponding global geometry settings.
 
-The XEmbed tray is single-instance; include it in at most one bar."
+The XEmbed tray is single-instance: if it appears in more than one bar,
+the first configured bar keeps it and later instances are skipped."
   :type '(repeat plist)
   :group 'slothbar)
 
@@ -643,6 +644,24 @@ NVAL is check against the existing value for any changes."
                       (t (error "Unsupported type in slothbar-bars: %s"
                                 val))))
                    constructors))))
+    (let ((claimed
+           (cl-loop for other in slothbar--bars
+                    unless (eq other bar)
+                    append (cl-loop for m in (slothbar-module-list other)
+                                    when (slothbar-module-p m)
+                                    collect (slothbar-module-singleton-id m))))
+          (kept nil))
+      (dolist (m built)
+        (let ((id (and (slothbar-module-p m)
+                       (slothbar-module-singleton-id m))))
+          (cond
+           ((and id (member id claimed))
+            (message "Slothbar: skipping %s; %s is already provided"
+                     (slothbar-module-name m) id))
+           (t
+            (when id (push id claimed))
+            (push m kept)))))
+      (setq built (nreverse kept)))
     (dolist (m built)
       (when (slothbar-module-p m)
         (setf (slothbar-module-backend m) backend
@@ -755,6 +774,9 @@ fallback offsets."
                 (slothbar-module-exit m)))
             (ignore-errors (slothbar-backend-destroy-bar backend bar)))))
       (setq kept (nreverse kept))
+      ;; Keep the global bar list current while creating new bars so module
+      ;; construction can see singleton modules already claimed by earlier bars.
+      (setq slothbar--bars kept)
       ;; Add bars for new specs.
       (dolist (spec specs)
         (let* ((config (plist-get spec :config))
@@ -766,6 +788,7 @@ fallback offsets."
                           (or output slothbar-preferred-display)))
                    (bar (slothbar--make-bar backend config index geom output)))
               (setq kept (append kept (list bar)))
+              (setq slothbar--bars kept)
               (slothbar--with-bar bar
                 (setq slothbar-font-px-size
                       (slothbar-font--precompute-px-sizes

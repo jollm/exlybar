@@ -118,6 +118,16 @@
 Modules that depend on X-only facilities override this to consult
 `slothbar-backend-supports-p'.")
 
+(cl-defgeneric slothbar-module-singleton-id (m)
+  "Return a symbol when module M may only be instantiated once globally.
+Return nil for modules that may appear any number of times.  Bars that
+would create a second instance of the same id skip it during module
+construction.")
+
+(cl-defmethod slothbar-module-singleton-id ((_m slothbar-module))
+  "Ordinary modules are not singletons."
+  nil)
+
 (cl-defgeneric slothbar-module-click (m x y button)
   "Handle a pointer click at X,Y with BUTTON on module M.
 X and Y are relative to M's top-left corner.  BUTTON is one of `:left',
