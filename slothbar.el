@@ -939,11 +939,28 @@ changes.  Recreate only the backend surface/modules that actually changed."
                          (setq slothbar--output-change-timer nil)
                          (slothbar--reconcile-bars))))))
 
-(defun slothbar--watch-slothbar-modules (_ nval oper where)
-  "(Re)construct modules when `slothbar-modules' is modified.
+(defun slothbar--bar-inherits-modules-p (bar)
+  "Return non-nil when BAR takes its modules from `slothbar-modules'."
+  (not (plist-member (slothbar-config bar) :modules)))
 
-Do this only when OPER eq \\='set and WHERE is nil.
-NVAL is check against the existing value for any changes."
+(defun slothbar--reload-bar-modules (bar)
+  "Exit and rebuild BAR's modules using its configured fallback."
+  (dolist (m (slothbar-module-list bar))
+    (when (slothbar-module-p m)
+      (slothbar-module-exit m)))
+  (setf (slothbar-module-list bar) nil)
+  (slothbar--with-bar bar
+    (slothbar--construct-modules bar)
+    (dolist (m (slothbar-module-list bar))
+      (when (slothbar-module-p m)
+        (slothbar-module-init m))))
+  (slothbar-refresh-modules nil bar))
+
+(defun slothbar--watch-slothbar-modules (_ nval oper where)
+  "(Re)construct inherited modules when `slothbar-modules' is modified.
+
+Bars with an explicit :modules entry keep their own module list.
+Do this only when OPER eq \='set and WHERE is nil."
   (when (and (not where) (eq 'set oper)
              (not (equal nval slothbar-modules)))
     (run-at-time
@@ -951,8 +968,11 @@ NVAL is check against the existing value for any changes."
      (lambda ()
        (if slothbar--bars
            (dolist (bar slothbar--bars)
-             (slothbar--construct-modules bar))
-         (slothbar--construct-modules))))))
+             (when (slothbar--bar-inherits-modules-p bar)
+               (slothbar--reload-bar-modules bar)))
+         (if slothbar--bar
+             (slothbar--reload-bar-modules slothbar--bar)
+           (slothbar--construct-modules)))))))
 
 (defun slothbar--watch-slothbar-bars (_ nval oper where)
   "Reconcile bars when `slothbar-bars' is modified.

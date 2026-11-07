@@ -367,6 +367,21 @@
   "A test singleton identifier."
   'unit-singleton)
 
+(ert-deftest slothbar-unit-watch-slothbar-modules-fallback ()
+  "The modules watcher reloads only bars inheriting slothbar-modules."
+  (let ((inherited (slothbar-create :config '(:width 100)))
+        (explicit (slothbar-create :config '(:modules nil)))
+        (slothbar--bars nil)
+        (slothbar-modules nil)
+        (seen nil))
+    (setq slothbar--bars (list inherited explicit))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (_delay _repeat function) (funcall function)))
+              ((symbol-function 'slothbar--reload-bar-modules)
+               (lambda (bar) (push bar seen))))
+      (slothbar--watch-slothbar-modules nil '(new-modules) 'set nil))
+    (should (equal seen (list inherited)))))
+
 (ert-deftest slothbar-unit-watch-slothbar-bars ()
   "Changing slothbar-bars while running schedules reconciliation."
   (let ((slothbar-bars '((:id old)))
