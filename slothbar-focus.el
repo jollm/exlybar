@@ -103,10 +103,36 @@
       (setq args (append (list :format slothbar-focus-format) args)))
     (apply #'slothbar-focus--create args)))
 
+(defvar slothbar-focus--subscribers 0
+  "Number of active focus modules sharing the backend hook.")
+
 (defun slothbar-focus--on-change (backend)
   "Refresh focus modules after a focused-window change on BACKEND."
   (when (eq backend slothbar--backend)
-    (slothbar-module--refresh-all-by-name "focus")))
+    (run-at-time
+     0 nil
+     (lambda ()
+       (setq slothbar-focus--refresh-timer nil)
+       (when slothbar--backend
+         (slothbar-module--refresh-all-by-name "focus"))))))
+
+(defun slothbar-focus--subscribe ()
+  "Register a focus module as a backend-hook subscriber."
+  (when (zerop slothbar-focus--subscribers)
+    (add-hook 'slothbar-backend-focused-window-change-hook
+              #'slothbar-focus--on-change))
+  (cl-incf slothbar-focus--subscribers))
+
+(defun slothbar-focus--unsubscribe ()
+  "Unregister a focus module from the backend hook."
+  (setq slothbar-focus--subscribers
+        (max 0 (1- slothbar-focus--subscribers)))
+  (when (zerop slothbar-focus--subscribers)
+    (remove-hook 'slothbar-backend-focused-window-change-hook
+                 #'slothbar-focus--on-change)
+    (when slothbar-focus--refresh-timer
+      (cancel-timer slothbar-focus--refresh-timer)
+      (setq slothbar-focus--refresh-timer nil))))
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-focus) (backend slothbar-backend))
@@ -132,8 +158,7 @@
 (cl-defmethod slothbar-module-init :before ((m slothbar-focus))
   "Configure M's initial focus state."
   (slothbar-module-update-status m)
-  (add-hook 'slothbar-backend-focused-window-change-hook
-            #'slothbar-focus--on-change))
+  (slothbar-focus--subscribe))
 
 (cl-defmethod slothbar-module-init ((m slothbar-focus))
   "Initialize M and start its focus update timer."
@@ -145,9 +170,8 @@
                      #'slothbar-module-update-status m)))
 
 (cl-defmethod slothbar-module-exit :before ((_m slothbar-focus))
-  "Stop listening for focus changes."
-  (remove-hook 'slothbar-backend-focused-window-change-hook
-               #'slothbar-focus--on-change))
+  "Stop listening for focus changes when no focus modules remain."
+  (slothbar-focus--unsubscribe))
 
 (provide 'slothbar-focus)
 ;;; slothbar-focus.el ends here

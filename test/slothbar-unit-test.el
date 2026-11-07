@@ -856,6 +856,24 @@
   "Return the fake focused window for BACKEND."
   (slothbar-unit-focus-backend-focused backend))
 
+(ert-deftest slothbar-unit-focus-hook-refcount ()
+  "Focus hook remains installed while any focus module is active."
+  (let ((slothbar-focus--subscribers 0)
+        (slothbar-focus--refresh-timer nil))
+    (slothbar-focus--subscribe)
+    (slothbar-focus--subscribe)
+    (should (= slothbar-focus--subscribers 2))
+    (should (memq #'slothbar-focus--on-change
+                  slothbar-backend-focused-window-change-hook))
+    (slothbar-focus--unsubscribe)
+    (should (= slothbar-focus--subscribers 1))
+    (should (memq #'slothbar-focus--on-change
+                  slothbar-backend-focused-window-change-hook))
+    (slothbar-focus--unsubscribe)
+    (should (= slothbar-focus--subscribers 0))
+    (should-not (memq #'slothbar-focus--on-change
+                      slothbar-backend-focused-window-change-hook))))
+
 (ert-deftest slothbar-unit-focus-render ()
   "Focus formatting uses title and app-id with empty fallbacks."
   (should (equal (slothbar-focus--render
