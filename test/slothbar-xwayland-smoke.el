@@ -347,6 +347,86 @@ Return VALUE."
                   (slothbar-smoke--check
                    "X two-bar damage leaves the other window unchanged"
                    (equal before-b after-b)))))
+            ;; Synthetic X pointer events must map each window to its bar.
+            (let ((button-events nil)
+                  (motion-events nil)
+                  (window-a
+                   (slothbar-backend-xcb-surface-window
+                    (slothbar-surface bar)))
+                  (window-b
+                   (slothbar-backend-xcb-surface-window
+                    (slothbar-surface bar-b)))
+                  (connection (slothbar-backend-xcb-connection backend))
+                  (root (slothbar-backend-xcb--root-window-id backend)))
+              (let ((button-hook
+                     (lambda (_backend bar x y button)
+                       (push (list bar x y button) button-events)))
+                    (motion-hook
+                     (lambda (_backend bar x y)
+                       (push (list bar x y) motion-events))))
+                (add-hook 'slothbar-backend-pointer-button-hook button-hook)
+                (add-hook 'slothbar-backend-pointer-motion-hook motion-hook)
+                (unwind-protect
+                    (progn
+                      (slothbar-backend-xcb--on-ButtonPress
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:ButtonPress
+                                       :detail 1 :time 0 :root root
+                                       :event window-a :child 0
+                                       :root-x 12 :root-y 5
+                                       :event-x 12 :event-y 5
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-backend-xcb--on-ButtonPress
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:ButtonPress
+                                       :detail 3 :time 0 :root root
+                                       :event window-b :child 0
+                                       :root-x 21 :root-y 9
+                                       :event-x 21 :event-y 9
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-backend-xcb--on-MotionNotify
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:MotionNotify
+                                       :detail 0 :time 0 :root root
+                                       :event window-b :child 0
+                                       :root-x 23 :root-y 10
+                                       :event-x 23 :event-y 10
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-backend-xcb--on-MotionNotify
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:MotionNotify
+                                       :detail 0 :time 0 :root root
+                                       :event window-a :child 0
+                                       :root-x 13 :root-y 8
+                                       :event-x 13 :event-y 8
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-smoke--check
+                       "X multi-bar pointer buttons route to the receiving bar"
+                       (equal (list (nth 1 button-events)
+                                    (nth 0 button-events))
+                              (list (list bar 12 5 :left)
+                                    (list bar-b 21 9 :right))))
+                      (slothbar-smoke--check
+                       "X multi-bar pointer motion routes to the receiving bar"
+                       (equal motion-events
+                              (list (list bar 13 8)
+                                    (list bar-b 23 10)))))
+                  (remove-hook 'slothbar-backend-pointer-button-hook
+                               button-hook)
+                  (remove-hook 'slothbar-backend-pointer-motion-hook
+                               motion-hook))))
             (slothbar-module-exit module-a)
             (slothbar-module-exit module-b)
             (slothbar--with-bar bar-b
