@@ -206,11 +206,29 @@ choose explicitly."
   :group 'slothbar)
 
 (defcustom slothbar-bars nil
-  "Additional bar definitions.
+  "Bar definitions.
 
-Each entry is a plist with any of :id, :output, :modules, :height,
-:offset-x, :offset-y, and :bottom.  When nil, one bar is created from
-`slothbar-modules' and the global geometry settings."
+When non-nil, this list is authoritative: one bar is created for each
+entry and each matching output, and no legacy default bar is added.
+When nil, a non-nil `slothbar-modules' creates one legacy bar.  When
+both are nil, no bars are created.
+
+Each entry is a plist with the following keys:
+
+- `:id' distinguishes bars that would otherwise have the same output.
+- `:output' selects the output or outputs:
+  - nil or omitted: one bar on `slothbar-preferred-display', or the
+    first connected output.
+  - a string: one bar while that output exists.
+  - a list of strings: one bar for each listed output that exists.
+  - `:each': one bar for every connected output.
+  Multiple entries may use `:each' to create multiple bars per output.
+- `:modules' is the module list or layout instructions for this bar.
+  Omitted means use `slothbar-modules'; nil means an empty bar.
+- `:height', `:width', `:offset-x', `:offset-y', and `:bottom' override
+  the corresponding global geometry settings.
+
+The XEmbed tray is single-instance; include it in at most one bar."
   :type '(repeat plist)
   :group 'slothbar)
 
@@ -595,9 +613,12 @@ NVAL is check against the existing value for any changes."
 (defun slothbar--construct-modules (&optional bar modules)
   "Construct modules for BAR, or the current environment when BAR is nil."
   (let* ((config (and bar (slothbar-config bar)))
-         (constructors (or modules
-                           (and config (plist-get config :modules))
-                           slothbar-modules))
+         (constructors
+          (cond
+           (modules modules)
+           ((and config (plist-member config :modules))
+            (plist-get config :modules))
+           (t slothbar-modules)))
          (backend (if bar (slothbar-display-backend bar) slothbar--backend))
          (built
           (seq-filter
@@ -835,11 +856,15 @@ NVAL is check against the existing value for any changes."
   (dolist (bar (or slothbar--bars (list slothbar--bar)))
     (when bar
       (let* ((config (slothbar-config bar))
-             (display (or (plist-get config :output)
+             (display (or (slothbar-output bar)
+                          (let ((configured (plist-get config :output)))
+                            (and (stringp configured) configured))
                           slothbar-preferred-display))
              (geom (slothbar--find-display-geometry display))
-             (height (slothbar-pixel-height bar)))
-        (setf (slothbar-pixel-width bar) (alist-get 'width geom)
+             (height (slothbar-pixel-height bar))
+             (width (or (plist-get config :width)
+                        (alist-get 'width geom))))
+        (setf (slothbar-pixel-width bar) width
               (slothbar-x-offset bar) (alist-get 'x-offset geom)
               (slothbar-y-offset bar)
               (if (slothbar-bottom bar)

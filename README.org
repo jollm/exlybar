@@ -92,6 +92,47 @@ an additional volume module to control microphone volume:
           slothbar-backlight-create slothbar-battery-create))
 #+END_SRC
 
+** Multiple bars
+
+`slothbar-bars` defines one or more bars.  When it is non-nil it is
+authoritative: exactly one bar is created per entry and matching output.
+When it is nil, a non-nil `slothbar-modules` still creates one legacy
+default bar.  When both are nil, slothbar creates no bars.
+
+#+begin_src emacs-lisp
+  (setq slothbar-bars
+        '((:id main
+           :output :each
+           :modules (:left slothbar-date-create
+                           slothbar-workspaces-create
+                           :right slothbar-battery-create))
+          (:id secondary
+           :output "HDMI-A-1"
+           :height 20
+           :offset-y 24
+           :modules (:left slothbar-focus-create))))
+#+end_src
+
+Each entry is a plist.  `:id` distinguishes entries, and `:output`
+selects where the bar appears:
+
+- `nil` or omitted: one bar on `slothbar-preferred-display`, falling
+  back to the first connected output.
+- a string: one bar while that output exists.
+- a list of strings: one bar for each listed output that exists.
+- `:each`: one bar for every connected output.
+
+Multiple entries may use `:output :each` to put more than one bar on
+each output.  Bars are created, removed, and recreated as outputs are
+connected and disconnected.
+
+`:modules` accepts the same list as `slothbar-modules`.  When omitted,
+the bar inherits `slothbar-modules`; an explicit `:modules nil` creates
+an empty bar.  `:height`, `:width`, `:offset-x`, `:offset-y`, and
+`:bottom` override the corresponding global settings for that bar.
+
+The XEmbed tray is single-instance.  Include it in at most one bar.
+
 ** Workspaces
 
 The workspaces module reads EWMH workspace properties on X11, EXWM workspace
@@ -274,8 +315,8 @@ installation.
 
 + Act as the system tray (as of version 0.22.0)
 
-+ Configuration for multiple screens/randr (currently may display on a
-  preferred display in a multi screen configuration)
++ Configuration for multiple screens/randr and multiple bars per output via
+  `slothbar-bars', including live output add/remove
 
 + Dock on screen tops or bottoms
 
@@ -283,7 +324,7 @@ installation.
 
 ** Not currently supported (but planned)
 + Easy and meaningful integration with screen readers
-+ Multiple bars and gaps like in Polybar
++ Automatic gaps between adjacent bars
 + Configurable transparency
 + Investigate rendering the bar inside an actual Emacs frame, if desired
 + Animations

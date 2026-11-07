@@ -179,6 +179,44 @@
   "Pretend this module needs X-only facilities."
   nil)
 
+(ert-deftest slothbar-unit-refresh-uses-bar-output ()
+  "Refresh uses each bar's resolved output and honors :width."
+  (let* ((bar-a (slothbar-create
+                 :id 'a :config '(:output :each :width 300)
+                 :output "A" :pixel-height 20))
+         (bar-b (slothbar-create
+                 :id 'b :config '(:output :each)
+                 :output "B" :pixel-height 20))
+         (slothbar--bars (list bar-a bar-b))
+         (slothbar--geometry-changed? nil)
+         (seen nil))
+    (cl-letf (((symbol-function 'slothbar--find-display-geometry)
+               (lambda (display)
+                 (push display seen)
+                 (pcase display
+                   ("A" '((x-offset . 0) (y-offset . 0)
+                          (width . 1000) (height . 100)))
+                   ("B" '((x-offset . 1000) (y-offset . 0)
+                          (width . 1000) (height . 100)))
+                   (_ (error "Unexpected output %S" display)))))
+              ((symbol-function 'run-at-time)
+               (lambda (&rest _) nil)))
+      (slothbar-refresh))
+    (should (equal (nreverse seen) '("A" "B")))
+    (should (= 300 (slothbar-pixel-width bar-a)))
+    (should (= 1000 (slothbar-pixel-width bar-b)))
+    (should (= 1000 (slothbar-x-offset bar-b)))))
+
+(ert-deftest slothbar-unit-explicit-empty-bar-modules ()
+  "A bar can explicitly opt out of the global module list."
+  (let ((slothbar-modules (list (slothbar-module-create :name "global"))))
+    (let ((bar (slothbar-create :config '(:modules nil))))
+      (slothbar--construct-modules bar)
+      (should-not (slothbar-module-list bar)))
+    (let ((bar (slothbar-create :config '(:id "inherits"))))
+      (slothbar--construct-modules bar)
+      (should (= 1 (length (slothbar-module-list bar)))))))
+
 (ert-deftest slothbar-unit-click-dispatch ()
   "Clicks are routed to the module under the pointer."
   (let* ((left (slothbar-unit-clickable-create :name "left" :width 10))

@@ -109,8 +109,8 @@
 (defvar slothbar-focus--subscribers 0
   "Number of active focus modules sharing the backend hook.")
 
-(defun slothbar-focus--on-change (backend m)
-  "Refresh focus module M after a focused-window change on BACKEND."
+(defun slothbar-focus--on-change (backend)
+  "Refresh every focus module after a focused-window change on BACKEND."
   (when (eq backend slothbar--backend)
     (unless slothbar-focus--refresh-timer
       (setq slothbar-focus--refresh-timer
@@ -118,15 +118,14 @@
              0.0008 nil
              (lambda ()
                (setq slothbar-focus--refresh-timer nil)
-               (setf (slothbar-module-needs-refresh? m) t)
                (when slothbar--backend
                  (slothbar-module--refresh-all-by-name "focus"))))))))
 
-(defun slothbar-focus--subscribe (m)
-  "Register a focus module M as a backend-hook subscriber."
+(defun slothbar-focus--subscribe ()
+  "Register a focus module as a backend-hook subscriber."
   (when (zerop slothbar-focus--subscribers)
     (add-hook 'slothbar-backend-focused-window-change-hook
-              #'(lambda (backend) (slothbar-focus--on-change backend m))))
+              #'slothbar-focus--on-change))
   (cl-incf slothbar-focus--subscribers))
 
 (defun slothbar-focus--unsubscribe ()
@@ -164,7 +163,7 @@
 (cl-defmethod slothbar-module-init :before ((m slothbar-focus))
   "Configure M's initial focus state."
   (slothbar-module-update-status m)
-  (slothbar-focus--subscribe m))
+  (slothbar-focus--subscribe))
 
 (cl-defmethod slothbar-module-init ((m slothbar-focus))
   "Initialize M and start its focus update timer."
