@@ -82,6 +82,7 @@
   shm
   layer-shell
   outputs
+  scale-watched
   ext-workspace-manager
   foreign-toplevel-manager
   seat
@@ -641,6 +642,44 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                     :key #'elwl-output-name :test #'equal))
       (car outputs)))
 
+(defun slothbar-backend-wayland--apply-surface-scale (surface scale)
+  "Apply output SCALE to SURFACE and rebuild its frame."
+  (unless (eql scale (slothbar-backend-wayland-surface-scale surface))
+    (setf (slothbar-backend-wayland-surface-scale surface) scale)
+    (when-let ((bar (slothbar-backend-wayland-surface-bar surface)))
+      (setf (slothbar-scale bar) scale))
+    (when (>= (elwl-object-version
+               (slothbar-backend-wayland-surface-surface surface))
+              3)
+      (elwl-surface-set-buffer-scale
+       (slothbar-backend-wayland-surface-surface surface) scale))
+    (slothbar-backend-wayland--rebuild-frame surface)
+    (setq slothbar--geometry-changed? t)
+    (run-at-time 0 nil #'slothbar-refresh-modules)))
+
+(defun slothbar-backend-wayland--watch-output-scale (backend output)
+  "Watch OUTPUT's scale changes on BACKEND."
+  (unless (memq output (slothbar-backend-wayland-scale-watched backend))
+    (push output (slothbar-backend-wayland-scale-watched backend))
+    (elwl-object-add-listener
+     (elwl-output-object output) 'scale
+     (lambda (_object arguments)
+       (let ((factor (alist-get 'factor arguments)))
+         (when factor
+           (dolist (bar (slothbar-backend-bars backend))
+             (let ((surface (slothbar-surface bar)))
+               (when (and surface
+                          (eq output
+                              (slothbar-backend-wayland-surface-output
+                               surface)))
+                 (slothbar-backend-wayland--apply-surface-scale
+                  surface factor))))))))))
+
+(defun slothbar-backend-wayland--watch-output-scales (backend)
+  "Watch all known output scales on BACKEND."
+  (dolist (output (slothbar-backend-wayland-outputs backend))
+    (slothbar-backend-wayland--watch-output-scale backend output)))
+
 (defun slothbar-backend-wayland--wait-for (backend predicate seconds)
   "Dispatch BACKEND until PREDICATE is true or SECONDS elapse."
   (let ((deadline (+ (float-time) seconds)))
@@ -681,6 +720,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
             (elwl-roundtrip connection)
             (slothbar-backend-wayland--ensure-pointer backend)
             (setf (slothbar-backend-wayland-outputs backend) outputs)
+            (slothbar-backend-wayland--watch-output-scales backend)
             (elwl-output-watch
              registry
              (lambda (_action _output)
@@ -692,6 +732,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                   (when (slothbar-backend-wayland-connection backend)
                     (setf (slothbar-backend-wayland-outputs backend)
                           (elwl-output-list registry))
+                    (slothbar-backend-wayland--watch-output-scales backend)
                     (run-hook-with-args
                      'slothbar-backend-output-change-hook backend)))))))
           (when (elwl-registry-find registry 'zwlr-foreign-toplevel-manager-v1)

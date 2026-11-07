@@ -558,7 +558,29 @@
     (slothbar-wayland-check
      "geometry refresh rebuilds the frame at the new scale"
      (= (* 30 scale)
-        (slothbar-backend-wayland-surface-frame-height state))))
+        (slothbar-backend-wayland-surface-frame-height state)))
+    ;; Changing the output scale must update the surface and frame.
+    (slothbar-wayland--swaymsg "output" "HEADLESS-1" "scale" "3")
+    (slothbar-wayland-check
+     "output scale change updates the surface scale"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (= 3 (slothbar-backend-wayland-surface-scale state)))
+      5))
+    (slothbar-wayland-check
+     "output scale change rebuilds the frame dimensions"
+     (and (= (* 3 (slothbar-backend-wayland-surface-logical-width state))
+             (slothbar-backend-wayland-surface-frame-width state))
+          (= (* 3 (slothbar-backend-wayland-surface-logical-height state))
+             (slothbar-backend-wayland-surface-frame-height state))))
+    (slothbar-wayland--swaymsg "output" "HEADLESS-1" "scale" "2")
+    (slothbar-wayland-check
+     "output scale restores the surface scale"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (= 2 (slothbar-backend-wayland-surface-scale state)))
+      5))
+    (sit-for 0.5))
   (slothbar-exit)
   (setq slothbar-bars nil)
 
