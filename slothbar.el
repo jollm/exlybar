@@ -229,6 +229,8 @@ Each entry is a plist with the following keys:
 - `:height', `:width', `:offset-x', `:offset-y', and `:bottom' override
   the corresponding global geometry settings.
 
+Changing this variable while slothbar is running reconciles the bar list.
+
 The XEmbed tray is single-instance: if it appears in more than one bar,
 the first configured bar keeps it and later instances are skipped."
   :type '(repeat plist)
@@ -849,6 +851,16 @@ NVAL is check against the existing value for any changes."
              (slothbar--construct-modules bar))
          (slothbar--construct-modules))))))
 
+(defun slothbar--watch-slothbar-bars (_ nval oper where)
+  "Reconcile bars when `slothbar-bars' is modified.
+
+Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
+  (when (and slothbar--enabled
+             (not where)
+             (eq 'set oper)
+             (not (equal nval slothbar-bars)))
+    (run-at-time 0 nil #'slothbar--reconcile-bars)))
+
 (defun slothbar--start ()
   "Start slothbar: open the backend, create bars, and initialize modules."
   (run-hook-with-args 'slothbar-before-init-hook)
@@ -876,6 +888,7 @@ NVAL is check against the existing value for any changes."
     (add-hook 'slothbar-backend-pointer-motion-hook
               #'slothbar--on-pointer-motion)
     (add-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
+    (add-variable-watcher 'slothbar-bars #'slothbar--watch-slothbar-bars)
     (slothbar-show)
     (slothbar-refresh-modules)
     (setq slothbar--enabled t)
@@ -943,6 +956,7 @@ NVAL is check against the existing value for any changes."
   (setq slothbar--last-layout nil)
   (setq slothbar--enabled nil)
   (remove-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
+  (remove-variable-watcher 'slothbar-bars #'slothbar--watch-slothbar-bars)
   (dolist (bar slothbar--bars)
     (when slothbar--backend
       (ignore-errors

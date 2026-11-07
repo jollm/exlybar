@@ -124,7 +124,8 @@ selects where the bar appears:
 
 Multiple entries may use `:output :each` to put more than one bar on
 each output.  Bars are created, removed, and recreated as outputs are
-connected and disconnected.
+connected and disconnected, and changing `slothbar-bars` while slothbar
+is running reconciles the bar list.
 
 `:modules` accepts the same list as `slothbar-modules`.  When omitted,
 the bar inherits `slothbar-modules`; an explicit `:modules nil` creates

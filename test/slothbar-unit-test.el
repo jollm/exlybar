@@ -269,6 +269,18 @@
   "A test singleton identifier."
   'unit-singleton)
 
+(ert-deftest slothbar-unit-watch-slothbar-bars ()
+  "Changing slothbar-bars while running schedules reconciliation."
+  (let ((slothbar-bars '((:id old)))
+        (slothbar--enabled t)
+        (called nil))
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (_delay _repeat function) (funcall function)))
+              ((symbol-function 'slothbar--reconcile-bars)
+               (lambda () (setq called t))))
+      (slothbar--watch-slothbar-bars nil '((:id new)) 'set nil))
+    (should called)))
+
 (ert-deftest slothbar-unit-singleton-bar-modules ()
   "Singleton modules are only constructed on the first bar that claims them."
   (let* ((bar-a (slothbar-create :config '(:modules nil)))
