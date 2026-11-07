@@ -182,10 +182,12 @@
 (ert-deftest slothbar-unit-refresh-uses-bar-output ()
   "Refresh uses each bar's resolved output and honors :width."
   (let* ((bar-a (slothbar-create
-                 :id 'a :config '(:output :each :width 300)
+                 :id 'a :config '(:output :each :width 300
+                                  :offset-x 10 :offset-y 5)
                  :output "A" :pixel-height 20))
          (bar-b (slothbar-create
-                 :id 'b :config '(:output :each)
+                 :id 'b :config '(:output :each
+                                  :offset-x 20 :offset-y 30)
                  :output "B" :pixel-height 20))
          (slothbar--bars (list bar-a bar-b))
          (slothbar--geometry-changed? nil)
@@ -205,7 +207,10 @@
     (should (equal (nreverse seen) '("A" "B")))
     (should (= 300 (slothbar-pixel-width bar-a)))
     (should (= 1000 (slothbar-pixel-width bar-b)))
-    (should (= 1000 (slothbar-x-offset bar-b)))))
+    (should (= 10 (slothbar-x-offset bar-a)))
+    (should (= 5 (slothbar-y-offset bar-a)))
+    (should (= 20 (slothbar-x-offset bar-b)))
+    (should (= 30 (slothbar-y-offset bar-b)))))
 
 (ert-deftest slothbar-unit-explicit-empty-bar-modules ()
   "A bar can explicitly opt out of the global module list."
