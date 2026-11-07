@@ -401,6 +401,14 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 ;;; Presentation
 
+(defun slothbar-backend-xcb--damage-intersects-p (x width damage)
+  "Return non-nil when X..X+WIDTH intersects a DAMAGE span."
+  (or (null damage)
+      (cl-some (lambda (span)
+                 (and (< (car span) (+ x width))
+                      (> (cadr span) x)))
+               damage)))
+
 (cl-defmethod slothbar-backend-present
     ((backend slothbar-backend-xcb) (bar slothbar) layout damage)
   "Draw LAYOUT into BAR and update its X window."
@@ -411,28 +419,34 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
           (pixmap (slothbar-backend-xcb-surface-pixmap surface))
           (module-surfaces
            (slothbar-backend-xcb-surface-module-surfaces surface)))
-      (dolist (segment damage)
-        (pcase-let ((`(,left ,right) segment))
+      (if (null damage)
           (xcb:+request connection
-              (make-instance 'xcb:ClearArea
-                             :exposures 0
-                             :window window
-                             :x left :y 0
-                             :width (- right left)
-                             :height slothbar-height))))
-      (xcb:+request connection
-          (make-instance 'xcb:CopyArea
-                         :src-drawable pixmap
-                         :dst-drawable window
-                         :gc gc
-                         :src-x 0 :src-y 0 :dst-x 0 :dst-y 0
-                         :width slothbar-width :height slothbar-height))
+              (make-instance 'xcb:CopyArea
+                             :src-drawable pixmap
+                             :dst-drawable window
+                             :gc gc
+                             :src-x 0 :src-y 0 :dst-x 0 :dst-y 0
+                             :width slothbar-width :height slothbar-height))
+        (dolist (segment damage)
+          (pcase-let ((`(,left ,right) segment))
+            (xcb:+request connection
+                (make-instance 'xcb:CopyArea
+                               :src-drawable pixmap
+                               :dst-drawable window
+                               :gc gc
+                               :src-x left :src-y 0
+                               :dst-x left :dst-y 0
+                               :width (- right left)
+                               :height slothbar-height)))))
       (dolist (placement layout)
         (pcase-let* ((`((,x ,y) ,m) placement)
+                     (width (slothbar-module-width m))
                      (module-surface (gethash m module-surfaces)))
           (when (and module-surface
                      (slothbar-backend-xcb--module-surface-pixmap
-                      module-surface))
+                      module-surface)
+                     (slothbar-backend-xcb--damage-intersects-p
+                      x width damage))
             (xcb:+request connection
                 (make-instance 'xcb:CopyArea
                                :src-drawable
@@ -442,7 +456,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
                                :gc (slothbar-backend-xcb--module-surface-gc
                                     module-surface)
                                :src-x 0 :src-y 0 :dst-x x :dst-y y
-                               :width (slothbar-module-width m)
+                               :width width
                                :height slothbar-height)))
           (slothbar-module-reposition m x y)))
       (xcb:flush connection))))

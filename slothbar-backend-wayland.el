@@ -438,14 +438,37 @@ placement."
      (gethash module (slothbar-backend-wayland-surface-module-ops surface))
      placement-x placement-y)))
 
-(defun slothbar-backend-wayland--compose-frame (surface layout)
-  "Clear and redraw SURFACE's frame with LAYOUT."
-  (let ((frame (or (slothbar-backend-wayland-surface-frame surface)
-                   (slothbar-backend-wayland--blank-frame surface))))
-    (slothbar-backend-wayland--clear-frame surface frame)
+(defun slothbar-backend-wayland--damage-intersects-p (x width damage)
+  "Return non-nil when X..X+WIDTH intersects one of DAMAGE's spans."
+  (or (null damage)
+      (cl-some (lambda (span)
+                 (and (< (car span) (+ x width))
+                      (> (cadr span) x)))
+               damage)))
+
+(defun slothbar-backend-wayland--compose-frame (surface layout damage)
+  "Compose LAYOUT into SURFACE's frame, redrawing DAMAGE spans.
+When DAMAGE is nil, clear and redraw the whole frame."
+  (let* ((existing (slothbar-backend-wayland-surface-frame surface))
+         (frame (or existing
+                    (slothbar-backend-wayland--blank-frame surface)))
+         (full (or (null damage) (null existing)))
+         (scale (slothbar-backend-wayland-surface-scale surface))
+         (stride (slothbar-backend-wayland-surface-frame-stride surface))
+         (height (slothbar-backend-wayland-surface-frame-height surface)))
+    (if full
+        (slothbar-backend-wayland--clear-frame surface frame)
+      (dolist (span damage)
+        (slothbar-backend-wayland--fill-rect
+         frame stride
+         (truncate (* scale (car span))) 0
+         (truncate (* scale (- (cadr span) (car span)))) height
+         (slothbar--background-color))))
     (dolist (placement layout)
       (pcase-let ((`((,x ,y) ,module) placement))
-        (when (slothbar-module-p module)
+        (when (and (slothbar-module-p module)
+                   (slothbar-backend-wayland--damage-intersects-p
+                    x (slothbar-module-width module) damage))
           (slothbar-backend-wayland--draw-module surface module x y))))
     (setf (slothbar-backend-wayland-surface-frame surface) frame)
     frame))
@@ -880,9 +903,9 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-present
     ((_backend slothbar-backend-wayland) (bar slothbar) layout damage)
   "Compose LAYOUT into BAR's frame and present it when visible."
-  (ignore damage)
   (when-let ((surface (slothbar-surface bar)))
-    (let ((frame (slothbar-backend-wayland--compose-frame surface layout)))
+    (let ((frame (slothbar-backend-wayland--compose-frame
+                  surface layout damage)))
       (setf (slothbar-backend-wayland-surface-rendered surface) t)
       (when (slothbar-visible bar)
         (slothbar-backend-wayland--present-frame surface frame)))))
