@@ -739,6 +739,47 @@ Return VALUE."
       (setq slothbar-font-px-scale old-scale)
       (sit-for 0.1)))
 
+  ;; XEmbed tray is a global singleton across bars.
+  (require 'slothbar-tray)
+  (setq slothbar-bars
+        (list (list :id "tray-a"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules (list #'slothbar-tray-create))
+              (list :id "tray-b"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 20
+                    :modules (list #'slothbar-tray-create))))
+  (slothbar--start)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars)))
+    (slothbar-smoke--check
+     "only the first bar constructs an XEmbed tray"
+     (and (equal (mapcar #'slothbar-module-name
+                         (slothbar-module-list bar-a))
+                 '("tray"))
+          (null (slothbar-module-list bar-b))))
+    (slothbar-smoke--check
+     "the XEmbed tray opened its manager connection"
+     (and slothbar-tray--connection
+          slothbar-tray--selection-owner-window))
+    (slothbar-smoke--check
+     "the tray module is owned by the first bar"
+     (eq slothbar-tray--module
+         (car (slothbar-module-list bar-a)))))
+  (slothbar-exit)
+  (slothbar-smoke--check
+   "exiting closes the XEmbed tray connection"
+   (and (null slothbar-tray--connection)
+        (null slothbar-tray--module)))
+  (setq slothbar-bars nil)
+
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-modules
         (list (lambda ()
