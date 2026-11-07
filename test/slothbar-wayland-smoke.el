@@ -646,6 +646,96 @@
   (slothbar-exit)
   (setq slothbar-bars nil)
 
+  ;; Live theme and font-scale fan-out to two bars.
+  (setq slothbar-bars
+        (list (list :id "theme-a"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "theme-a" :format "theme-a"
+                             :lpad 2 :rpad 2))))
+              (list :id "theme-b"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 24
+                    :offset-x 0
+                    :offset-y 24
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "theme-b" :format "theme-b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars))
+         (module-a (car (slothbar-module-list bar-a)))
+         (module-b (car (slothbar-module-list bar-b)))
+         (state-a (slothbar-surface bar-a))
+         (state-b (slothbar-surface bar-b))
+         (frame-a (copy-sequence (slothbar-backend-wayland-surface-frame state-a)))
+         (frame-b (copy-sequence (slothbar-backend-wayland-surface-frame state-b)))
+         (font-a (copy-sequence (slothbar-font-px-sizes bar-a)))
+         (font-b (copy-sequence (slothbar-font-px-sizes bar-b)))
+         (old-scale slothbar-font-px-scale)
+         (new-bg (slothbar-color-from-plist
+                  '(:red #x1111 :green #x2222 :blue #x3333 :alpha #xffff)))
+         (new-fg (slothbar-color-from-plist
+                  '(:red #xdddd :green #xeeee :blue #xffff :alpha #xffff))))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'slothbar--background-color)
+                     (lambda () new-bg))
+                    ((symbol-function 'slothbar--foreground-color)
+                     (lambda () new-fg)))
+            (slothbar--on-theme-change nil)
+            (slothbar-wayland-check
+             "theme change updates both bars' module colors"
+             (and (eq (slothbar-module-rgb-background-color
+                       (slothbar-module-colors module-a))
+                      new-bg)
+                  (eq (slothbar-module-rgb-background-color
+                       (slothbar-module-colors module-b))
+                      new-bg)))
+            (slothbar-wayland-check
+             "theme change redraws both bars"
+             (slothbar-wayland--wait-for
+              (lambda ()
+                (and (not (equal frame-a
+                                 (slothbar-backend-wayland-surface-frame state-a)))
+                     (not (equal frame-b
+                                 (slothbar-backend-wayland-surface-frame state-b)))))
+              3)))
+          (let ((theme-frame-a
+                 (copy-sequence (slothbar-backend-wayland-surface-frame state-a)))
+                (theme-frame-b
+                 (copy-sequence (slothbar-backend-wayland-surface-frame state-b))))
+            (setq slothbar-font-px-scale 0.75)
+            (slothbar-wayland-check
+             "font scale changes both bars' computed sizes"
+             (slothbar-wayland--wait-for
+              (lambda ()
+                (and (not (equal font-a (slothbar-font-px-sizes bar-a)))
+                     (not (equal font-b (slothbar-font-px-sizes bar-b)))))
+              3))
+            (slothbar-wayland-check
+             "font scale redraws both bars"
+             (slothbar-wayland--wait-for
+              (lambda ()
+                (and (not (equal theme-frame-a
+                                 (slothbar-backend-wayland-surface-frame state-a)))
+                     (not (equal theme-frame-b
+                                 (slothbar-backend-wayland-surface-frame state-b)))))
+              3))))
+      (slothbar-exit)
+      (setq slothbar-bars nil)
+      (setq slothbar-font-px-scale old-scale)
+      (sit-for 0.1)))
+
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-bars
         (list (list :id "one"

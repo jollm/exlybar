@@ -101,6 +101,15 @@ Return VALUE."
                                 :plane-mask #xffffffff))))
     (vconcat (slot-value reply 'data))))
 
+(defun slothbar-smoke--module-pixmap-data (_backend module)
+  "Return MODULE's live X pixmap bytes."
+  (let* ((table (slothbar-backend-xcb--module-surface-table module))
+         (surface (and table (gethash module table)))
+         (pixmap (slothbar-backend-xcb--module-surface-pixmap surface))
+         (width (max 1 (slothbar-module-width module)))
+         (height (slothbar-pixel-height (slothbar-module--bar module))))
+    (slothbar-smoke--drawable-data pixmap width height)))
+
 (defun slothbar-smoke--pixmap-non-background (backend module)
   "Count pixels in MODULE's pixmap that differ from its first pixel."
   (let* ((surface (gethash
@@ -576,6 +585,102 @@ Return VALUE."
             '("runtime-b"))))
   (slothbar-exit)
   (setq slothbar-bars nil)
+
+  ;; Live theme and font-scale fan-out to two X bars.
+  (setq slothbar-bars
+        (list (list :id "theme-a"
+                    :output "HEADLESS-1"
+                    :width 1280
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "theme-a" :format "theme-a"
+                             :lpad 2 :rpad 2))))
+              (list :id "theme-b"
+                    :output "HEADLESS-1"
+                    :width 1280
+                    :height 24
+                    :offset-x 0
+                    :offset-y 24
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "theme-b" :format "theme-b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars))
+         (backend (slothbar-display-backend bar-a))
+         (module-a (car (slothbar-module-list bar-a)))
+         (module-b (car (slothbar-module-list bar-b)))
+         (before-a (slothbar-smoke--module-pixmap-data backend module-a))
+         (before-b (slothbar-smoke--module-pixmap-data backend module-b))
+         (font-a (copy-sequence (slothbar-font-px-sizes bar-a)))
+         (font-b (copy-sequence (slothbar-font-px-sizes bar-b)))
+         (old-scale slothbar-font-px-scale)
+         (new-bg (slothbar-color-from-plist
+                  '(:red #x1111 :green #x2222 :blue #x3333 :alpha #xffff)))
+         (new-fg (slothbar-color-from-plist
+                  '(:red #xdddd :green #xeeee :blue #xffff :alpha #xffff))))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'slothbar--background-color)
+                     (lambda () new-bg))
+                    ((symbol-function 'slothbar--foreground-color)
+                     (lambda () new-fg)))
+            (slothbar--on-theme-change nil)
+            (slothbar-refresh-modules)
+            (slothbar-smoke--check
+             "X theme change updates both bars' module colors"
+             (and (eq (slothbar-module-rgb-background-color
+                       (slothbar-module-colors module-a))
+                      new-bg)
+                  (eq (slothbar-module-rgb-background-color
+                       (slothbar-module-colors module-b))
+                      new-bg)))
+            (slothbar-smoke--check
+             "X theme change redraws both bars"
+             (slothbar-smoke--wait-for
+              (lambda ()
+                (and (not (equal
+                           before-a
+                           (slothbar-smoke--module-pixmap-data
+                            backend module-a)))
+                     (not (equal
+                           before-b
+                           (slothbar-smoke--module-pixmap-data
+                            backend module-b)))))
+              3)))
+          (let ((theme-a (slothbar-smoke--module-pixmap-data backend module-a))
+                (theme-b (slothbar-smoke--module-pixmap-data backend module-b)))
+            (setq slothbar-font-px-scale 0.75)
+            (slothbar-smoke--check
+             "X font scale changes both bars' computed sizes"
+             (slothbar-smoke--wait-for
+              (lambda ()
+                (and (not (equal font-a (slothbar-font-px-sizes bar-a)))
+                     (not (equal font-b (slothbar-font-px-sizes bar-b)))))
+              3))
+            (slothbar-smoke--check
+             "X font scale redraws both bars"
+             (slothbar-smoke--wait-for
+              (lambda ()
+                (and (not (equal
+                           theme-a
+                           (slothbar-smoke--module-pixmap-data
+                            backend module-a)))
+                     (not (equal
+                           theme-b
+                           (slothbar-smoke--module-pixmap-data
+                            backend module-b)))))
+              3))))
+      (slothbar-exit)
+      (setq slothbar-bars nil)
+      (setq slothbar-font-px-scale old-scale)
+      (sit-for 0.1)))
 
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-modules
