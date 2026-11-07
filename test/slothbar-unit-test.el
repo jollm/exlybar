@@ -165,13 +165,20 @@
 (cl-defstruct (slothbar-unit-clickable
                (:include slothbar-module)
                (:constructor slothbar-unit-clickable-create))
-  "A module that records clicks."
-  clicks)
+  "A module that records pointer events."
+  clicks
+  hovers)
 
 (cl-defmethod slothbar-module-click
   ((m slothbar-unit-clickable) x y button)
   "Record a click on M."
   (push (list x y button) (slothbar-unit-clickable-clicks m))
+  t)
+
+(cl-defmethod slothbar-module-hover
+  ((m slothbar-unit-clickable) x y)
+  "Record pointer motion over M."
+  (push (list x y) (slothbar-unit-clickable-hovers m))
   t)
 
 (cl-defmethod slothbar-module-supported-p
@@ -514,8 +521,9 @@
     (should refreshed)))
 
 (ert-deftest slothbar-unit-multi-bar-pointer-routing ()
-  "Pointer clicks are routed to the bar that received the event."
+  "Pointer motion and clicks are routed to the bar that received them."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))
+         (other-backend (make-slothbar-unit-backend :kind 'other))
          (bar-a (slothbar-create :id "a" :display-backend backend
                                  :pixel-width 100 :pixel-height 30))
          (bar-b (slothbar-create :id "b" :display-backend backend
@@ -526,13 +534,35 @@
          (slothbar--bar bar-a)
          (slothbar--enabled t))
     (setf (slothbar-placements bar-a)
-          (list (list (list 0 0) module-a))
+          (list (list (list 10 0) module-a))
           (slothbar-placements bar-b)
           (list (list (list 0 0) module-b)))
-    (should (slothbar--on-pointer-button backend bar-b 4 5 :left))
+    ;; Motion is dispatched to the receiving bar and uses bar-local coordinates.
+    (should (slothbar--on-pointer-motion backend bar-b 4 5))
+    (should (eq (slothbar-hovered-module bar-b) module-b))
+    (should-not (slothbar-hovered-module bar-a))
+    (should (equal (slothbar-unit-clickable-hovers module-b) '((4 5))))
+    (should (slothbar--on-pointer-motion backend bar-a 12 5))
+    (should (eq (slothbar-hovered-module bar-a) module-a))
+    (should (eq (slothbar-hovered-module bar-b) module-b))
+    (should (equal (slothbar-unit-clickable-hovers module-a) '((2 5))))
+    ;; Leaving one bar clears only that bar's hover state.
+    (slothbar--on-pointer-motion backend bar-b nil nil)
+    (should-not (slothbar-hovered-module bar-b))
+    (should (eq (slothbar-hovered-module bar-a) module-a))
+    (should (equal (slothbar-unit-clickable-hovers module-b)
+                   '((nil nil) (4 5))))
+    ;; Clicks are dispatched to the correct bar and module.
+    (should (slothbar--on-pointer-button backend bar-a 12 5 :left))
+    (should (equal (slothbar-unit-clickable-clicks module-a)
+                   '((2 5 :left))))
+    (should-not (slothbar-unit-clickable-clicks module-b))
+    (should (slothbar--on-pointer-button backend bar-b 4 5 :right))
     (should (equal (slothbar-unit-clickable-clicks module-b)
-                   '((4 5 :left))))
-    (should (null (slothbar-unit-clickable-clicks module-a)))))
+                   '((4 5 :right))))
+    ;; Events from a different backend are ignored.
+    (should-not (slothbar--on-pointer-button
+                 other-backend bar-a 12 5 :left))))
 
 (ert-deftest slothbar-unit-module-gating ()
   "Unsupported modules are dropped during module construction."
