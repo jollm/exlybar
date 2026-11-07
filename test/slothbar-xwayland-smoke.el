@@ -282,6 +282,75 @@ Return VALUE."
                               (cl-subseq before start (+ start cut))
                               (cl-subseq after start (+ start cut)))))))))
             (slothbar-module-exit module-a))
+          ;; Two independent X windows must keep independent damage.
+          (let* ((bar-b (slothbar-create
+                         :display-backend backend
+                         :pixel-width slothbar-width
+                         :pixel-height slothbar-height))
+                 (module-a
+                  (slothbar-module-create
+                   :name "two-bar-a" :format "alpha" :lpad 2 :rpad 2))
+                 (module-b
+                  (slothbar-module-create
+                   :name "two-bar-b" :format "bravo" :lpad 2 :rpad 2)))
+            (aset module-a
+                  (cl-struct-slot-offset 'slothbar-module 'backend) backend)
+            (aset module-a
+                  (cl-struct-slot-offset 'slothbar-module 'bar) bar)
+            (aset module-b
+                  (cl-struct-slot-offset 'slothbar-module 'backend) backend)
+            (aset module-b
+                  (cl-struct-slot-offset 'slothbar-module 'bar) bar-b)
+            (slothbar--with-bar bar-b
+              (slothbar-backend-create-bar backend bar-b))
+            (slothbar--with-bar bar
+              (slothbar-module-init module-a))
+            (slothbar--with-bar bar-b
+              (slothbar-module-init module-b))
+            (let* ((layout-a (list (list (list 0 0) module-a)))
+                   (layout-b (list (list (list 0 0) module-b)))
+                   (window-a
+                    (slothbar-backend-xcb-surface-window
+                     (slothbar-surface bar)))
+                   (window-b
+                    (slothbar-backend-xcb-surface-window
+                     (slothbar-surface bar-b))))
+              (slothbar--with-bar bar
+                (slothbar-backend-show backend bar)
+                (slothbar-backend-present backend bar layout-a nil))
+              (slothbar--with-bar bar-b
+                (slothbar-backend-show backend bar-b)
+                (slothbar-backend-present backend bar-b layout-b nil))
+              (let ((before-a
+                     (slothbar-smoke--drawable-data
+                      window-a slothbar-width slothbar-height))
+                    (before-b
+                     (slothbar-smoke--drawable-data
+                      window-b slothbar-width slothbar-height)))
+                (slothbar--with-bar bar
+                  (aset module-a
+                        (cl-struct-slot-offset 'slothbar-module 'format)
+                        "i")
+                  (slothbar-module-layout module-a)
+                  (slothbar-backend-draw-module backend module-a)
+                  (slothbar-backend-present
+                   backend bar layout-a '((0 100))))
+                (let ((after-a
+                       (slothbar-smoke--drawable-data
+                        window-a slothbar-width slothbar-height))
+                      (after-b
+                       (slothbar-smoke--drawable-data
+                        window-b slothbar-width slothbar-height)))
+                  (slothbar-smoke--check
+                   "X two-bar damage changes the receiving bar"
+                   (not (equal before-a after-a)))
+                  (slothbar-smoke--check
+                   "X two-bar damage leaves the other window unchanged"
+                   (equal before-b after-b)))))
+            (slothbar-module-exit module-a)
+            (slothbar-module-exit module-b)
+            (slothbar--with-bar bar-b
+              (slothbar-backend-destroy-bar backend bar-b)))
           (slothbar-backend-present
            backend bar
            (list (list (list 0 0) module))
