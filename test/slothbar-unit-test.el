@@ -212,6 +212,17 @@
     (should (= 20 (slothbar-x-offset bar-b)))
     (should (= 30 (slothbar-y-offset bar-b)))))
 
+(ert-deftest slothbar-unit-per-bar-font-px-sizes ()
+  "Each bar binds its own precomputed font pixel sizes."
+  (let* ((bar-a (slothbar-create :font-px-sizes [20]))
+         (bar-b (slothbar-create :font-px-sizes [30]))
+         (seen nil))
+    (slothbar--with-bar bar-a
+      (push slothbar-font-px-size seen))
+    (slothbar--with-bar bar-b
+      (push slothbar-font-px-size seen))
+    (should (equal seen '([30] [20])))))
+
 (ert-deftest slothbar-unit-explicit-empty-bar-modules ()
   "A bar can explicitly opt out of the global module list."
   (let ((slothbar-modules (list (slothbar-module-create :name "global"))))

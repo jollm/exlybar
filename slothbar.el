@@ -118,6 +118,7 @@
   hovered-module
   (pixel-width 0 :type 'integer)
   (pixel-height 0 :type 'integer)
+  font-px-sizes
   (x-offset 0 :type 'integer)
   (y-offset 0 :type 'integer)
   (scale 1 :type 'integer)
@@ -327,6 +328,8 @@ If DISPLAY is not found, the value chosen is the first found in
           (slothbar--bar ,bar)
           (slothbar-width (slothbar-pixel-width ,bar))
           (slothbar-height (slothbar-pixel-height ,bar))
+          (slothbar-font-px-size (or (slothbar-font-px-sizes ,bar)
+                                     slothbar-font-px-size))
           (slothbar-offset-x (slothbar-x-offset ,bar))
           (slothbar-offset-y (slothbar-y-offset ,bar))
           (slothbar-is-bottom (slothbar-bottom ,bar)))
@@ -412,6 +415,7 @@ When BAR is non-nil, only that bar is refreshed."
       (setq slothbar--geometry-changed? nil)
       (dolist (bar bars)
         (slothbar--with-bar bar
+          (slothbar--refresh-bar-font-px-sizes bar)
           (dolist (m (slothbar-module-list bar))
             (when (slothbar-module-p m)
               (setf (slothbar-module-needs-refresh? m) t
@@ -682,6 +686,13 @@ configured, no bars are created."
    (slothbar-modules (list nil))
    (t nil)))
 
+(defun slothbar--refresh-bar-font-px-sizes (bar)
+  "Recompute BAR's per-bar font pixel sizes."
+  (setf (slothbar-font-px-sizes bar)
+        (slothbar-font--precompute-px-sizes
+         (slothbar-pixel-height bar)
+         slothbar-font--color-code-map)))
+
 (defun slothbar--make-bar (backend config index geometry &optional output)
   "Create a bar from CONFIG for BACKEND on OUTPUT.
 INDEX identifies CONFIG among the bar definitions.  GEOMETRY supplies
@@ -706,6 +717,8 @@ fallback offsets."
      :pixel-width (or (plist-get config :width)
                       (alist-get 'width geometry))
      :pixel-height height
+     :font-px-sizes (slothbar-font--precompute-px-sizes
+                     height slothbar-font--color-code-map)
      :x-offset x-offset
      :y-offset y-offset
      :bottom bottom)))
@@ -790,10 +803,6 @@ fallback offsets."
               (setq kept (append kept (list bar)))
               (setq slothbar--bars kept)
               (slothbar--with-bar bar
-                (setq slothbar-font-px-size
-                      (slothbar-font--precompute-px-sizes
-                       (slothbar-pixel-height bar)
-                       slothbar-font--color-code-map))
                 (slothbar-backend-create-bar backend bar)
                 (slothbar--construct-modules bar)
                 (dolist (m (slothbar-module-list bar))
