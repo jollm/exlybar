@@ -66,6 +66,7 @@ trap cleanup EXIT
 
 XDG_RUNTIME_DIR="$RUNTIME" \
 WLR_BACKENDS=headless \
+WLR_HEADLESS_OUTPUTS=2 \
 WLR_LIBINPUT_NO_DEVICES=1 \
 WLR_RENDERER=pixman \
   "$SWAY" -c "$WORK/sway.conf" > "$WORK/sway.log" 2>&1 &
@@ -141,6 +142,7 @@ if [ -n "${SLOTHBAR_FONTSLOTH_DIR:-}" ]; then
 fi
 
 DISPLAY=":$DISPLAY_NUM" \
+XDG_RUNTIME_DIR="$RUNTIME" \
 SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
 SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
   timeout 120 "$EMACS" -Q --display=":$DISPLAY_NUM" \

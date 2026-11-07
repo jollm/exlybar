@@ -70,6 +70,25 @@ Return VALUE."
   (unless value (kill-emacs 1))
   value)
 
+(defun slothbar-smoke--swaymsg (&rest args)
+  "Run swaymsg with ARGS against the harness sway instance."
+  (let ((sock (or (getenv "SWAYSOCK")
+                  (car (file-expand-wildcards
+                        (expand-file-name "sway-ipc.*.sock"
+                                          (or (getenv "XDG_RUNTIME_DIR")
+                                              "/tmp")))))))
+    (unless sock
+      (error "No sway IPC socket found"))
+    (setenv "SWAYSOCK" sock)
+    (apply #'call-process "swaymsg" nil nil nil "-s" sock args)))
+
+(defun slothbar-smoke--wait-for (predicate &optional seconds)
+  "Wait up to SECONDS for PREDICATE, processing X events."
+  (let ((deadline (+ (float-time) (or seconds 5))))
+    (while (and (not (funcall predicate)) (< (float-time) deadline))
+      (sit-for 0.1))
+    (funcall predicate)))
+
 (defun slothbar-smoke--pixmap-non-background (backend module)
   "Count pixels in MODULE's pixmap that differ from its first pixel."
   (let* ((surface (gethash
@@ -143,6 +162,15 @@ Return VALUE."
                                  (slothbar-xcb-window))
           (slothbar-smoke--check "created a background pixmap"
                                  (slothbar-backend-xcb-pixmap backend))
+          (let ((names (slothbar-backend-output-names backend)))
+            (slothbar-smoke--record (format "X outputs: %S\n" names))
+            (slothbar-smoke--check
+             "Xwayland exposes multiple outputs"
+             (>= (length names) 2))
+            (slothbar-smoke--check
+             "headless output names are visible"
+             (and (member "HEADLESS-1" names)
+                  (member "HEADLESS-2" names))))
           (slothbar-smoke--check "xcb supports the system tray"
                                  (slothbar-backend-supports-p
                                   backend 'system-tray))
@@ -210,6 +238,59 @@ Return VALUE."
     (slothbar-smoke--check "closed the connection"
                            (null (slothbar-backend-xcb-connection backend))))
 
+  ;; Multi-output core lifecycle: one bar per named X output.
+  (setq slothbar-bars
+        (list (list :id 'left
+                    :output "HEADLESS-1"
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "left" :format "left" :lpad 2 :rpad 2))))
+              (list :id 'right
+                    :output "HEADLESS-2"
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "right" :format "right" :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (slothbar-smoke--check "core start created one bar per output"
+                         (= 2 (length slothbar--bars)))
+  (slothbar-smoke--check "each X bar has a window surface"
+                         (cl-every (lambda (bar) (slothbar-surface bar))
+                                   slothbar--bars))
+  (let ((by-output
+         (cl-loop for bar in slothbar--bars
+                  collect (cons (slothbar-output bar)
+                                (slothbar-x-offset bar)))))
+    (slothbar-smoke--record (format "bar offsets: %S\n" by-output))
+    (slothbar-smoke--check
+     "bars use distinct monitor offsets"
+     (= 2 (length (delete-dups (mapcar #'cdr by-output))))))
+  ;; Physical output removal/re-add through sway's RandR backing.
+  (require 'slothbar-randr)
+  (slothbar-randr-mode 1)
+  (slothbar-smoke--check "randr mode enabled for hotplug test"
+                         slothbar-randr-mode)
+  (slothbar-smoke--swaymsg "output" "HEADLESS-2" "disable")
+  (slothbar-smoke--check
+   "disabling an output removes its bar"
+   (slothbar-smoke--wait-for
+    (lambda () (= 1 (length slothbar--bars)))))
+  (slothbar-smoke--swaymsg "output" "HEADLESS-2" "enable")
+  (slothbar-smoke--check
+   "re-enabling an output restores its bar"
+   (slothbar-smoke--wait-for
+    (lambda () (= 2 (length slothbar--bars)))))
+  (slothbar-randr-mode -1)
+  (setq slothbar-bars (list (car slothbar-bars)))
+  (slothbar--reconcile-bars)
+  (slothbar-smoke--check "reconciliation drops removed bar definitions"
+                         (= 1 (length slothbar--bars)))
+  (slothbar-exit)
+  (slothbar-smoke--check "multi-output exit cleared the backend"
+                         (null slothbar--backend))
+  (setq slothbar-bars nil)
+
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-modules
         (list (lambda ()
@@ -237,7 +318,8 @@ Return VALUE."
       (slothbar-smoke--record "all xwayland smoke checks passed\n")
       (kill-emacs 0))
   (error
-   (slothbar-smoke--record (format "ERROR: %S\n" err))
+   (slothbar-smoke--record
+    (format "ERROR: %S\nBACKTRACE:\n%s\n" err (backtrace)))
    (kill-emacs 1)))
 
 ;;; slothbar-xwayland-smoke.el ends here

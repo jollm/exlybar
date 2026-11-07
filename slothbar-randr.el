@@ -82,7 +82,11 @@ configure RandR)."
     (let ((seqnum (slot-value evt '~sequence)))
       (unless (equal seqnum slothbar-randr--prev-screen-change-seqnum)
         (setq slothbar-randr--prev-screen-change-seqnum seqnum)
-        (run-hooks 'slothbar-randr-screen-change-hook)))))
+        (run-hooks 'slothbar-randr-screen-change-hook)
+        (run-at-time 0 nil #'slothbar-refresh)
+        (when slothbar--backend
+          (run-hook-with-args
+           'slothbar-backend-output-change-hook slothbar--backend))))))
 
 (defun slothbar-randr--on-Notify (data _synthetic)
   "Handle `CrtcChangeNotify' and `OutputChangeNotify' events with DATA.
@@ -105,7 +109,15 @@ Refresh when any RandR 1.5 monitor changes."
   (let ((evt (make-instance 'xcb:ConfigureNotify)))
     (xcb:unmarshal evt data)
     (with-slots (window) evt
-      (when (eq window (slothbar-xcb-window))
+      (when (and slothbar--backend
+                 (cl-find-if
+                  (lambda (bar)
+                    (let ((surface (slothbar-surface bar)))
+                      (and surface
+                           (eql window
+                                (slothbar-backend-xcb-surface-window
+                                 surface)))))
+                  (slothbar-backend-bars slothbar--backend)))
         (slothbar-refresh)))))
 
 (cl-defun slothbar-randr--init ()
@@ -146,7 +158,7 @@ This is adapted from the EXWM RandR module."
                 #'slothbar-randr--on-ConfigureNotify)
     (xcb:+request (slothbar-xcb-connection)
         (make-instance 'xcb:randr:SelectInput
-                       :window (slothbar-xcb-window)
+                       :window (slothbar-xcb-root-window-id)
                        :enable (logior
                                 xcb:randr:NotifyMask:ScreenChange
                                 xcb:randr:NotifyMask:CrtcChange
@@ -155,6 +167,16 @@ This is adapted from the EXWM RandR module."
 
 (defun slothbar-randr--exit ()
   "Perform cleanup."
+  (when (and slothbar--backend
+             (slothbar-backend-xcb-p slothbar--backend)
+             (slothbar-xcb-connection)
+             (slothbar-xcb-root-window-id))
+    (ignore-errors
+      (xcb:+request (slothbar-xcb-connection)
+          (make-instance 'xcb:randr:SelectInput
+                         :window (slothbar-xcb-root-window-id)
+                         :enable 0))
+      (xcb:flush (slothbar-xcb-connection))))
   (setq slothbar-randr--last-timestamp 0
         slothbar-randr--prev-screen-change-seqnum nil
         slothbar-randr--compatibility-mode nil))

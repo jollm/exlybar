@@ -269,7 +269,9 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
                                      (slothbar-backend-xcb--root-window-id
                                       backend))))
                  ((map ('y-offset mon-y-offset) ('height mon-height))
-                  (slothbar--find-display-geometry slothbar-preferred-display))
+                  (slothbar--find-display-geometry
+                   (or (and slothbar--bar (slothbar-output slothbar--bar))
+                       slothbar-preferred-display)))
                  (bottom-strut (if slothbar-is-bottom
                                    (+ slothbar-height slothbar-margin-y
                                       (- root-window-height
