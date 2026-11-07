@@ -126,7 +126,7 @@
     (when changed
       (setf (slothbar-module-needs-refresh? m) t)
       (when (and backend (slothbar-enabled-p))
-        (slothbar-refresh-modules)))
+        (slothbar-refresh-modules nil (slothbar-module--bar m))))
     text))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-focus))

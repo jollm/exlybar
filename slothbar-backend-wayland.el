@@ -600,7 +600,8 @@ VISIBLE non-nil reserves the bar's exclusive zone."
         (setq slothbar-width new-width))
       (slothbar-backend-wayland--rebuild-frame surface)
       (unless initial
-        (run-at-time 0 nil #'slothbar-refresh-modules)))))
+        (run-at-time 0 nil
+                     (lambda () (slothbar-refresh-modules nil bar)))))))
 
 (defun slothbar-backend-wayland--select-output (outputs)
   "Choose an output from OUTPUTS using `slothbar-preferred-display'."

@@ -821,7 +821,7 @@ are honored."
     (when changed
       (setf (slothbar-module-needs-refresh? m) t)
       (when (and (slothbar-module--backend m) (slothbar-enabled-p))
-        (slothbar-refresh-modules)))
+        (slothbar-refresh-modules nil (slothbar-module--bar m))))
     text))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-sysinfo))

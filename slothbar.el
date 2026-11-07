@@ -370,13 +370,16 @@ Remap colors in every bar and refresh the display."
   "Non-nil when the bar geometry changed.
 Cleared by `slothbar-refresh-modules' after the change is processed.")
 
-(cl-defun slothbar-refresh-modules (&optional modules)
+(cl-defun slothbar-refresh-modules (&optional modules bar)
   "Refresh bars whose modules or geometry changed, and present them.
-MODULES, when non-nil, is used instead of each bar's module list."
-  (let ((geometry-changed slothbar--geometry-changed?))
+MODULES, when non-nil, is used instead of each bar's module list.
+When BAR is non-nil, only that bar is refreshed."
+  (let ((geometry-changed slothbar--geometry-changed?)
+        (bars (if bar (list bar)
+                (or slothbar--bars (list slothbar--bar)))))
     (when geometry-changed
       (setq slothbar--geometry-changed? nil)
-      (dolist (bar slothbar--bars)
+      (dolist (bar bars)
         (slothbar--with-bar bar
           (dolist (m (slothbar-module-list bar))
             (when (slothbar-module-p m)
@@ -386,7 +389,7 @@ MODULES, when non-nil, is used instead of each bar's module list."
                 (slothbar-backend-reset-module-cache
                  (slothbar-display-backend bar) m))))))
       (slothbar--refresh))
-    (dolist (bar (or slothbar--bars (list slothbar--bar)))
+    (dolist (bar bars)
       (when bar
         (slothbar--with-bar bar
           (let* ((modules (or modules

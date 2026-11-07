@@ -238,6 +238,30 @@
         (named "A")
         (default nil))))))
 
+(ert-deftest slothbar-unit-bar-local-refresh ()
+  "Refreshing with a bar refreshes only that bar."
+  (let* ((backend (make-slothbar-unit-backend :kind 'test))
+         (module-a (slothbar-module-create :name "a" :width 10))
+         (module-b (slothbar-module-create :name "b" :width 10))
+         (bar-a (slothbar-create :id "a" :display-backend backend
+                                 :module-list (list module-a)
+                                 :pixel-width 100 :pixel-height 20))
+         (bar-b (slothbar-create :id "b" :display-backend backend
+                                 :module-list (list module-b)
+                                 :pixel-width 100 :pixel-height 20))
+         (slothbar--bars (list bar-a bar-b))
+         (slothbar--bar bar-a)
+         (presented nil))
+    (setf (slothbar-module-needs-refresh? module-a) t
+          (slothbar-module-needs-refresh? module-b) t)
+    (cl-letf (((symbol-function 'slothbar-backend-present)
+               (lambda (_backend bar &rest _)
+                 (push (slothbar-id bar) presented)))
+              ((symbol-function 'slothbar-module-refresh)
+               (lambda (_module) nil)))
+      (slothbar-refresh-modules nil bar-a))
+    (should (equal presented '("a")))))
+
 (ert-deftest slothbar-unit-theme-change-updates-every-bar ()
   "Theme changes update module colors in every bar."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))

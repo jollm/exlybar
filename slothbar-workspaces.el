@@ -278,7 +278,7 @@ Return non-nil when an activation request was sent."
       (setf (slothbar-workspaces-hover-index m) index
             (slothbar-module-needs-refresh? m) t)
       (when (and slothbar--backend (slothbar-enabled-p))
-        (slothbar-refresh-modules)))))
+        (slothbar-refresh-modules nil (slothbar-module--bar m))))))
 
 (defun slothbar-workspaces-format-format (m)
   "Format M's format string."
