@@ -157,6 +157,21 @@
   "A test backend."
   features)
 
+(cl-defmethod slothbar-backend-add-module
+  ((_backend slothbar-unit-backend) (_module slothbar-module))
+  "Accept module resources for the test backend."
+  nil)
+
+(cl-defmethod slothbar-backend-remove-module
+  ((_backend slothbar-unit-backend) (_module slothbar-module))
+  "Release module resources for the test backend."
+  nil)
+
+(cl-defmethod slothbar-backend-draw-module
+  ((_backend slothbar-unit-backend) (_module slothbar-module))
+  "Draw nothing for the test backend."
+  nil)
+
 (cl-defstruct (slothbar-unit-unsupported
                (:include slothbar-module)
                (:constructor slothbar-unit-unsupported-create))
@@ -388,6 +403,55 @@
                (lambda (bar) (push bar seen))))
       (slothbar--watch-slothbar-modules nil '(new-modules) 'set nil))
     (should (equal seen (list inherited)))))
+
+(cl-defstruct (slothbar-unit-lifecycle
+               (:include slothbar-module)
+               (:constructor slothbar-unit-lifecycle-create))
+  "A module that records its init and exit events."
+  events)
+
+(cl-defmethod slothbar-module-init ((m slothbar-unit-lifecycle))
+  "Record initialization of M."
+  (push 'init (slothbar-unit-lifecycle-events m))
+  (setf (slothbar-module-initialized m) t))
+
+(cl-defmethod slothbar-module-exit ((m slothbar-unit-lifecycle))
+  "Record exit of M."
+  (push 'exit (slothbar-unit-lifecycle-events m))
+  (setf (slothbar-module-initialized m) nil))
+
+(ert-deftest slothbar-unit-reconcile-replaces-bar-modules ()
+  "Changing a running bar's :modules replaces those modules in place."
+  (let* ((slothbar-modules nil)
+         (backend (make-slothbar-unit-output-backend
+                   :kind 'test :outputs '("A")))
+         (old-module (slothbar-unit-lifecycle-create :name "old"))
+         (new-module (slothbar-unit-lifecycle-create :name "new"))
+         (bar (slothbar-create
+               :id '("main" "A")
+               :config '(:id "main" :output "A" :modules nil
+                         :width 100 :height 20
+                         :offset-x 0 :offset-y 0)
+               :output "A" :pixel-width 100 :pixel-height 20
+               :x-offset 0 :y-offset 0))
+         (slothbar--backend backend)
+         (slothbar--bars (list bar))
+         (slothbar--enabled nil)
+         (slothbar-bars
+          (list (list :id "main" :output "A"
+                      :modules (list new-module)
+                      :width 100 :height 20
+                      :offset-x 0 :offset-y 0))))
+    (setf (slothbar-module-list bar) (list old-module))
+    (cl-letf (((symbol-function 'slothbar--find-display-geometry)
+               (lambda (_display)
+                 '((x-offset . 0) (y-offset . 0)
+                   (width . 1000) (height . 700)))))
+      (slothbar--reconcile-bars))
+    (should (eq bar (car slothbar--bars)))
+    (should (equal (slothbar-module-list bar) (list new-module)))
+    (should (equal (slothbar-unit-lifecycle-events old-module) '(exit)))
+    (should (equal (slothbar-unit-lifecycle-events new-module) '(init)))))
 
 (ert-deftest slothbar-unit-watch-slothbar-bars ()
   "Changing slothbar-bars while running schedules reconciliation."
