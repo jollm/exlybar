@@ -319,6 +319,18 @@ If DISPLAY is not found, the value chosen is the first found in
       (width . ,(caddr geom))
       (height . ,(cadddr geom)))))
 
+(defmacro slothbar--with-bar (bar &rest body)
+  "Evaluate BODY with BAR as the current bar and geometry."
+  (declare (indent 1) (debug t))
+  `(let* ((,bar ,bar)
+          (slothbar--bar ,bar)
+          (slothbar-width (slothbar-pixel-width ,bar))
+          (slothbar-height (slothbar-pixel-height ,bar))
+          (slothbar-offset-x (slothbar-x-offset ,bar))
+          (slothbar-offset-y (slothbar-y-offset ,bar))
+          (slothbar-is-bottom (slothbar-bottom ,bar)))
+     ,@body))
+
 (defun slothbar-show ()
   "Show every active bar."
   (dolist (bar (or slothbar--bars (list slothbar--bar)))
@@ -387,18 +399,6 @@ Remap colors in every bar and refresh the display."
 (defvar slothbar--geometry-changed? nil
   "Non-nil when the bar geometry changed.
 Cleared by `slothbar-refresh-modules' after the change is processed.")
-
-(defmacro slothbar--with-bar (bar &rest body)
-  "Evaluate BODY with BAR as the current bar and geometry."
-  (declare (indent 1) (debug t))
-  `(let* ((,bar ,bar)
-          (slothbar--bar ,bar)
-          (slothbar-width (slothbar-pixel-width ,bar))
-          (slothbar-height (slothbar-pixel-height ,bar))
-          (slothbar-offset-x (slothbar-x-offset ,bar))
-          (slothbar-offset-y (slothbar-y-offset ,bar))
-          (slothbar-is-bottom (slothbar-bottom ,bar)))
-     ,@body))
 
 (cl-defun slothbar-refresh-modules (&optional modules bar)
   "Refresh bars whose modules or geometry changed, and present them.
