@@ -844,6 +844,15 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     ((_backend slothbar-backend-wayland) (bar slothbar))
   "Show BAR and reserve its exclusive zone."
   (when-let ((surface (slothbar-surface bar)))
+    (let ((width (max 1 (or (slothbar-pixel-width bar) slothbar-width 1)))
+          (height (max 1 (or (slothbar-pixel-height bar) slothbar-height))))
+      (when (or (/= width
+                    (slothbar-backend-wayland-surface-logical-width surface))
+                (/= height
+                    (slothbar-backend-wayland-surface-logical-height surface)))
+        (setf (slothbar-backend-wayland-surface-logical-width surface) width
+              (slothbar-backend-wayland-surface-logical-height surface) height)
+        (slothbar-backend-wayland--rebuild-frame surface)))
     (slothbar-backend-wayland--apply-layer-state surface t)
     (if (and (slothbar-backend-wayland-surface-rendered surface)
              (slothbar-backend-wayland-surface-frame surface))

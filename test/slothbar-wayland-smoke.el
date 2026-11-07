@@ -468,6 +468,47 @@
    (null slothbar--bars))
   (setq slothbar-bars nil)
 
+  ;; Geometry refresh must resize the Wayland surface and frame.
+  (setq slothbar-bars
+        (list (list :id "geometry"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "geometry" :format "geometry"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar (car slothbar--bars))
+         (state (slothbar-surface bar))
+         (scale (slothbar-backend-wayland-surface-scale state)))
+    (slothbar-wayland-check
+     "geometry refresh starts at the configured height"
+     (= 20 (slothbar-backend-wayland-surface-logical-height state)))
+    (let ((config (copy-sequence (slothbar-config bar))))
+      (setf (slothbar-config bar)
+            (plist-put config :height 30)))
+    (slothbar-refresh)
+    (slothbar-wayland-check
+     "geometry refresh updates the bar height"
+     (slothbar-wayland--wait-for
+      (lambda () (= 30 (slothbar-pixel-height bar))) 3))
+    (slothbar-wayland-check
+     "geometry refresh resizes the Wayland surface"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (= 30 (slothbar-backend-wayland-surface-logical-height state)))
+      3))
+    (slothbar-wayland-check
+     "geometry refresh rebuilds the frame at the new scale"
+     (= (* 30 scale)
+        (slothbar-backend-wayland-surface-frame-height state))))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
   ;; Full core lifecycle through slothbar--start and slothbar-exit.
   (setq slothbar-bars
         (list (list :id "one"
