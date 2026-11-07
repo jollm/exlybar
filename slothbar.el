@@ -342,16 +342,29 @@ If UNMAP? is non-nil, first unmap the window."
 (defun slothbar--on-theme-change (_)
   "A function to run when the Emacs theme changes.
 
-It will remap colors and refresh the display."
+Remap colors in every bar and refresh the display."
   (setq slothbar-color-map-fg (slothbar-color--gen-color-map))
   (when (slothbar-enabled-p)
-    (dolist (m slothbar--modules)
-      (when (slothbar-module-p m)
-        (setf (slothbar-module-rgb-background-color
-               (slothbar-module-colors m))
-              (slothbar--background-color))
-        (setf (slothbar-module-needs-refresh? m) t)))
-    (run-with-idle-timer 0 nil (lambda () (slothbar--refresh t)))))
+    (let ((background (slothbar--background-color))
+          (foreground (slothbar--foreground-color))
+          (bars (or slothbar--bars (list slothbar--bar))))
+      (dolist (bar bars)
+        (when bar
+          (let ((modules (or (slothbar-module-list bar)
+                             slothbar--modules)))
+            (dolist (m modules)
+              (when (slothbar-module-p m)
+                (let ((colors (slothbar-module-colors m)))
+                  (setf (slothbar-module-rgb-background-color colors)
+                        background
+                        (slothbar-module-rgb-foreground-color colors)
+                        foreground
+                        (slothbar-module-needs-refresh? m) t))))))))
+    (run-with-idle-timer
+     0 nil
+     (lambda ()
+       (slothbar--refresh t)
+       (slothbar-refresh-modules)))))
 
 (defvar slothbar--geometry-changed? nil
   "Non-nil when the bar geometry changed.

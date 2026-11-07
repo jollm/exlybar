@@ -238,6 +238,39 @@
         (named "A")
         (default nil))))))
 
+(ert-deftest slothbar-unit-theme-change-updates-every-bar ()
+  "Theme changes update module colors in every bar."
+  (let* ((backend (make-slothbar-unit-backend :kind 'test))
+         (m-a (slothbar-module-create :name "a"))
+         (m-b (slothbar-module-create :name "b"))
+         (bar-a (slothbar-create :display-backend backend
+                                 :module-list (list m-a)))
+         (bar-b (slothbar-create :display-backend backend
+                                 :module-list (list m-b)))
+         (slothbar--bars (list bar-a bar-b))
+         (slothbar--enabled t)
+         (refreshed nil))
+    (cl-letf (((symbol-function 'slothbar--background-color)
+               (lambda () 'background))
+              ((symbol-function 'slothbar--foreground-color)
+               (lambda () 'foreground))
+              ((symbol-function 'run-with-idle-timer)
+               (lambda (_seconds _repeat function) (funcall function)))
+              ((symbol-function 'slothbar--refresh)
+               (lambda (&optional _) (setq refreshed t)))
+              ((symbol-function 'slothbar-refresh-modules)
+               (lambda (&optional _) nil)))
+      (slothbar--on-theme-change nil))
+    (dolist (module (list m-a m-b))
+      (should (eq (slothbar-module-rgb-background-color
+                   (slothbar-module-colors module))
+                  'background))
+      (should (eq (slothbar-module-rgb-foreground-color
+                   (slothbar-module-colors module))
+                  'foreground))
+      (should (slothbar-module-needs-refresh? module)))
+    (should refreshed)))
+
 (ert-deftest slothbar-unit-multi-bar-pointer-routing ()
   "Pointer clicks are routed to the bar that received the event."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))
