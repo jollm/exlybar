@@ -220,47 +220,48 @@
 
 ;;; Struts and window geometry
 
+(defun slothbar-backend-xcb--surface (bar)
+  "Return BAR's xcb surface."
+  (and bar (slothbar-surface bar)))
+
 (defun slothbar-backend-xcb--do-struts
-    (backend top bottom left top-start-x top-end-x bottom-start-x bottom-end-x)
-  "Do requests for struts on BACKEND.
-TOP the top strut
-BOTTOM the bottom strut
-LEFT the left strut
-TOP-START-X x coordinate of the top strut
-TOP-END-X end x coordinate of the top strut
-BOTTOM-START-X x coordinate of the bottom strut
-BOTTOM-END-X end x coordinate of the bottom strut"
+    (backend bar top bottom left top-start-x top-end-x
+             bottom-start-x bottom-end-x)
+  "Do requests for struts on BAR's window.
+TOP, BOTTOM, LEFT are the strut sizes. TOP-START-X and TOP-END-X delimit
+the top strut; BOTTOM-START-X and BOTTOM-END-X delimit the bottom strut."
   (let ((connection (slothbar-backend-xcb-connection backend))
-        (window (slothbar-backend-xcb-window backend)))
-    (xcb:+request connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
-                       :window window
-                       :left left
-                       :right 0
-                       :top top
-                       :bottom bottom))
-    (xcb:+request connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_STRUT_PARTIAL
-                       :window window
-                       :left left
-                       :right 0
-                       :top top
-                       :bottom bottom
-                       :left-start-y 0
-                       :left-end-y 0
-                       :right-start-y 0
-                       :right-end-y 0
-                       :top-start-x top-start-x
-                       :top-end-x top-end-x
-                       :bottom-start-x bottom-start-x
-                       :bottom-end-x bottom-end-x))))
+        (surface (slothbar-backend-xcb--surface bar)))
+    (when surface
+      (let ((window (slothbar-backend-xcb-surface-window surface)))
+        (xcb:+request connection
+            (make-instance 'xcb:ewmh:set-_NET_WM_STRUT
+                           :window window
+                           :left left
+                           :right 0
+                           :top top
+                           :bottom bottom))
+        (xcb:+request connection
+            (make-instance 'xcb:ewmh:set-_NET_WM_STRUT_PARTIAL
+                           :window window
+                           :left left
+                           :right 0
+                           :top top
+                           :bottom bottom
+                           :left-start-y 0
+                           :left-end-y 0
+                           :right-start-y 0
+                           :right-end-y 0
+                           :top-start-x top-start-x
+                           :top-end-x top-end-x
+                           :bottom-start-x bottom-start-x
+                           :bottom-end-x bottom-end-x))))))
 
-(defun slothbar-backend-xcb--configure-struts (backend &optional hide?)
-  "Configure BACKEND's struts.
-
+(defun slothbar-backend-xcb--configure-struts (backend bar &optional hide?)
+  "Configure BAR's struts on BACKEND.
 If HIDE? is non-nil, configure struts to make the bar invisible."
   (if hide?
-      (slothbar-backend-xcb--do-struts backend 0 0 0 0 0 0 0)
+      (slothbar-backend-xcb--do-struts backend bar 0 0 0 0 0 0 0)
     (pcase-let* (((eieio (height root-window-height))
                   (xcb:+request-unchecked+reply
                       (slothbar-backend-xcb-connection backend)
@@ -270,15 +271,14 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
                                       backend))))
                  ((map ('y-offset mon-y-offset) ('height mon-height))
                   (slothbar--find-display-geometry
-                   (or (and slothbar--bar (slothbar-output slothbar--bar))
-                       slothbar-preferred-display)))
+                   (or (slothbar-output bar) slothbar-preferred-display)))
                  (bottom-strut (if slothbar-is-bottom
                                    (+ slothbar-height slothbar-margin-y
                                       (- root-window-height
                                          (+ mon-y-offset mon-height)))
                                  0)))
       (slothbar-backend-xcb--do-struts
-       backend
+       backend bar
        (if slothbar-is-bottom 0
          (+ slothbar-height slothbar-offset-y slothbar-margin-y))
        bottom-strut
@@ -292,198 +292,224 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
        (if slothbar-is-bottom (1- (+ slothbar-offset-x slothbar-width))
          0)))))
 
-(defun slothbar-backend-xcb--configure-geom (backend)
-  "Configure BACKEND's window geometry."
-  (let ((ecw (xcb:+request-checked+request-check
-                 (slothbar-backend-xcb-connection backend)
-               (make-instance 'xcb:ConfigureWindow
-                              :window (slothbar-backend-xcb-window backend)
-                              :value-mask (logior xcb:ConfigWindow:X
-                                                  xcb:ConfigWindow:Y
-                                                  xcb:ConfigWindow:Width
-                                                  xcb:ConfigWindow:Height)
-                              :x slothbar-offset-x
-                              :y slothbar-offset-y
-                              :width slothbar-width
-                              :height slothbar-height))))
-    (slothbar--log-debug* "slothbar-refresh: configure window errors: %s" ecw)))
+(defun slothbar-backend-xcb--configure-geom (backend bar)
+  "Configure BAR's window geometry on BACKEND."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (let ((ecw (xcb:+request-checked+request-check
+                   (slothbar-backend-xcb-connection backend)
+                 (make-instance 'xcb:ConfigureWindow
+                                :window
+                                (slothbar-backend-xcb-surface-window surface)
+                                :value-mask (logior xcb:ConfigWindow:X
+                                                    xcb:ConfigWindow:Y
+                                                    xcb:ConfigWindow:Width
+                                                    xcb:ConfigWindow:Height)
+                                :x slothbar-offset-x
+                                :y slothbar-offset-y
+                                :width slothbar-width
+                                :height slothbar-height))))
+      (slothbar--log-debug*
+       "slothbar-refresh: configure window errors: %s" ecw))))
 
-(defun slothbar-backend-xcb--configure-pos (backend)
-  "Configure BACKEND's window position."
-  (let ((ecw (xcb:+request-checked+request-check
-                 (slothbar-backend-xcb-connection backend)
-               (make-instance 'xcb:ConfigureWindow
-                              :window (slothbar-backend-xcb-window backend)
-                              :value-mask (logior xcb:ConfigWindow:X
-                                                  xcb:ConfigWindow:Y)
-                              :x slothbar-offset-x
-                              :y slothbar-offset-y))))
-    (slothbar--log-debug* "slothbar-refresh: configure window errors: %s" ecw)))
+(defun slothbar-backend-xcb--configure-pos (backend bar)
+  "Configure BAR's window position on BACKEND."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (let ((ecw (xcb:+request-checked+request-check
+                   (slothbar-backend-xcb-connection backend)
+                 (make-instance 'xcb:ConfigureWindow
+                                :window
+                                (slothbar-backend-xcb-surface-window surface)
+                                :value-mask (logior xcb:ConfigWindow:X
+                                                    xcb:ConfigWindow:Y)
+                                :x slothbar-offset-x
+                                :y slothbar-offset-y))))
+      (slothbar--log-debug*
+       "slothbar-refresh: configure window errors: %s" ecw))))
 
-(defun slothbar-backend-xcb--change-background (backend &optional color)
-  "Change BACKEND's background pixel attribute with optional COLOR.
+(defun slothbar-backend-xcb--change-background (backend bar &optional color)
+  "Change BAR's background pixel attribute with optional COLOR."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (let ((connection (slothbar-backend-xcb-connection backend))
+          (window (slothbar-backend-xcb-surface-window surface))
+          (gc (slothbar-backend-xcb-surface-gc surface))
+          (pixmap (slothbar-backend-xcb-surface-pixmap surface)))
+      (xcb:+request connection
+          (make-instance 'xcb:ChangeWindowAttributes
+                         :window window
+                         :value-mask (logior xcb:CW:BackPixmap
+                                             xcb:CW:BackPixel)
+                         :background-pixmap xcb:BackPixmap:ParentRelative
+                         :background-pixel
+                         (or color (slothbar-backend-xcb--background-pixel))))
+      (xcb:+request-checked+request-check connection
+          (make-instance 'xcb:ChangeGC
+                         :gc gc
+                         :value-mask (logior xcb:GC:Background
+                                             xcb:GC:Foreground)
+                         :background (slothbar-backend-xcb--background-pixel)
+                         :foreground (slothbar-backend-xcb--background-pixel)))
+      (slothbar-render-fill-rectangle
+       connection gc pixmap slothbar-width slothbar-height))))
 
-The default color is from `slothbar-util--find-background-color'."
-  (let ((connection (slothbar-backend-xcb-connection backend)))
-    (xcb:+request connection
-        (make-instance 'xcb:ChangeWindowAttributes
-                       :window (slothbar-backend-xcb-window backend)
-                       :value-mask (logior xcb:CW:BackPixmap
-                                           xcb:CW:BackPixel)
-                       :background-pixmap xcb:BackPixmap:ParentRelative
-                       :background-pixel
-                       (or color (slothbar-backend-xcb--background-pixel))))
-    (xcb:+request-checked+request-check connection
-        (make-instance 'xcb:ChangeGC
-                       :gc (slothbar-backend-xcb-gc backend)
-                       :value-mask (logior xcb:GC:Background
-                                           xcb:GC:Foreground)
-                       :background (slothbar-backend-xcb--background-pixel)
-                       :foreground (slothbar-backend-xcb--background-pixel)))
-    (slothbar-render-fill-rectangle connection
-                                    (slothbar-backend-xcb-gc backend)
-                                    (slothbar-backend-xcb-pixmap backend)
-                                    slothbar-width slothbar-height)))
-
-(defun slothbar-backend-xcb--configure-wm-hints (backend)
-  "Configure BACKEND's icccm and ewmh hints."
-  (let ((connection (slothbar-backend-xcb-connection backend))
-        (window (slothbar-backend-xcb-window backend)))
-    (xcb:+request-checked connection
-        (make-instance 'xcb:icccm:set-WM_SIZE_HINTS
-                       :window window
-                       :data (xcb:icccm:-WM_SIZE_HINTS
-                              :x slothbar-offset-x
-                              :y slothbar-offset-y
-                              :width slothbar-width
-                              :height slothbar-height)))
-    (xcb:+request-checked connection
-        (make-instance 'xcb:ewmh:set-_NET_WM_DESKTOP
-                       :window window
-                       :data #xFFFFFFFF))))
+(defun slothbar-backend-xcb--configure-wm-hints (backend bar)
+  "Configure BAR's icccm and ewmh hints on BACKEND."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (let ((connection (slothbar-backend-xcb-connection backend))
+          (window (slothbar-backend-xcb-surface-window surface)))
+      (xcb:+request-checked connection
+          (make-instance 'xcb:icccm:set-WM_SIZE_HINTS
+                         :window window
+                         :data (xcb:icccm:-WM_SIZE_HINTS
+                                :x slothbar-offset-x
+                                :y slothbar-offset-y
+                                :width slothbar-width
+                                :height slothbar-height)))
+      (xcb:+request-checked connection
+          (make-instance 'xcb:ewmh:set-_NET_WM_DESKTOP
+                         :window window
+                         :data #xFFFFFFFF)))))
 
 ;;; Showing and hiding
 
-(cl-defmethod slothbar-backend-show ((backend slothbar-backend-xcb) _bar)
-  "Map BACKEND's bar and reserve its space."
-  (slothbar-backend-xcb--configure-geom backend)
-  (slothbar-backend-xcb--change-background backend)
-  (slothbar-backend-xcb--configure-struts backend)
-  (slothbar-backend-xcb--configure-wm-hints backend)
-  (let ((connection (slothbar-backend-xcb-connection backend)))
-    (xcb:+request connection
-        (make-instance 'xcb:MapWindow
-                       :window (slothbar-backend-xcb-window backend)))
-    (slothbar-backend-xcb--configure-pos backend)
-    (xcb:flush connection)))
+(cl-defmethod slothbar-backend-show
+    ((backend slothbar-backend-xcb) (bar slothbar))
+  "Map BAR and reserve its space."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (slothbar-backend-xcb--configure-geom backend bar)
+    (slothbar-backend-xcb--change-background backend bar)
+    (slothbar-backend-xcb--configure-struts backend bar)
+    (slothbar-backend-xcb--configure-wm-hints backend bar)
+    (let ((connection (slothbar-backend-xcb-connection backend)))
+      (xcb:+request connection
+          (make-instance 'xcb:MapWindow
+                         :window
+                         (slothbar-backend-xcb-surface-window surface)))
+      (slothbar-backend-xcb--configure-pos backend bar)
+      (xcb:flush connection))))
 
-(cl-defmethod slothbar-backend-hide ((backend slothbar-backend-xcb) _bar)
-  "Unmap BACKEND's bar and release its reserved space."
-  (slothbar-backend-xcb--configure-struts backend t)
-  (let ((connection (slothbar-backend-xcb-connection backend)))
-    (xcb:+request connection
-        (make-instance 'xcb:UnmapWindow
-                       :window (slothbar-backend-xcb-window backend)))
-    (xcb:flush connection)))
+(cl-defmethod slothbar-backend-hide
+    ((backend slothbar-backend-xcb) (bar slothbar))
+  "Unmap BAR and release its reserved space."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (slothbar-backend-xcb--configure-struts backend bar t)
+    (let ((connection (slothbar-backend-xcb-connection backend)))
+      (xcb:+request connection
+          (make-instance 'xcb:UnmapWindow
+                         :window
+                         (slothbar-backend-xcb-surface-window surface)))
+      (xcb:flush connection))))
 
 ;;; Presentation
 
 (cl-defmethod slothbar-backend-present
-    ((backend slothbar-backend-xcb) _bar layout damage)
-  "Draw LAYOUT with BACKEND and update the X window."
-  (let ((connection (slothbar-backend-xcb-connection backend))
-        (window (slothbar-backend-xcb-window backend))
-        (gc (slothbar-backend-xcb-gc backend))
-        (pixmap (slothbar-backend-xcb-pixmap backend)))
-    (dolist (segment damage)
-      (pcase-let ((`(,left ,right) segment))
-        (xcb:+request connection
-            (make-instance 'xcb:ClearArea
-                           :exposures 0
-                           :window window
-                           :x left :y 0
-                           :width (- right left) :height slothbar-height))))
-    ;; first copy the background pixmap
-    (xcb:+request connection
-        (make-instance 'xcb:CopyArea
-                       :src-drawable pixmap
-                       :dst-drawable window
-                       :gc gc
-                       :src-x 0 :src-y 0 :dst-x 0 :dst-y 0
-                       :width slothbar-width :height slothbar-height))
-    (dolist (placement layout)
-      (pcase-let* ((`((,x ,y) ,m) placement)
-                   (surface (gethash m
-                                     (slothbar-backend-xcb-module-surfaces
-                                      backend))))
-        (when (and surface
-                   (slothbar-backend-xcb--module-surface-pixmap surface))
+    ((backend slothbar-backend-xcb) (bar slothbar) layout damage)
+  "Draw LAYOUT into BAR and update its X window."
+  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+    (let ((connection (slothbar-backend-xcb-connection backend))
+          (window (slothbar-backend-xcb-surface-window surface))
+          (gc (slothbar-backend-xcb-surface-gc surface))
+          (pixmap (slothbar-backend-xcb-surface-pixmap surface))
+          (module-surfaces
+           (slothbar-backend-xcb-surface-module-surfaces surface)))
+      (dolist (segment damage)
+        (pcase-let ((`(,left ,right) segment))
           (xcb:+request connection
-              (make-instance 'xcb:CopyArea
-                             :src-drawable
-                             (slothbar-backend-xcb--module-surface-pixmap
-                              surface)
-                             :dst-drawable window
-                             :gc (slothbar-backend-xcb--module-surface-gc
-                                  surface)
-                             :src-x 0 :src-y 0 :dst-x x :dst-y y
-                             :width (slothbar-module-width m)
-                             :height slothbar-height)))
-        (slothbar-module-reposition m x y)))
-    (xcb:flush connection)))
+              (make-instance 'xcb:ClearArea
+                             :exposures 0
+                             :window window
+                             :x left :y 0
+                             :width (- right left)
+                             :height slothbar-height))))
+      (xcb:+request connection
+          (make-instance 'xcb:CopyArea
+                         :src-drawable pixmap
+                         :dst-drawable window
+                         :gc gc
+                         :src-x 0 :src-y 0 :dst-x 0 :dst-y 0
+                         :width slothbar-width :height slothbar-height))
+      (dolist (placement layout)
+        (pcase-let* ((`((,x ,y) ,m) placement)
+                     (module-surface (gethash m module-surfaces)))
+          (when (and module-surface
+                     (slothbar-backend-xcb--module-surface-pixmap
+                      module-surface))
+            (xcb:+request connection
+                (make-instance 'xcb:CopyArea
+                               :src-drawable
+                               (slothbar-backend-xcb--module-surface-pixmap
+                                module-surface)
+                               :dst-drawable window
+                               :gc (slothbar-backend-xcb--module-surface-gc
+                                    module-surface)
+                               :src-x 0 :src-y 0 :dst-x x :dst-y y
+                               :width (slothbar-module-width m)
+                               :height slothbar-height)))
+          (slothbar-module-reposition m x y)))
+      (xcb:flush connection))))
 
 ;;; Module pixel resources
+
+(defun slothbar-backend-xcb--module-surface-table (module)
+  "Return MODULE's owning bar surface table, if any."
+  (let ((bar (slothbar-module--bar module)))
+    (when-let ((surface (and bar (slothbar-surface bar))))
+      (slothbar-backend-xcb-surface-module-surfaces surface))))
 
 (cl-defmethod slothbar-backend-add-module
     ((backend slothbar-backend-xcb) (module slothbar-module))
   "Give BACKEND the pixel resources MODULE needs to draw."
-  (pcase-let* ((connection (slothbar-backend-xcb-connection backend))
-               (pixmap (xcb:generate-id connection))
-               (gc (xcb:generate-id connection))
-               ((cl-struct slothbar-module width colors) module)
-               (background-pixel
-                (slothbar-render-color->pixel
-                 (slothbar-module-rgb-background-color colors))))
-    (slothbar-render-create-pixmap connection pixmap width slothbar-height)
-    (let ((egc
-           (xcb:+request-checked+request-check connection
-               (make-instance 'xcb:CreateGC
-                              :cid gc
-                              :drawable (slothbar-backend-xcb-window backend)
-                              :value-mask (logior xcb:GC:Background
-                                                  xcb:GC:Foreground
-                                                  xcb:GC:GraphicsExposures)
-                              :background background-pixel
-                              :foreground background-pixel
-                              :graphics-exposures 0))))
-      (slothbar--log-debug* "create %s gc, errors %s"
-                            (slothbar-module-name module) egc))
-    (slothbar-render-fill-rectangle connection gc pixmap
-                                    width slothbar-height)
-    (puthash module
-             (slothbar-backend-xcb--module-surface-create
-              :pixmap pixmap
-              :gc gc
-              :gs (slothbar-render-create-glyphset connection)
-              :cache (make-hash-table :test 'equal)
-              :width width)
-             (slothbar-backend-xcb-module-surfaces backend))))
+  (when-let ((table (slothbar-backend-xcb--module-surface-table module)))
+    (pcase-let* ((bar (slothbar-module--bar module))
+           (bar-surface (slothbar-surface bar))
+           (connection (slothbar-backend-xcb-connection backend))
+           (pixmap (xcb:generate-id connection))
+           (gc (xcb:generate-id connection))
+           ((cl-struct slothbar-module width colors) module)
+           (background-pixel
+            (slothbar-render-color->pixel
+             (slothbar-module-rgb-background-color colors))))
+      (slothbar-render-create-pixmap connection pixmap width slothbar-height)
+      (let ((egc
+             (xcb:+request-checked+request-check connection
+                 (make-instance 'xcb:CreateGC
+                                :cid gc
+                                :drawable
+                                (slothbar-backend-xcb-surface-window
+                                 bar-surface)
+                                :value-mask (logior xcb:GC:Background
+                                                    xcb:GC:Foreground
+                                                    xcb:GC:GraphicsExposures)
+                                :background background-pixel
+                                :foreground background-pixel
+                                :graphics-exposures 0))))
+        (slothbar--log-debug* "create %s gc, errors %s"
+                              (slothbar-module-name module) egc))
+      (slothbar-render-fill-rectangle connection gc pixmap
+                                      width slothbar-height)
+      (puthash module
+               (slothbar-backend-xcb--module-surface-create
+                :pixmap pixmap
+                :gc gc
+                :gs (slothbar-render-create-glyphset connection)
+                :cache (make-hash-table :test 'equal)
+                :width width)
+               table))))
 
 (cl-defmethod slothbar-backend-draw-module
     ((backend slothbar-backend-xcb) (module slothbar-module))
   "Draw MODULE's text layout with BACKEND."
-  (let ((surface (gethash module
-                          (slothbar-backend-xcb-module-surfaces backend))))
+  (let* ((table (slothbar-backend-xcb--module-surface-table module))
+         (surface (and table (gethash module table))))
     (when surface
       (slothbar-backend-xcb--prepare-module backend surface module)
       (slothbar-backend-xcb--load-glyphs backend module surface)
       (slothbar-backend-xcb--draw-text backend module surface))))
 
 (cl-defmethod slothbar-backend-reset-module-cache
-    ((backend slothbar-backend-xcb) (module slothbar-module))
+    ((_backend slothbar-backend-xcb) (module slothbar-module))
   "Discard BACKEND's render cache for MODULE."
-  (let ((surface (gethash module
-                          (slothbar-backend-xcb-module-surfaces backend))))
+  (let* ((table (slothbar-backend-xcb--module-surface-table module))
+         (surface (and table (gethash module table))))
     (when surface
       (setf (slothbar-backend-xcb--module-surface-cache surface)
             (make-hash-table :test 'equal)))))
@@ -491,10 +517,9 @@ The default color is from `slothbar-util--find-background-color'."
 (cl-defmethod slothbar-backend-remove-module
     ((backend slothbar-backend-xcb) (module slothbar-module))
   "Release BACKEND's pixel resources for MODULE."
-  (let ((connection (slothbar-backend-xcb-connection backend))
-        (surfaces (slothbar-backend-xcb-module-surfaces backend))
-        (surface (gethash module
-                          (slothbar-backend-xcb-module-surfaces backend))))
+  (let* ((connection (slothbar-backend-xcb-connection backend))
+         (surfaces (slothbar-backend-xcb--module-surface-table module))
+         (surface (and surfaces (gethash module surfaces))))
     (when surface
       (when (slothbar-backend-xcb--module-surface-pixmap surface)
         (xcb:+request connection
