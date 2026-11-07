@@ -362,6 +362,54 @@
                           (not (equal (substring before start (+ start cut))
                                       (substring after start (+ start cut))))))))
             (slothbar-module-exit module-b))
+          ;; Two independent bars must keep independent damage state.
+          (let* ((bar-b (slothbar-create
+                         :display-backend backend
+                         :pixel-width slothbar-width
+                         :pixel-height slothbar-height))
+                 (module-a
+                  (slothbar-module-create
+                   :name "two-bar-a" :format "alpha" :lpad 2 :rpad 2))
+                 (module-b
+                  (slothbar-module-create
+                   :name "two-bar-b" :format "bravo" :lpad 2 :rpad 2)))
+            (setf (slothbar-module-backend module-a) backend
+                  (slothbar-module-bar module-a) bar
+                  (slothbar-module-backend module-b) backend
+                  (slothbar-module-bar module-b) bar-b)
+            (let ((state-b (slothbar-backend-create-bar backend bar-b)))
+              (slothbar-module-init module-a)
+              (slothbar-module-init module-b)
+              (slothbar-backend-present
+               backend bar (list (list (list 0 0) module-a)) nil)
+              (slothbar-backend-present
+               backend bar-b (list (list (list 0 0) module-b)) nil)
+              (let ((before-a
+                     (copy-sequence
+                      (slothbar-backend-wayland-surface-frame state)))
+                    (before-b
+                     (copy-sequence
+                      (slothbar-backend-wayland-surface-frame state-b))))
+                (aset module-a
+                      (cl-struct-slot-offset 'slothbar-module 'format)
+                      "beta")
+                (slothbar-module-layout module-a)
+                (slothbar-backend-draw-module backend module-a)
+                (slothbar-backend-present
+                 backend bar (list (list (list 0 0) module-a)) '((0 10)))
+                (slothbar-wayland-check
+                 "two-bar damage changes the receiving bar"
+                 (not (equal
+                       before-a
+                       (slothbar-backend-wayland-surface-frame state))))
+                (slothbar-wayland-check
+                 "two-bar damage leaves the other bar unchanged"
+                 (equal
+                  before-b
+                  (slothbar-backend-wayland-surface-frame state-b))))
+              (slothbar-module-exit module-a)
+              (slothbar-module-exit module-b)
+              (slothbar-backend-destroy-bar backend bar-b)))
           (slothbar-backend-show backend bar)
           (slothbar-wayland-check
            "presented buffer was submitted in-flight"
