@@ -112,7 +112,6 @@
     (run-at-time
      0 nil
      (lambda ()
-       (setq slothbar-focus--refresh-timer nil)
        (when slothbar--backend
          (slothbar-module--refresh-all-by-name "focus"))))))
 

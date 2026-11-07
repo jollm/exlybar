@@ -370,6 +370,18 @@ Remap colors in every bar and refresh the display."
   "Non-nil when the bar geometry changed.
 Cleared by `slothbar-refresh-modules' after the change is processed.")
 
+(defmacro slothbar--with-bar (bar &rest body)
+  "Evaluate BODY with BAR as the current bar and geometry."
+  (declare (indent 1) (debug t))
+  `(let* ((,bar ,bar)
+          (slothbar--bar ,bar)
+          (slothbar-width (slothbar-pixel-width ,bar))
+          (slothbar-height (slothbar-pixel-height ,bar))
+          (slothbar-offset-x (slothbar-x-offset ,bar))
+          (slothbar-offset-y (slothbar-y-offset ,bar))
+          (slothbar-is-bottom (slothbar-bottom ,bar)))
+     ,@body))
+
 (cl-defun slothbar-refresh-modules (&optional modules bar)
   "Refresh bars whose modules or geometry changed, and present them.
 MODULES, when non-nil, is used instead of each bar's module list.
@@ -405,10 +417,22 @@ When BAR is non-nil, only that bar is refreshed."
                                modules)))
                  (first (null (slothbar-placements bar))))
             (when (or dirty first)
-              (let ((prev-extents
-                     (slothbar-layout-extents
-                      (slothbar-layout-coordinate
-                       (slothbar-layout modules) 0 0 width))))
+              (let* ((dirty-modules
+                      (cl-remove-if-not
+                       (lambda (m)
+                         (and (slothbar-module-p m)
+                              (slothbar-module-needs-refresh? m)))
+                       modules))
+                     (old-layout
+                      (or (slothbar-placements bar)
+                          (slothbar-layout-coordinate
+                           (slothbar-layout modules) 0 0 width)))
+                     (old-widths
+                      (cl-loop for placement in old-layout
+                               collect (cons (cadr placement)
+                                             (slothbar-module-width
+                                              (cadr placement)))))
+                     (prev-extents (slothbar-layout-extents old-layout)))
                 (dolist (m modules)
                   (when (slothbar-module-p m)
                     (slothbar-module-refresh m)))
@@ -416,14 +440,67 @@ When BAR is non-nil, only that bar is refreshed."
                         (slothbar-layout-coordinate
                          (slothbar-layout modules) 0 0 width))
                        (new-extents (slothbar-layout-extents new-layout))
-                       (damage (unless (equal prev-extents new-extents)
-                                 (slothbar-layout-subtract-extents
-                                  new-extents prev-extents))))
+                       (extent-damage
+                        (unless (equal prev-extents new-extents)
+                          (slothbar-layout-subtract-extents
+                           new-extents prev-extents)))
+                       (damage
+                        (unless first
+                          (slothbar--merge-damage
+                           (append
+                            extent-damage
+                            (slothbar--content-damage
+                             old-layout old-widths new-layout
+                             dirty-modules))))))
                   (setq slothbar--last-layout new-layout)
                   (setf (slothbar-placements bar) new-layout)
                   (when backend
                     (slothbar-backend-present
                      backend bar new-layout damage)))))))))))
+
+(defun slothbar--merge-damage (spans)
+  "Sort and merge horizontal damage SPANS."
+  (let ((spans (sort (cl-remove-if-not
+                     (lambda (span)
+                       (and (consp span)
+                            (numberp (car span))
+                            (numberp (cadr span))
+                            (< (car span) (cadr span))))
+                     (copy-sequence spans))
+                    (lambda (a b) (< (car a) (car b)))))
+        (merged nil))
+    (dolist (span spans)
+      (if (and merged (<= (car span) (cadar merged)))
+          (setf (cadar merged) (max (cadar merged) (cadr span)))
+        (push (list (car span) (cadr span)) merged)))
+    (nreverse merged)))
+
+(defun slothbar--content-damage (old-layout old-widths new-layout modules)
+  "Return damage spans for changed MODULES between layouts.
+OLD-WIDTHS maps modules to their widths before refresh."
+  (slothbar--merge-damage
+   (cl-loop for module in modules
+            when (slothbar-module-p module)
+            append
+            (let* ((old-placement
+                    (cl-find module old-layout :key #'cadr :test #'eq))
+                   (new-placement
+                    (cl-find module new-layout :key #'cadr :test #'eq))
+                   (old-width (cdr (assq module old-widths)))
+                   (new-width (slothbar-module-width module))
+                   (left (cond ((and old-placement new-placement)
+                                (min (caar old-placement)
+                                     (caar new-placement)))
+                               (old-placement (caar old-placement))
+                               (new-placement (caar new-placement))))
+                   (right (cond ((and old-placement new-placement)
+                                 (max (+ (caar old-placement) (or old-width 0))
+                                      (+ (caar new-placement) new-width)))
+                                (old-placement
+                                 (+ (caar old-placement) (or old-width 0)))
+                                (new-placement
+                                 (+ (caar new-placement) new-width)))))
+              (when (and left right) (list (list left right)))))))
 
 (defun slothbar--module-placement-at (x y &optional bar)
   "Return BAR's layout placement containing X and Y, or nil."
@@ -514,18 +591,6 @@ NVAL is check against the existing value for any changes."
     (run-at-time 0 nil #'slothbar-refresh-modules)))
 
 (add-variable-watcher 'slothbar-height #'slothbar--watch-height)
-
-(defmacro slothbar--with-bar (bar &rest body)
-  "Evaluate BODY with BAR as the current bar and geometry."
-  (declare (indent 1) (debug t))
-  `(let* ((,bar ,bar)
-          (slothbar--bar ,bar)
-          (slothbar-width (slothbar-pixel-width ,bar))
-          (slothbar-height (slothbar-pixel-height ,bar))
-          (slothbar-offset-x (slothbar-x-offset ,bar))
-          (slothbar-offset-y (slothbar-y-offset ,bar))
-          (slothbar-is-bottom (slothbar-bottom ,bar)))
-     ,@body))
 
 (defun slothbar--construct-modules (&optional bar modules)
   "Construct modules for BAR, or the current environment when BAR is nil."

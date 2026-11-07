@@ -238,6 +238,19 @@
         (named "A")
         (default nil))))))
 
+(ert-deftest slothbar-unit-content-damage ()
+  "Content damage covers old and new module rectangles."
+  (let* ((module (slothbar-module-create :name "damage" :width 10))
+         (old-layout (list (list (list 0 0) module)))
+         (new-layout (list (list (list 5 0) module))))
+    (should (equal (slothbar--content-damage
+                    old-layout (list (cons module 10))
+                    new-layout (list module))
+                   '((0 15))))
+    (should (equal (slothbar--merge-damage
+                    '((0 10) (5 15) (20 30)))
+                   '((0 15) (20 30))))))
+
 (ert-deftest slothbar-unit-bar-local-refresh ()
   "Refreshing with a bar refreshes only that bar."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))
