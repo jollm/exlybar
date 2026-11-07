@@ -353,6 +353,44 @@
       (slothbar--construct-modules bar)
       (should (= 1 (length (slothbar-module-list bar)))))))
 
+(cl-defstruct (slothbar-unit-present-backend
+               (:include slothbar-unit-backend))
+  "A test backend that records presentations."
+  presents)
+
+(cl-defmethod slothbar-backend-present
+  ((backend slothbar-unit-present-backend) bar _layout damage)
+  "Record BAR and DAMAGE for BACKEND."
+  (push (list bar damage)
+        (slothbar-unit-present-backend-presents backend)))
+
+(ert-deftest slothbar-unit-multi-bar-damage ()
+  "A damaged bar is presented independently of the other bars."
+  (let* ((backend (make-slothbar-unit-present-backend :kind 'test))
+         (bar-a (slothbar-create :display-backend backend
+                                 :pixel-width 100 :pixel-height 20))
+         (bar-b (slothbar-create :display-backend backend
+                                 :pixel-width 100 :pixel-height 20))
+         (module-a (slothbar-module-create :name "a" :format "" :width 10))
+         (module-b (slothbar-module-create :name "b" :format "" :width 10))
+         (slothbar--bars (list bar-a bar-b))
+         (slothbar--bar bar-a)
+         (slothbar--enabled t)
+         (slothbar--geometry-changed? nil)
+         (slothbar-modules nil))
+    (setf (slothbar-module-list bar-a) (list module-a)
+          (slothbar-module-list bar-b) (list module-b))
+    (slothbar-refresh-modules)
+    (should (= 2 (length (slothbar-unit-present-backend-presents backend))))
+    (setf (slothbar-unit-present-backend-presents backend) nil
+          (slothbar-module-needs-refresh? module-a) t)
+    (slothbar-refresh-modules)
+    (let ((presents (slothbar-unit-present-backend-presents backend)))
+      (should (= 1 (length presents)))
+      (should (eq (caar presents) bar-a))
+      (should (cadar presents))
+      (should-not (assq bar-b presents)))))
+
 (ert-deftest slothbar-unit-click-dispatch ()
   "Clicks are routed to the module under the pointer."
   (let* ((left (slothbar-unit-clickable-create :name "left" :width 10))
