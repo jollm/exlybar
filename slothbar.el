@@ -1009,7 +1009,8 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
                             (and (stringp configured) configured))
                           slothbar-preferred-display))
              (geom (slothbar--find-display-geometry display))
-             (height (slothbar-pixel-height bar))
+             (height (or (plist-get config :height)
+                         (slothbar-pixel-height bar)))
              (width (or (plist-get config :width)
                         (alist-get 'width geom)))
              (x-offset (or (plist-get config :offset-x)
@@ -1021,8 +1022,10 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
                                   height)
                              (alist-get 'y-offset geom)))))
         (setf (slothbar-pixel-width bar) width
+              (slothbar-pixel-height bar) height
               (slothbar-x-offset bar) x-offset
-              (slothbar-y-offset bar) y-offset))))
+              (slothbar-y-offset bar) y-offset)
+        (slothbar--refresh-bar-font-px-sizes bar))))
   (setq slothbar--geometry-changed? t)
   (run-at-time 0 nil #'slothbar-refresh-modules))
 

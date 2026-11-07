@@ -278,7 +278,7 @@
 (ert-deftest slothbar-unit-refresh-uses-bar-output ()
   "Refresh uses each bar's resolved output and honors :width."
   (let* ((bar-a (slothbar-create
-                 :id 'a :config '(:output :each :width 300
+                 :id 'a :config '(:output :each :width 300 :height 25
                                   :offset-x 10 :offset-y 5)
                  :output "A" :pixel-height 20))
          (bar-b (slothbar-create
@@ -302,6 +302,8 @@
       (slothbar-refresh))
     (should (equal (nreverse seen) '("A" "B")))
     (should (= 300 (slothbar-pixel-width bar-a)))
+    (should (= 25 (slothbar-pixel-height bar-a)))
+    (should (= 20 (slothbar-pixel-height bar-b)))
     (should (= 1000 (slothbar-pixel-width bar-b)))
     (should (= 10 (slothbar-x-offset bar-a)))
     (should (= 5 (slothbar-y-offset bar-a)))
