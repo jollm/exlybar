@@ -700,6 +700,25 @@
     (should (equal (alist-get ?c (slothbar-module-format-spec m)) "5"))
     (should (slothbar-module-needs-refresh? m))))
 
+(ert-deftest slothbar-unit-sysinfo-shared-provider ()
+  "One provider tick updates all subscribed sysinfo modules."
+  (let* ((m-a (slothbar-sysinfo-create))
+         (m-b (slothbar-sysinfo-create))
+         (slothbar-sysinfo--subscribers (list m-a m-b))
+         (slothbar-sysinfo--shared-state (slothbar-sysinfo-state-create))
+         (slothbar-sysinfo-format '((:cpu-usage :width 3)))
+         (updates 0))
+    (cl-letf (((symbol-function 'slothbar-sysinfo-update)
+               (lambda (state &optional _now _force)
+                 (cl-incf updates)
+                 (setf (slothbar-sysinfo-state-values state)
+                       '((:cpu-usage . 5)))
+                 state)))
+      (slothbar-sysinfo--provider-tick))
+    (should (= updates 1))
+    (should (equal (slothbar-module-text m-a) "  5"))
+    (should (equal (slothbar-module-text m-b) "  5"))))
+
 (ert-deftest slothbar-unit-sysinfo-percent-suffix ()
   "A literal percent in a colored suffix renders once."
   (let ((format (slothbar-sysinfo-compile-format

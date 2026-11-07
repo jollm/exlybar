@@ -686,6 +686,54 @@ A nil interval means read once per state."
     (power . slothbar-sysinfo--read-power))
   "Provider functions keyed by sysinfo category.")
 
+(defvar slothbar-sysinfo--shared-state nil
+  "Provider state shared by all sysinfo module instances.")
+
+(defvar slothbar-sysinfo--provider-timer nil
+  "Single timer driving shared sysinfo collection.")
+
+(defvar slothbar-sysinfo--subscribers nil
+  "Sysinfo module instances using the shared provider.")
+
+(defvar slothbar-sysinfo--batch-values nil
+  "Pre-collected values used while notifying subscribers.")
+
+(defvar slothbar-sysinfo-refresh-interval)
+
+(defun slothbar-sysinfo--state ()
+  "Return the shared sysinfo state, creating it if needed."
+  (or slothbar-sysinfo--shared-state
+      (setq slothbar-sysinfo--shared-state
+            (slothbar-sysinfo-state-create))))
+
+(defun slothbar-sysinfo--provider-tick ()
+  "Collect sysinfo once and update every subscriber."
+  (when slothbar-sysinfo--subscribers
+    (let ((state (slothbar-sysinfo--state)))
+      (slothbar-sysinfo-update state)
+      (let ((slothbar-sysinfo--batch-values
+             (copy-sequence (slothbar-sysinfo-state-values state))))
+        (dolist (module slothbar-sysinfo--subscribers)
+          (when (slothbar-module-p module)
+            (slothbar-module-update-status module)))))))
+
+(defun slothbar-sysinfo--subscribe (module)
+  "Subscribe MODULE to the shared sysinfo provider."
+  (add-to-list 'slothbar-sysinfo--subscribers module)
+  (unless slothbar-sysinfo--provider-timer
+    (setq slothbar-sysinfo--provider-timer
+          (run-at-time nil slothbar-sysinfo-refresh-interval
+                       #'slothbar-sysinfo--provider-tick))))
+
+(defun slothbar-sysinfo--unsubscribe (module)
+  "Remove MODULE from the shared sysinfo provider."
+  (setq slothbar-sysinfo--subscribers
+        (delq module slothbar-sysinfo--subscribers))
+  (unless slothbar-sysinfo--subscribers
+    (when slothbar-sysinfo--provider-timer
+      (cancel-timer slothbar-sysinfo--provider-timer)
+      (setq slothbar-sysinfo--provider-timer nil))))
+
 (defun slothbar-sysinfo--due-p (state category now)
   "Return non-nil when CATEGORY is due at NOW."
   (let ((last (gethash category (slothbar-sysinfo-state-timestamps state)))
@@ -805,11 +853,11 @@ are honored."
                                 (slothbar-sysinfo-field-characters)))
 
 (cl-defmethod slothbar-module-update-status ((m slothbar-sysinfo))
-  "Collect sysinfo values for M and update its text."
+  "Update M's text from the shared sysinfo cache."
   (let* ((state (or (slothbar-sysinfo-state m)
-                    (setf (slothbar-sysinfo-state m)
-                          (slothbar-sysinfo-state-create))))
-         (values (slothbar-sysinfo-collect state))
+                    (slothbar-sysinfo--state)))
+         (values (or slothbar-sysinfo--batch-values
+                     (slothbar-sysinfo-collect state)))
          (plan (slothbar-sysinfo-compile-plan))
          (format (slothbar-format-plan-format plan))
          (spec (slothbar-sysinfo--format-values values plan))
@@ -825,21 +873,21 @@ are honored."
     text))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-sysinfo))
-  "Prepare M's state and initial text before layout."
-  (setf (slothbar-sysinfo-state m) (slothbar-sysinfo-state-create))
+  "Prepare M's shared state and initial text before layout."
+  (setf (slothbar-sysinfo-state m) (slothbar-sysinfo--state))
+  (slothbar-sysinfo--subscribe m)
   (slothbar-module-update-status m))
 
 (cl-defmethod slothbar-module-init ((m slothbar-sysinfo))
-  "Initialize M and start its high-frequency update timer."
+  "Initialize M; the shared provider owns the update timer."
   (cl-call-next-method)
   (when (slothbar-module-update-timer m)
-    (cancel-timer (slothbar-module-update-timer m)))
-  (setf (slothbar-module-update-timer m)
-        (run-at-time nil slothbar-sysinfo-refresh-interval
-                     #'slothbar-module-update-status m)))
+    (cancel-timer (slothbar-module-update-timer m))
+    (setf (slothbar-module-update-timer m) nil)))
 
 (cl-defmethod slothbar-module-exit :after ((m slothbar-sysinfo))
-  "Drop M's provider state after exit."
+  "Unsubscribe M from the shared provider."
+  (slothbar-sysinfo--unsubscribe m)
   (setf (slothbar-sysinfo-state m) nil))
 
 (defun slothbar-sysinfo--watch-format (_ _nval oper where)
