@@ -407,6 +407,59 @@
                  (equal
                   before-b
                   (slothbar-backend-wayland-surface-frame state-b))))
+              ;; Pointer events map the receiving surface back to its bar.
+              (let ((button-events nil)
+                    (motion-events nil))
+                (let ((button-hook
+                       (lambda (_backend bar x y button)
+                         (push (list bar x y button) button-events)))
+                      (motion-hook
+                       (lambda (_backend bar x y)
+                         (push (list bar x y) motion-events))))
+                  (add-hook 'slothbar-backend-pointer-button-hook button-hook)
+                  (add-hook 'slothbar-backend-pointer-motion-hook motion-hook)
+                  (unwind-protect
+                      (progn
+                        (setf (slothbar-backend-wayland-pointer-surface backend)
+                              (slothbar-backend-wayland-surface-surface state)
+                              (slothbar-backend-wayland-pointer-x backend) 11
+                              (slothbar-backend-wayland-pointer-y backend) 7)
+                        (slothbar-backend-wayland--pointer-button
+                         backend '((state . pressed) (button . 272)))
+                        (setf (slothbar-backend-wayland-pointer-surface backend)
+                              (slothbar-backend-wayland-surface-surface state-b)
+                              (slothbar-backend-wayland-pointer-x backend) 21
+                              (slothbar-backend-wayland-pointer-y backend) 9)
+                        (slothbar-backend-wayland--pointer-button
+                         backend '((state . pressed) (button . 273)))
+                        (setf (slothbar-backend-wayland-pointer-surface backend)
+                              (slothbar-backend-wayland-surface-surface state-b)
+                              (slothbar-backend-wayland-pointer-x backend) 23
+                              (slothbar-backend-wayland-pointer-y backend) 10)
+                        (slothbar-backend-wayland--pointer-motion backend 23 10)
+                        (setf (slothbar-backend-wayland-pointer-surface backend)
+                              (slothbar-backend-wayland-surface-surface state)
+                              (slothbar-backend-wayland-pointer-x backend) 13
+                              (slothbar-backend-wayland-pointer-y backend) 8)
+                        (slothbar-backend-wayland--pointer-motion backend 13 8)
+                        (slothbar-wayland-check
+                         "multi-bar pointer buttons route to the receiving bar"
+                         (equal (list (nth 1 button-events)
+                                      (nth 0 button-events))
+                                (list (list bar 11 7 :left)
+                                      (list bar-b 21 9 :right))))
+                        (slothbar-wayland-check
+                         "multi-bar pointer motion routes to the receiving bar"
+                         (equal motion-events
+                                (list (list bar 13 8)
+                                      (list bar-b 23 10)))))
+                    (remove-hook 'slothbar-backend-pointer-button-hook
+                                 button-hook)
+                    (remove-hook 'slothbar-backend-pointer-motion-hook
+                                 motion-hook)
+                    (setf (slothbar-backend-wayland-pointer-surface backend) nil
+                          (slothbar-backend-wayland-pointer-x backend) nil
+                          (slothbar-backend-wayland-pointer-y backend) nil))))
               (slothbar-module-exit module-a)
               (slothbar-module-exit module-b)
               (slothbar-backend-destroy-bar backend bar-b)))
