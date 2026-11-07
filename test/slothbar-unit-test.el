@@ -204,6 +204,60 @@
     (should (= 20 (slothbar-y-offset fallback)))
     (should-not (slothbar-bottom fallback))))
 
+(ert-deftest slothbar-unit-reconcile-updates-id-bar ()
+  "Reconciliation keeps an :id bar and updates its output and geometry."
+  (let* ((backend (make-slothbar-unit-output-backend
+                  :kind 'test :outputs '("A" "B")))
+         (slothbar--backend backend)
+         (slothbar--bars nil)
+         (slothbar--enabled nil)
+         (slothbar-modules nil)
+         (slothbar-bars
+          (list (list :id "main" :output "A" :modules nil :width 100))))
+    (cl-letf (((symbol-function 'slothbar--find-display-geometry)
+               (lambda (_display)
+                 '((x-offset . 0) (y-offset . 0)
+                   (width . 1000) (height . 700)))))
+      (slothbar--reconcile-bars)
+      (should (= 1 (length slothbar--bars)))
+      (let ((bar (car slothbar--bars)))
+        (setq slothbar-bars
+              (list (list :id "main" :output "B"
+                          :modules nil :width 400)))
+        (slothbar--reconcile-bars)
+        (should (= 1 (length slothbar--bars)))
+        (should (eq bar (car slothbar--bars)))
+        (should (equal (slothbar-output bar) "B"))
+        (should (= 400 (slothbar-pixel-width bar)))
+        (should (equal (slothbar-id bar) '("main" "B")))))))
+
+(ert-deftest slothbar-unit-update-bar-by-id ()
+  "An :id-tagged bar is updated in place, even when its output changes."
+  (let* ((slothbar-modules nil)
+         (backend (make-slothbar-unit-backend :kind 'test))
+         (bar (slothbar-create
+               :id '("main" "A")
+               :config '(:id "main" :width 100 :height 20)
+               :output "A" :pixel-width 100 :pixel-height 20
+               :x-offset 1 :y-offset 2 :bottom nil))
+         (spec (list
+                :config '(:id "main" :width 400 :height 30
+                          :offset-x 5 :offset-y 6)
+                :index 0 :output "B")))
+    (cl-letf (((symbol-function 'slothbar--find-display-geometry)
+               (lambda (_display)
+                 '((x-offset . 10) (y-offset . 20)
+                   (width . 1000) (height . 700)))))
+      (should (slothbar--update-bar backend bar spec)))
+    (should (equal (slothbar-id bar) '("main" "B")))
+    (should (equal (slothbar-output bar) "B"))
+    (should (= 400 (slothbar-pixel-width bar)))
+    (should (= 30 (slothbar-pixel-height bar)))
+    (should (= 5 (slothbar-x-offset bar)))
+    (should (= 6 (slothbar-y-offset bar)))
+    (should (equal (slothbar--bar-key bar) '("main")))
+    (should (equal (slothbar--spec-key spec) '("main")))))
+
 (ert-deftest slothbar-unit-refresh-bottom-offset ()
   "Refresh computes the bottom offset from the bar height."
   (let* ((bar (slothbar-create

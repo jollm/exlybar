@@ -230,6 +230,8 @@ Each entry is a plist with the following keys:
   the corresponding global geometry settings.
 
 Changing this variable while slothbar is running reconciles the bar list.
+Bars with a `:id' are updated in place; bars without one are matched by
+config index and output.
 
 The XEmbed tray is single-instance: if it appears in more than one bar,
 the first configured bar keeps it and later instances are skipped."
@@ -761,8 +763,102 @@ fallback offsets."
   "Return the bar in BARS whose id is ID."
   (cl-find id bars :key #'slothbar-id :test #'equal))
 
+(defun slothbar--bar-key (bar)
+  "Return the configuration key for BAR.
+A bar with an explicit `:id' is matched by that id alone; otherwise it is
+matched by its config index and output."
+  (let ((id (plist-get (slothbar-config bar) :id)))
+    (if id (list id) (slothbar-id bar))))
+
+(defun slothbar--spec-key (spec)
+  "Return the configuration key for bar spec SPEC."
+  (let* ((config (plist-get spec :config))
+         (id (plist-get config :id)))
+    (if id
+        (list id)
+      (list (plist-get spec :index) (plist-get spec :output)))))
+
+(defun slothbar--update-bar (backend bar spec)
+  "Update BAR in place from SPEC.
+Keep BAR's identity so a configured :id survives runtime configuration
+changes.  Recreate only the backend surface/modules that actually changed."
+  (let* ((config (plist-get spec :config))
+         (index (plist-get spec :index))
+         (output (plist-get spec :output))
+         (geom (slothbar--find-display-geometry
+                (or output slothbar-preferred-display)))
+         (height (or (plist-get config :height) slothbar-height))
+         (bottom (if (plist-member config :bottom)
+                     (plist-get config :bottom)
+                   slothbar-is-bottom))
+         (x-offset (or (plist-get config :offset-x)
+                       (alist-get 'x-offset geom)))
+         (y-offset (or (plist-get config :offset-y)
+                       (if bottom
+                           (- (+ (alist-get 'y-offset geom)
+                                 (alist-get 'height geom))
+                              height)
+                         (alist-get 'y-offset geom))))
+         (width (or (plist-get config :width)
+                    (alist-get 'width geom)))
+         (old-config (slothbar-config bar))
+         (old-output (slothbar-output bar))
+         (old-height (slothbar-pixel-height bar))
+         (old-width (slothbar-pixel-width bar))
+         (old-x (slothbar-x-offset bar))
+         (old-y (slothbar-y-offset bar))
+         (old-bottom (slothbar-bottom bar))
+         (old-modules (if (plist-member old-config :modules)
+                          (list (plist-get old-config :modules))
+                        :inherit))
+         (new-modules (if (plist-member config :modules)
+                          (list (plist-get config :modules))
+                        :inherit))
+         (surface-changed
+          (not (and (equal output old-output)
+                    (equal height old-height)
+                    (equal width old-width)
+                    (equal x-offset old-x)
+                    (equal y-offset old-y)
+                    (equal bottom old-bottom))))
+         (modules-changed (not (equal old-modules new-modules)))
+         (changed (or surface-changed
+                      modules-changed
+                      (not (equal old-config config)))))
+    (when changed
+      (when (or surface-changed modules-changed)
+        (dolist (m (slothbar-module-list bar))
+          (when (slothbar-module-p m)
+            (slothbar-module-exit m)))
+        (setf (slothbar-module-list bar) nil))
+      (when surface-changed
+        (slothbar--with-bar bar
+          (ignore-errors (slothbar-backend-destroy-bar backend bar))))
+      (setf (slothbar-config bar) config
+            (slothbar-id bar) (list (or (plist-get config :id) index) output)
+            (slothbar-output bar) output
+            (slothbar-pixel-height bar) height
+            (slothbar-pixel-width bar) width
+            (slothbar-x-offset bar) x-offset
+            (slothbar-y-offset bar) y-offset
+            (slothbar-bottom bar) bottom)
+      (slothbar--refresh-bar-font-px-sizes bar)
+      (when (or surface-changed modules-changed)
+        (slothbar--with-bar bar
+          (when surface-changed
+            (slothbar-backend-create-bar backend bar))
+          (slothbar--construct-modules bar)
+          (dolist (m (slothbar-module-list bar))
+            (when (slothbar-module-p m)
+              (slothbar-module-init m)))
+          (when (and surface-changed
+                     slothbar--enabled
+                     (slothbar-visible bar))
+            (slothbar-backend-show backend bar)))))
+    changed))
+
 (defun slothbar--reconcile-bars ()
-  "Create and destroy bars to match the current outputs and configuration."
+  "Create, update, and destroy bars to match outputs and configuration."
   (when slothbar--reconciling
     (setq slothbar--reconcile-pending t))
   (unless slothbar--reconciling
@@ -770,56 +866,63 @@ fallback offsets."
     (unwind-protect
         (when slothbar--backend
           (let* ((backend slothbar--backend)
-           (specs (slothbar--desired-bar-specs backend))
-           (desired-ids (mapcar (lambda (spec)
-                                  (list (or (plist-get (plist-get spec :config)
-                                                       :id)
-                                            (plist-get spec :index))
-                                        (plist-get spec :output)))
-                                specs))
-           (existing slothbar--bars)
-           (kept nil))
-      ;; Remove bars whose output or configuration disappeared.
-      (dolist (bar existing)
-        (if (member (slothbar-id bar) desired-ids)
-            (push bar kept)
-          (slothbar--with-bar bar
-            (dolist (m (slothbar-module-list bar))
-              (when (slothbar-module-p m)
-                (slothbar-module-exit m)))
-            (ignore-errors (slothbar-backend-destroy-bar backend bar)))))
-      (setq kept (nreverse kept))
-      ;; Keep the global bar list current while creating new bars so module
-      ;; construction can see singleton modules already claimed by earlier bars.
-      (setq slothbar--bars kept)
-      ;; Add bars for new specs.
-      (dolist (spec specs)
-        (let* ((config (plist-get spec :config))
-               (index (plist-get spec :index))
-               (output (plist-get spec :output))
-               (id (list (or (plist-get config :id) index) output)))
-          (unless (slothbar--bar-by-id id kept)
-            (let* ((geom (slothbar--find-display-geometry
-                          (or output slothbar-preferred-display)))
-                   (bar (slothbar--make-bar backend config index geom output)))
-              (setq kept (append kept (list bar)))
-              (setq slothbar--bars kept)
-              (slothbar--with-bar bar
-                (slothbar-backend-create-bar backend bar)
-                (slothbar--construct-modules bar)
-                (dolist (m (slothbar-module-list bar))
-                  (when (slothbar-module-p m)
-                    (slothbar-module-init m)))
-                (when slothbar--enabled
-                  (slothbar-backend-show backend bar)
-                  (setf (slothbar-visible bar) t)))))))
-      (let ((changed (not (equal (mapcar #'slothbar-id existing)
-                                 (mapcar #'slothbar-id kept)))))
-        (setq slothbar--bars kept
-              slothbar--bar (car kept)
-              slothbar--modules (and kept (slothbar-module-list (car kept))))
-        (when (and changed slothbar--enabled)
-          (run-at-time 0 nil #'slothbar-refresh-modules)))))
+                 (specs (slothbar--desired-bar-specs backend))
+                 (remaining (copy-sequence specs))
+                 (existing slothbar--bars)
+                 (kept nil)
+                 (updated nil))
+            ;; Update bars whose configured :id still exists; remove the rest.
+            (dolist (bar existing)
+              (let ((spec (cl-find (slothbar--bar-key bar)
+                                   remaining
+                                   :key #'slothbar--spec-key
+                                   :test #'equal)))
+                (if spec
+                    (progn
+                      (setq remaining (delq spec remaining))
+                      (push bar kept)
+                      (when (slothbar--update-bar backend bar spec)
+                        (setq updated t)))
+                  (slothbar--with-bar bar
+                    (dolist (m (slothbar-module-list bar))
+                      (when (slothbar-module-p m)
+                        (slothbar-module-exit m)))
+                    (ignore-errors
+                      (slothbar-backend-destroy-bar backend bar))))))
+            (setq kept (nreverse kept))
+            ;; Keep the global bar list current while creating new bars so
+            ;; module construction can see singleton modules already claimed.
+            (setq slothbar--bars kept)
+            ;; Add bars for new specs.
+            (dolist (spec remaining)
+              (let* ((config (plist-get spec :config))
+                     (index (plist-get spec :index))
+                     (output (plist-get spec :output))
+                     (id (list (or (plist-get config :id) index) output)))
+                (unless (slothbar--bar-by-id id kept)
+                  (let* ((geom (slothbar--find-display-geometry
+                                (or output slothbar-preferred-display)))
+                         (bar (slothbar--make-bar backend config index geom output)))
+                    (setq kept (append kept (list bar)))
+                    (setq slothbar--bars kept)
+                    (slothbar--with-bar bar
+                      (slothbar-backend-create-bar backend bar)
+                      (slothbar--construct-modules bar)
+                      (dolist (m (slothbar-module-list bar))
+                        (when (slothbar-module-p m)
+                          (slothbar-module-init m)))
+                      (when slothbar--enabled
+                        (slothbar-backend-show backend bar)
+                        (setf (slothbar-visible bar) t)))))))
+            (let ((changed
+                   (not (equal (mapcar #'slothbar-id existing)
+                               (mapcar #'slothbar-id kept)))))
+              (setq slothbar--bars kept
+                    slothbar--bar (car kept)
+                    slothbar--modules (and kept
+                                           (slothbar-module-list (car kept))))
+              (when (and (or changed updated) slothbar--enabled)
+                (run-at-time 0 nil #'slothbar-refresh-modules)))))
       (setq slothbar--reconciling nil)
       (when slothbar--reconcile-pending
         (setq slothbar--reconcile-pending nil)
