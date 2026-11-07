@@ -179,6 +179,48 @@
   "Pretend this module needs X-only facilities."
   nil)
 
+(ert-deftest slothbar-unit-make-bar-geometry ()
+  "Bar construction honors per-bar geometry overrides and fallbacks."
+  (let* ((slothbar-height 20)
+         (geometry '((x-offset . 10) (y-offset . 20)
+                     (width . 800) (height . 600)))
+         (bar (slothbar--make-bar
+               nil '(:id "main" :width 400 :height 30
+                     :offset-x 5 :offset-y 60 :bottom t)
+               0 geometry "HDMI-1"))
+         (fallback (slothbar--make-bar
+                    nil '(:id "other") 1 geometry "HDMI-2")))
+    (should (equal (slothbar-id bar) '("main" "HDMI-1")))
+    (should (equal (slothbar-output bar) "HDMI-1"))
+    (should (= 400 (slothbar-pixel-width bar)))
+    (should (= 30 (slothbar-pixel-height bar)))
+    (should (= 5 (slothbar-x-offset bar)))
+    (should (= 60 (slothbar-y-offset bar)))
+    (should (slothbar-bottom bar))
+    (should (equal (slothbar-id fallback) '("other" "HDMI-2")))
+    (should (= 800 (slothbar-pixel-width fallback)))
+    (should (= 20 (slothbar-pixel-height fallback)))
+    (should (= 10 (slothbar-x-offset fallback)))
+    (should (= 20 (slothbar-y-offset fallback)))
+    (should-not (slothbar-bottom fallback))))
+
+(ert-deftest slothbar-unit-refresh-bottom-offset ()
+  "Refresh computes the bottom offset from the bar height."
+  (let* ((bar (slothbar-create
+               :config '(:output :each :bottom t)
+               :bottom t
+               :output "A" :pixel-height 20 :pixel-width 100))
+         (slothbar--bars (list bar))
+         (slothbar--geometry-changed? nil))
+    (cl-letf (((symbol-function 'slothbar--find-display-geometry)
+               (lambda (_display)
+                 '((x-offset . 0) (y-offset . 100)
+                   (width . 800) (height . 200))))
+              ((symbol-function 'run-at-time)
+               (lambda (&rest _) nil)))
+      (slothbar-refresh))
+    (should (= 280 (slothbar-y-offset bar)))))
+
 (ert-deftest slothbar-unit-refresh-uses-bar-output ()
   "Refresh uses each bar's resolved output and honors :width."
   (let* ((bar-a (slothbar-create
