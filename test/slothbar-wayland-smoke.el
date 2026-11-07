@@ -303,6 +303,42 @@
             (slothbar-wayland-check
              "glyphs are not clipped at the bottom"
              (and max-y (< max-y (1- height)))))
+          ;; Partial damage must leave pixels outside the damaged span alone.
+          (let* ((module-b
+                  (slothbar-module-create
+                   :name "smoke-b" :format "world" :lpad 2 :rpad 2))
+                 (layout (list (list (list 0 0) module)
+                               (list (list 100 0) module-b))))
+            (slothbar-module-init module-b)
+            (slothbar-backend-present backend bar layout nil)
+            (let* ((before (copy-sequence
+                            (slothbar-backend-wayland-surface-frame state)))
+                   (scale (slothbar-backend-wayland-surface-scale state))
+                   (stride (slothbar-backend-wayland-surface-frame-stride state))
+                   (height (slothbar-backend-wayland-surface-frame-height state))
+                   (cut (* 100 scale 4)))
+              (aset module (cl-struct-slot-offset 'slothbar-module 'format) "i")
+              (slothbar-module-layout module)
+              (slothbar-backend-draw-module backend module)
+              (slothbar-backend-present backend bar layout '((0 100)))
+              (let ((after (slothbar-backend-wayland-surface-frame state)))
+                (slothbar-wayland-check
+                 "partial damage leaves untouched pixels unchanged"
+                 (cl-loop for y below height
+                          for start = (+ (* y stride) cut)
+                          always
+                          (equal (substring before start
+                                             (+ start (- stride cut)))
+                                 (substring after start
+                                            (+ start (- stride cut))))))
+                (slothbar-wayland-check
+                 "partial damage changes the damaged region"
+                 (cl-loop for y below height
+                          for start = (* y stride)
+                          thereis
+                          (not (equal (substring before start (+ start cut))
+                                      (substring after start (+ start cut))))))))
+            (slothbar-module-exit module-b))
           (slothbar-backend-show backend bar)
           (slothbar-wayland-check
            "presented buffer was submitted in-flight"

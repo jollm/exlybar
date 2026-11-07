@@ -110,7 +110,7 @@
   "Number of active focus modules sharing the backend hook.")
 
 (defun slothbar-focus--on-change (backend m)
-  "Refresh focus modules after a focused-window change on BACKEND."
+  "Refresh focus module M after a focused-window change on BACKEND."
   (when (eq backend slothbar--backend)
     (unless slothbar-focus--refresh-timer
       (setq slothbar-focus--refresh-timer
@@ -123,7 +123,7 @@
                  (slothbar-module--refresh-all-by-name "focus"))))))))
 
 (defun slothbar-focus--subscribe (m)
-  "Register a focus module as a backend-hook subscriber."
+  "Register a focus module M as a backend-hook subscriber."
   (when (zerop slothbar-focus--subscribers)
     (add-hook 'slothbar-backend-focused-window-change-hook
               #'(lambda (backend) (slothbar-focus--on-change backend m))))

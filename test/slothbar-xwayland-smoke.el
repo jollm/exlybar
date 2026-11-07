@@ -89,6 +89,18 @@ Return VALUE."
       (sit-for 0.1))
     (funcall predicate)))
 
+(defun slothbar-smoke--drawable-data (drawable width height)
+  "Return DRAWABLE's pixels as a vector of WIDTH by HEIGHT."
+  (let ((reply (xcb:+request-unchecked+reply
+                   (slothbar-xcb-connection)
+                 (make-instance 'xcb:GetImage
+                                :format xcb:ImageFormat:ZPixmap
+                                :drawable drawable
+                                :x 0 :y 0
+                                :width width :height height
+                                :plane-mask #xffffffff))))
+    (vconcat (slot-value reply 'data))))
+
 (defun slothbar-smoke--pixmap-non-background (backend module)
   "Count pixels in MODULE's pixmap that differ from its first pixel."
   (let* ((surface (gethash
@@ -220,6 +232,56 @@ Return VALUE."
              "redraw clears previous glyphs"
              (< (slothbar-smoke--pixmap-non-background backend module)
                 before)))
+          ;; Partial damage must preserve pixels outside the damaged span.
+          (let* ((module-a
+                  (slothbar-module-create
+                   :name "damage-a" :format "hello" :lpad 2 :rpad 2)))
+            (slothbar-module-init module-a)
+            (let* ((layout (list (list (list 0 0) module-a)))
+                   (window (slothbar-xcb-window)))
+              (slothbar-backend-show backend bar)
+              (slothbar-backend-present backend bar layout nil)
+              (let* ((before (slothbar-smoke--drawable-data
+                              window slothbar-width slothbar-height))
+                     (bytes-per-pixel
+                      (/ (length before)
+                         (* slothbar-width slothbar-height)))
+                     (cut (* 100 bytes-per-pixel)))
+                (aset module-a
+                      (cl-struct-slot-offset 'slothbar-module 'format)
+                      "i")
+                (slothbar-module-layout module-a)
+                (slothbar-backend-draw-module backend module-a)
+                (slothbar-backend-present backend bar layout '((0 100)))
+                (let ((after (slothbar-smoke--drawable-data
+                              window slothbar-width slothbar-height)))
+                  (slothbar-smoke--check
+                   "X partial damage leaves untouched pixels unchanged"
+                   (cl-loop for y below slothbar-height
+                            for start = (+ (* y slothbar-width
+                                               bytes-per-pixel)
+                                           cut)
+                            always
+                            (equal
+                             (cl-subseq before start
+                                        (+ start (- (* slothbar-width
+                                                       bytes-per-pixel)
+                                                    cut)))
+                             (cl-subseq after start
+                                        (+ start (- (* slothbar-width
+                                                       bytes-per-pixel)
+                                                    cut))))))
+                  (slothbar-smoke--check
+                   "X partial damage changes the damaged region"
+                   (cl-loop for y below slothbar-height
+                            for start = (* y slothbar-width
+                                           bytes-per-pixel)
+                            thereis
+                            (not
+                             (equal
+                              (cl-subseq before start (+ start cut))
+                              (cl-subseq after start (+ start cut)))))))))
+            (slothbar-module-exit module-a))
           (slothbar-backend-present
            backend bar
            (list (list (list 0 0) module))
