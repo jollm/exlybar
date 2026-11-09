@@ -20,6 +20,7 @@ EMACS=${EMACS:-emacs}
 SWAY=${SWAY:-sway}
 XWAYLAND_SATELLITE=${XWAYLAND_SATELLITE:-xwayland-satellite}
 TEST_ELISP="$ROOT/test/slothbar-xwayland-smoke.el"
+NO_ELWL=${SLOTHBAR_TEST_NO_ELWL:-0}
 
 for tool in "$EMACS" "$SWAY" "$XWAYLAND_SATELLITE"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -145,6 +146,7 @@ DISPLAY=":$DISPLAY_NUM" \
 XDG_RUNTIME_DIR="$RUNTIME" \
 SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
 SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
+SLOTHBAR_EXPECT_NO_ELWL="$NO_ELWL" \
   timeout 120 "$EMACS" -Q --display=":$DISPLAY_NUM" \
   -L "$ROOT" "${EXTRA_LOAD_PATH[@]}" \
   -l "$TEST_ELISP" > "$WORK/emacs.log" 2>&1

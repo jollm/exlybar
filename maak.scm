@@ -19,6 +19,10 @@
   ($ '("bash test/slothbar-xwayland-smoke.sh")))
 
 ;; Run the live Wayland backend smoke test under headless sway.
+(define (test-xwayland-no-elwl)
+  "Run the xcb smoke test with elwl unavailable."
+  ($ '("env SLOTHBAR_TEST_NO_ELWL=1 bash test/slothbar-xwayland-smoke.sh")))
+
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
   ($ '("bash test/slothbar-wayland-smoke.sh")))
@@ -36,4 +40,5 @@
   "Run the unit tests, the Wayland smoke test, and the Xwayland smoke test."
   (test-unit)
   (test-wayland)
-  (test-xwayland))
+  (test-xwayland)
+  (test-xwayland-no-elwl))

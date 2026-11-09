@@ -34,13 +34,24 @@
 ;; Environment:
 ;;   SLOTHBAR_SMOKE_RESULTS   file to append results to
 ;;   SLOTHBAR_TEST_LOAD_PATH  colon-separated extra `load-path' entries
+;;   SLOTHBAR_EXPECT_NO_ELWL  when "1", assert that elwl is unavailable
 
 ;;; Code:
+
+(require 'cl-lib)
 
 (add-to-list 'load-path
              (file-name-directory
               (directory-file-name
                (file-name-directory load-file-name))))
+
+(when (equal (getenv "SLOTHBAR_EXPECT_NO_ELWL") "1")
+  (setq load-path
+        (cl-remove-if
+         (lambda (dir)
+           (or (string-match-p "elwl" dir)
+               (file-exists-p (expand-file-name "elwl.el" dir))))
+         load-path)))
 
 (let ((extra (getenv "SLOTHBAR_TEST_LOAD_PATH")))
   (when extra
@@ -158,6 +169,11 @@ Return VALUE."
   (require 'slothbar)
   (require 'slothbar-module-)
   (require 'slothbar-backend-xcb)
+  (when (equal (getenv "SLOTHBAR_EXPECT_NO_ELWL") "1")
+    (slothbar-smoke--check
+     "elwl is unavailable for this X run"
+     (and (not (featurep 'elwl))
+          (not (locate-library "elwl")))))
   (slothbar-smoke--record
    (format "display: %s\n" (frame-parameter nil 'display)))
 
@@ -799,7 +815,12 @@ Return VALUE."
   (slothbar-smoke--check "core exit disabled slothbar"
                          (not (slothbar-enabled-p)))
   (slothbar-smoke--check "core exit cleared the backend"
-                         (null slothbar--backend)))
+                         (null slothbar--backend))
+  (when (equal (getenv "SLOTHBAR_EXPECT_NO_ELWL") "1")
+    (slothbar-smoke--check
+     "the X path did not load elwl"
+     (and (not (featurep 'elwl))
+          (not (locate-library "elwl"))))))
 
 (condition-case err
     (progn
