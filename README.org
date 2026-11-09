@@ -1,5 +1,5 @@
 #+TITLE: slothbar
-#+OPTIONS: toc:nil ^:{} \n:t
+#+OPTIONS: toc:nil ^:{}
 
 Slothbar is a window manager status bar that runs within Emacs.
 
