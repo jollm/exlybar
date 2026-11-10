@@ -736,10 +736,23 @@ DATA the event data"
                   "pointer button hook error: %S" err))))))))))
 
 (defun slothbar-backend-xcb--on-Expose (data _synthetic)
-  "Can draw things after Expose.
-DATA the event data"
+  "Redraw the exposed bar and restart the refresh timer.
+DATA is the X Expose event."
   (slothbar--log-debug* "slothbar received expose %s" data)
-  (ignore data)
+  (let* ((event (make-instance 'xcb:Expose))
+         (_ (xcb:unmarshal event data))
+         (bar (and slothbar--backend
+                   (slothbar-backend-xcb--bar-for-window
+                    slothbar--backend (slot-value event 'window)))))
+    (when bar
+      (dolist (m (slothbar-module-list bar))
+        (when (slothbar-module-p m)
+          (setf (slothbar-module-needs-refresh? m) t)))
+      (run-at-time 0 nil
+                   (lambda ()
+                     (when (and slothbar--backend
+                                (memq bar slothbar--bars))
+                       (slothbar-refresh-modules nil bar))))))
   (when slothbar--enabled
     (when slothbar--module-refresh-timer
       (slothbar--log-debug* "slothbar restarting module refresh timer")

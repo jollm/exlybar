@@ -809,6 +809,22 @@ Return VALUE."
   (slothbar-smoke--check "core start initialized the module"
                          (cl-some #'slothbar-module-initialized
                                   slothbar--modules))
+  ;; An X Expose must force a redraw of the exposed bar, otherwise the
+  ;; first map can leave the initial paint blank until another update.
+  (let* ((bar (car slothbar--bars))
+         (window (slothbar-backend-xcb-surface-window
+                  (slothbar-surface bar)))
+         (called nil)
+         (data (xcb:marshal
+                (make-instance 'xcb:Expose :window window)
+                (slothbar-xcb-connection))))
+    (cl-letf (((symbol-function 'slothbar-refresh-modules)
+               (lambda (&optional _modules bar-arg)
+                 (setq called bar-arg))))
+      (slothbar-backend-xcb--on-Expose data nil)
+      (slothbar-smoke--check
+       "Expose schedules a refresh for the exposed bar"
+       (slothbar-smoke--wait-for (lambda () (eq called bar)) 2))))
   ;; Let Expose and other X events reach the handlers.
   (sit-for 0.3)
   (slothbar-exit)
