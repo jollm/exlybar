@@ -1221,6 +1221,27 @@
       (should (equal heights '(30)))
       (should (eq slothbar-font-px-size :scaled)))))
 
+(ert-deftest slothbar-unit-font-candidates-live-refresh ()
+  "Installing a new candidate map recomputes sizes and redraws bars."
+  (let ((slothbar-height 30)
+        (slothbar--enabled t)
+        (slothbar-font-px-size nil)
+        (slothbar-font--color-code-map (make-vector 10 nil))
+        (slothbar--geometry-changed? nil)
+        (refreshed nil)
+        (candidates (vector "font")))
+    (cl-letf (((symbol-function 'slothbar-font--precompute-px-sizes)
+               (lambda (&optional _height _map) :resized))
+              ((symbol-function 'run-at-time)
+               (lambda (_time _repeat fn) (funcall fn)))
+              ((symbol-function 'slothbar-refresh-modules)
+               (lambda () (setq refreshed t))))
+      (slothbar-font--apply-color-code-map candidates)
+      (should (eq slothbar-font--color-code-map candidates))
+      (should (eq slothbar-font-px-size :resized))
+      (should slothbar--geometry-changed?)
+      (should refreshed))))
+
 (ert-deftest slothbar-unit-color-brighten ()
   "Brightening clamps channels and preserves alpha."
   (let* ((color (slothbar-color-rgb-create

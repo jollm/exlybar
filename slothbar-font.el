@@ -110,6 +110,19 @@ By default, CANDIDATES is the value of `slothbar-font-candidates'."
   (make-vector 10 nil)
   "The font map corresponding to color codes ^f0-^f9.")
 
+(defun slothbar-font--apply-color-code-map (candidates)
+  "Install CANDIDATES and refresh all font-dependent state."
+  (setq slothbar-font--color-code-map candidates)
+  (when (and (boundp 'slothbar-height) slothbar-height)
+    (setq slothbar-font-px-size
+          (slothbar-font--precompute-px-sizes slothbar-height candidates)))
+  (when (and (fboundp 'slothbar-refresh-modules)
+             (bound-and-true-p slothbar--enabled))
+    (run-at-time 0 nil
+                 (lambda ()
+                   (setq slothbar--geometry-changed? t)
+                   (slothbar-refresh-modules)))))
+
 (defun slothbar-font--watch-font-candidates (_ nval oper where)
   "Update `slothbar-font--color-code-map' with NVAL candidates.
 
@@ -121,7 +134,7 @@ Do this only when OPER eq \\='set and WHERE is nil."
        candidates
        :finish-func
        (lambda (_)
-         (setq slothbar-font--color-code-map candidates))))))
+         (slothbar-font--apply-color-code-map candidates))))))
 
 (cl-defun slothbar-font--precompute-px-sizes (height &optional font-map)
   "Given a HEIGHT, compute pixel sizes for all fonts in the FONT-MAP.
