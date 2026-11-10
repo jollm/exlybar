@@ -45,6 +45,7 @@
 (require 'slothbar-module)
 (require 'slothbar-draw-op)
 (require 'slothbar-focus)
+(require 'slothbar-volume)
 
 ;; `slothbar-layout' only declares this variable; `slothbar.el' gives it a
 ;; defcustom value.  Define it here so tests can bind it dynamically.
@@ -342,6 +343,20 @@
     (slothbar--with-bar bar-b
       (push slothbar-font-px-size seen))
     (should (equal seen '([30] [20])))))
+
+(ert-deftest slothbar-unit-volume-backend-error ()
+  "A volume backend failure retains the last good reading."
+  (let ((module (slothbar-volume-create :name "volume")))
+    (setf (slothbar-volume-last-status module) 42)
+    (cl-letf (((symbol-function 'volume-get)
+               (lambda ()
+                 (error "Process `amixer get Capture' exited abnormally"))))
+      (should (= 42 (slothbar-volume--get-status module)))
+      (should-not
+       (condition-case nil
+           (progn (slothbar-module-update-status module) nil)
+         (error t)))
+      (should (= 42 (slothbar-volume-last-status module))))))
 
 (ert-deftest slothbar-unit-explicit-empty-bar-modules ()
   "A bar can explicitly opt out of the global module list."

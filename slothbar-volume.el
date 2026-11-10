@@ -76,7 +76,9 @@ See `slothbar-color-zone'"
                (:copier nil))
   (channel nil :type 'string
            :documentation "Channel name corresponding to `volume-channels'. When nil, it will be
-`volume-default-channel'."))
+`volume-default-channel'.")
+  (last-status 0 :type 'number
+               :documentation "Last successfully read volume percentage."))
 
 (defun slothbar-volume-current-progress (pct)
   "Build a progress bar corresponding to the current PCT."
@@ -94,10 +96,19 @@ See `slothbar-color-zone'"
 		 (slothbar-volume--format-fn-spec (slothbar-volume--get-status m)) t)))
 
 (defun slothbar-volume--get-status (m)
-  "Return volume status for the given module M."
-  (let* ((channel (slothbar-volume-channel m))
-         (volume-amixer-current-channel (or channel (volume-default-channel))))
-    (volume-get)))
+  "Return volume status for the given module M.
+If the system volume backend fails, retain M's last successful reading."
+  (condition-case err
+      (let* ((channel (slothbar-volume-channel m))
+             (volume-amixer-current-channel
+              (or channel (volume-default-channel)))
+             (status (volume-get)))
+        (setf (slothbar-volume-last-status m)
+              (or status 0))
+        (slothbar-volume-last-status m))
+    (error
+     (slothbar--log-debug* "volume backend error: %S" err)
+     (slothbar-volume-last-status m))))
 
 (defun slothbar-volume--format-spec (m pct)
   "Build M's `format-spec' spec used to generate module text given PCT."
