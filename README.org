@@ -29,11 +29,12 @@ If you would like it to work on Emacs 27, please let me know.
 * Usage
 
 To start slothbar, run =M-x slothbar-mode=. On first run, expect a
-font-loading delay before the bar appears. With one of the preferred
-nerd-bundle fonts available, an isolated cold-cache load measured about
-four to five seconds in one test environment. Without a bundled font it
-can take longer. Fonts configured in =slothbar-font-candidates= are cached
-for later runs.
+font-loading delay before the bar appears. With byte-compiled fontsloth
+and one of the preferred nerd-bundle fonts available, an isolated
+cold-cache load measured about 0.4 seconds in one test environment.
+Interpreted fontsloth, or multiple very large fonts, can take several
+seconds. Fonts configured in =slothbar-font-candidates= are cached for
+later runs.
 
 At first there is an empty bar without any modules. The background
 color will match the current Emacs background color.

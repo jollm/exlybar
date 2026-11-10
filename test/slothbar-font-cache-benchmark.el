@@ -41,6 +41,12 @@ first candidate name in each group with `fc-match'."
 (let* ((paths (slothbar-font-cache-benchmark--paths)))
   (if (null paths)
       (princ "SKIP: no font paths could be resolved\n")
+    (let ((fontsloth-file (symbol-file 'fontsloth-load-font 'defun)))
+      (princ (format "fontsloth-file: %s\n"
+                     (or fontsloth-file "unknown")))
+      (unless (and fontsloth-file
+                   (string-suffix-p ".elc" fontsloth-file))
+        (princ "WARNING: fontsloth is interpreted; byte-compile it for comparable timings\n")))
     (let* ((dir (make-temp-file "slothbar-font-cold-" t))
            (pcache-directory (file-name-as-directory dir))
            (fontsloth-cache--initialized? nil)
