@@ -83,9 +83,12 @@
 ;; M-x: slothbar-mode
 
 ;; On first run, font discovery and loading can add a noticeable delay
-;; before the bar appears.  Fonts configured in
-;; slothbar-font-candidates are loaded and cached in the background
-;; for later runs; a warm cache makes subsequent starts much faster.
+;; before the bar appears.  With one of the preferred nerd-bundle fonts
+;; available, an isolated cold-cache load measured about four to five
+;; seconds in one test environment.  Without one it can take longer.
+;; Fonts configured in slothbar-font-candidates are cached for later
+;; runs, so warm starts are much faster.  Run `maak test-font-cache' to
+;; re-measure.
 
 ;; Check the default value of slothbar-font-candidates in
 ;; slothbar-font.el to determine a minimal set of fonts.

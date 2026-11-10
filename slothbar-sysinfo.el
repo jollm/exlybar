@@ -789,7 +789,7 @@ STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
       "^[^f2"(:net-up :width 10 :pad right)"^]"
       "^[^f0 ^2^f4^]"
       "^[^f2"(:net-down :width 10 :pad right)"^]"
-      "^[^f1 ^2^f4^]"
+      "^[^f0 ^2^f4^]"
       " "
       "^[^2^f0"(:net-interface)"^]"
       ))

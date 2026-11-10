@@ -19,6 +19,10 @@
   ($ '("bash test/slothbar-xwayland-smoke.sh")))
 
 ;; Run the live Wayland backend smoke test under headless sway.
+(define (test-font-cache)
+  "Measure cold-cache font loading with an isolated fontsloth cache."
+  ($ '("bash test/slothbar-font-cache-benchmark.sh")))
+
 (define (test-xwayland-no-elwl)
   "Run the xcb smoke test with elwl unavailable."
   ($ '("env SLOTHBAR_TEST_NO_ELWL=1 bash test/slothbar-xwayland-smoke.sh")))

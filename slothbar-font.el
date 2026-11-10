@@ -50,16 +50,30 @@
 ;;; Try to use safe fallback font lists where possible
 
 (defcustom slothbar-font-candidates
-  '(("Aporetic Sans"
+  '(("IBM Plex Sans"
+     "Noto Sans"
+     "Aporetic Sans"
      "IBM Plex Serif"
      "Deja Vu Serif"
      "Cantarell")
-    ("Font Awesome")
-    ("Aporetic Sans Mono"
+    ("Blex Mono Nerd Font Propo"
+     "Fira Code Nerd Font Propo"
+     "MesloLGL Nerd Font Propo"
+     "Font Awesome")
+    ("Blex Mono Nerd Font Propo"
+     "Fira Code Nerd Font Propo"
+     "MesloLGL Nerd Font Propo"
+     "Aporetic Sans Mono"
      "IBM Plex Mono"
      "DejaVu Sans Mono:style=Book")
-    ("all-the-icons")
-    ("Symbols Nerd Font Mono"))
+    ("Blex Mono Nerd Font Propo"
+     "Fira Code Nerd Font Propo"
+     "MesloLGL Nerd Font Propo"
+     "all-the-icons")
+    ("Blex Mono Nerd Font Propo"
+     "Fira Code Nerd Font Propo"
+     "MesloLGL Nerd Font Propo"
+     "Symbols Nerd Font Mono"))
   "A list of lists of candidate fonts for color codes ^f0-^f9.
 
 Elements of the outer list correspond to ^f0, ^f1, and so on.
