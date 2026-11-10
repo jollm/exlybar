@@ -518,6 +518,60 @@
       (slothbar--watch-slothbar-bars nil '((:id new)) 'set nil))
     (should called)))
 
+(cl-defstruct (slothbar-unit-failing-init (:include slothbar-module))
+  "A module whose initialization fails.")
+
+(cl-defmethod slothbar-module-init ((_m slothbar-unit-failing-init))
+  "Simulate a module that cannot start, e.g. missing /sys."
+  (error "missing /sys"))
+
+(cl-defstruct (slothbar-unit-failing-refresh (:include slothbar-module))
+  "A module whose refresh fails.")
+
+(cl-defmethod slothbar-module-refresh ((_m slothbar-unit-failing-refresh))
+  "Simulate a module refresh failure."
+  (error "refresh failed"))
+
+(ert-deftest slothbar-unit-module-init-failure-contained ()
+  "A failing module is disabled without aborting bar startup."
+  (let* ((bad (make-slothbar-unit-failing-init :name "bad"))
+         (good (slothbar-module-create :name "good"))
+         (bar (slothbar-create :module-list (list bad good))))
+    (cl-letf (((symbol-function 'display-warning)
+               (lambda (&rest _) nil)))
+      (slothbar--init-modules bar)
+      (should (equal (slothbar-module-list bar) (list good)))
+      (should-not (slothbar-module-initialized bad)))))
+
+(ert-deftest slothbar-unit-module-refresh-failure-contained ()
+  "A failing refresh removes the module instead of signaling."
+  (let* ((bad (make-slothbar-unit-failing-refresh :name "bad"))
+         (bar (slothbar-create :module-list (list bad)))
+         (slothbar--modules (list bad)))
+    (setf (slothbar-module-bar bad) bar)
+    (cl-letf (((symbol-function 'display-warning)
+               (lambda (&rest _) nil)))
+      (should-not (slothbar--module-refresh-safe bad))
+      (should (null (slothbar-module-list bar))))))
+
+(ert-deftest slothbar-unit-startup-failure-recovery ()
+  "A fatal startup error cleans up and clears `slothbar-mode'."
+  (let ((slothbar-mode t)
+        (exited nil)
+        (cleaned nil))
+    (cl-letf (((symbol-function 'slothbar--start)
+               (lambda () (error "missing /sys")))
+              ((symbol-function 'slothbar-exit)
+               (lambda () (setq exited t)))
+              ((symbol-function 'slothbar--cleanup-mode-hooks)
+               (lambda () (setq cleaned t)))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil)))
+      (slothbar--start-safe)
+      (should exited)
+      (should cleaned)
+      (should-not slothbar-mode))))
+
 (ert-deftest slothbar-unit-singleton-bar-modules ()
   "Singleton modules are only constructed on the first bar that claims them."
   (let* ((bar-a (slothbar-create :config '(:modules nil)))

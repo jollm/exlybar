@@ -405,6 +405,61 @@ Remap colors in every bar and refresh the display."
        (slothbar--refresh t)
        (slothbar-refresh-modules)))))
 
+(defvar slothbar--reported-module-failures (make-hash-table :test 'eq)
+  "Modules whose failures have already been reported in this run.")
+
+(defun slothbar--report-module-failure (module phase err)
+  "Report MODULE's failure during PHASE without signaling."
+  (let ((name (if (slothbar-module-p module)
+                  (or (slothbar-module-name module) "anonymous")
+                "anonymous")))
+    (slothbar--log-error "Slothbar module %s failed during %s: %S"
+                         name phase err)
+    (unless (gethash module slothbar--reported-module-failures)
+      (puthash module t slothbar--reported-module-failures)
+      (display-warning
+       'slothbar
+       (format "Slothbar module `%s' failed during %s: %s. It has been disabled for this run."
+               name phase (error-message-string err))
+       :warning))))
+
+(defun slothbar--module-init-safe (module)
+  "Initialize MODULE, returning non-nil when it succeeds."
+  (condition-case err
+      (progn
+        (slothbar-module-init module)
+        t)
+    (error
+     (slothbar--report-module-failure module "initialization" err)
+     (ignore-errors (slothbar-module-exit module))
+     (setf (slothbar-module-initialized module) nil)
+     nil)))
+
+(defun slothbar--module-refresh-safe (module)
+  "Refresh MODULE, disabling it when it fails."
+  (condition-case err
+      (progn
+        (slothbar-module-refresh module)
+        t)
+    (error
+     (slothbar--report-module-failure module "refresh" err)
+     (setf (slothbar-module-needs-refresh? module) nil)
+     (ignore-errors (slothbar-module-exit module))
+     (let ((bar (slothbar-module--bar module)))
+       (when bar
+         (setf (slothbar-module-list bar)
+               (delq module (slothbar-module-list bar)))))
+     (setq slothbar--modules (delq module slothbar--modules))
+     nil)))
+
+(defun slothbar--init-modules (bar)
+  "Initialize BAR's modules, dropping modules that fail to initialize."
+  (setf (slothbar-module-list bar)
+        (cl-loop for module in (slothbar-module-list bar)
+                 if (or (not (slothbar-module-p module))
+                        (slothbar--module-init-safe module))
+                 collect module)))
+
 (defvar slothbar--geometry-changed? nil
   "Non-nil when the bar geometry changed.
 Cleared by `slothbar-refresh-modules' after the change is processed.")
@@ -463,7 +518,8 @@ When BAR is non-nil, only that bar is refreshed."
                      (prev-extents (slothbar-layout-extents old-layout)))
                 (dolist (m modules)
                   (when (slothbar-module-p m)
-                    (slothbar-module-refresh m)))
+                    (unless (slothbar--module-refresh-safe m)
+                      (setq modules (delq m modules)))))
                 (let* ((new-layout
                         (slothbar-layout-coordinate
                          (slothbar-layout modules) 0 0 width))
@@ -595,7 +651,8 @@ X and Y are bar-local logical coordinates."
     (dolist (m nval)
       (when (slothbar-module-p m)
         (unless (slothbar-module-initialized m)
-          (slothbar-module-init m))))
+          (unless (slothbar--module-init-safe m)
+            (setq nval (delq m nval))))))
     (when slothbar--bar
       (setf (slothbar-module-list slothbar--bar) nval))
     (slothbar-refresh-modules nval)))
@@ -858,9 +915,7 @@ changes.  Recreate only the backend surface/modules that actually changed."
           (when surface-changed
             (slothbar-backend-create-bar backend bar))
           (slothbar--construct-modules bar)
-          (dolist (m (slothbar-module-list bar))
-            (when (slothbar-module-p m)
-              (slothbar-module-init m)))
+          (slothbar--init-modules bar)
           (when (and surface-changed
                      slothbar--enabled
                      (slothbar-visible bar))
@@ -918,9 +973,7 @@ changes.  Recreate only the backend surface/modules that actually changed."
                     (slothbar--with-bar bar
                       (slothbar-backend-create-bar backend bar)
                       (slothbar--construct-modules bar)
-                      (dolist (m (slothbar-module-list bar))
-                        (when (slothbar-module-p m)
-                          (slothbar-module-init m)))
+                      (slothbar--init-modules bar)
                       (when slothbar--enabled
                         (slothbar-backend-show backend bar)
                         (setf (slothbar-visible bar) t)))))))
@@ -961,9 +1014,7 @@ changes.  Recreate only the backend surface/modules that actually changed."
   (setf (slothbar-module-list bar) nil)
   (slothbar--with-bar bar
     (slothbar--construct-modules bar)
-    (dolist (m (slothbar-module-list bar))
-      (when (slothbar-module-p m)
-        (slothbar-module-init m))))
+    (slothbar--init-modules bar))
   (slothbar-refresh-modules nil bar))
 
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
@@ -996,6 +1047,7 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
 
 (defun slothbar--start ()
   "Start slothbar: open the backend, create bars, and initialize modules."
+  (clrhash slothbar--reported-module-failures)
   (run-hook-with-args 'slothbar-before-init-hook)
   (cl-assert (not slothbar--backend))
   (slothbar--log-enable-logging)
@@ -1065,7 +1117,7 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
   (if (display-graphic-p)
       (fontsloth-async-load-and-cache-fonts
        (slothbar-font-map-candidates)
-       :finish-func (lambda (_) (slothbar--start)))
+       :finish-func (lambda (_) (slothbar--start-safe)))
     (message "Slothbar requires a graphical display to run")))
 
 ;;;###autoload
@@ -1106,6 +1158,30 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
         slothbar--modules nil
         slothbar--visible nil))
 
+(defun slothbar--cleanup-mode-hooks ()
+  "Remove hooks and watchers installed by `slothbar-mode'."
+  (remove-hook 'enable-theme-functions #'slothbar--on-theme-change)
+  (remove-hook 'disable-theme-functions #'slothbar--on-theme-change)
+  (remove-variable-watcher 'slothbar-height #'slothbar-font--watch-px-size)
+  (remove-variable-watcher 'slothbar-font-candidates
+                           #'slothbar-font--watch-font-candidates)
+  (remove-variable-watcher 'slothbar-font--color-code-map
+                           #'slothbar-font--watch-px-size))
+
+(defun slothbar--start-safe ()
+  "Start slothbar, reporting fatal errors without trapping the mode on."
+  (condition-case err
+      (slothbar--start)
+    (error
+     (slothbar--log-error "Slothbar startup failed: %S" err)
+     (display-warning
+      'slothbar
+      (format "Slothbar failed to start: %s" (error-message-string err))
+      :warning)
+     (ignore-errors (slothbar-exit))
+     (slothbar--cleanup-mode-hooks)
+     (setq slothbar-mode nil))))
+
 ;;;###autoload
 (define-minor-mode slothbar-mode
   "Slothbar-mode provides a window manager status bar."
@@ -1122,15 +1198,10 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
     (add-variable-watcher 'slothbar-font--color-code-map
                           #'slothbar-font--watch-px-size)
     (slothbar))
-  (when (and (not slothbar-mode) (slothbar-enabled-p))
-    (remove-hook 'enable-theme-functions #'slothbar--on-theme-change)
-    (remove-hook 'disable-theme-functions #'slothbar--on-theme-change)
-    (slothbar-exit)
-    (remove-variable-watcher 'slothbar-height #'slothbar-font--watch-px-size)
-    (remove-variable-watcher 'slothbar-font-candidates
-                             #'slothbar-font--watch-font-candidates)
-    (remove-variable-watcher 'slothbar-font--color-code-map
-                             #'slothbar-font--watch-px-size)))
+  (when (not slothbar-mode)
+    (when (slothbar-enabled-p)
+      (slothbar-exit))
+    (slothbar--cleanup-mode-hooks)))
 
 (provide 'slothbar)
 

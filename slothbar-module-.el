@@ -145,12 +145,22 @@ This default primary method uses a result from fontsloth-layout to set
 
 (declare-function cl-type-of "data.c" (object))
 
+(defun slothbar-module--update-status-safe (m)
+  "Update M, reporting failures instead of signaling from a timer."
+  (condition-case err
+      (slothbar-module-update-status m)
+    (error
+     (if (fboundp 'slothbar--report-module-failure)
+         (slothbar--report-module-failure m "update" err)
+       (slothbar--log-error "Slothbar module %s update failed: %S"
+                            (slothbar-module-name m) err)))))
+
 (cl-defmethod slothbar-module-init :after ((m slothbar-module))
   "After init start module M's update timer and draw its text."
   (when (cl-find-method #'slothbar-module-update-status '() `(,(cl-type-of m)))
     (unless (slothbar-module-update-timer m)
       (setf (slothbar-module-update-timer m)
-            (run-at-time nil 10 #'slothbar-module-update-status m))))
+            (run-at-time nil 10 #'slothbar-module--update-status-safe m))))
   (when (slothbar-module-format m)
     (when-let ((backend (slothbar-module--backend m)))
       (slothbar-backend-draw-module backend m)))
@@ -217,7 +227,7 @@ status."
   (when (slothbar-enabled-p)
     (let ((ms (slothbar-module--find-by-name module-name)))
       (dolist (m ms)
-        (slothbar-module-update-status m))
+        (slothbar-module--update-status-safe m))
       (slothbar-refresh-modules))))
 
 (provide 'slothbar-module-)

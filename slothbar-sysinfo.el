@@ -715,7 +715,7 @@ A nil interval means read once per state."
              (copy-sequence (slothbar-sysinfo-state-values state))))
         (dolist (module slothbar-sysinfo--subscribers)
           (when (slothbar-module-p module)
-            (slothbar-module-update-status module)))))))
+            (slothbar-module--update-status-safe module)))))))
 
 (defun slothbar-sysinfo--subscribe (module)
   "Subscribe MODULE to the shared sysinfo provider."
