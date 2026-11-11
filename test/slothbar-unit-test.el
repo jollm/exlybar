@@ -896,6 +896,41 @@
     (should (equal (slothbar-format-compile '("^1CPU^0 " :cpu) fields)
                    "^1CPU^0 %c"))))
 
+(ert-deftest slothbar-unit-format-directives ()
+  "Progress and zone directives compile to value-aware slots."
+  (let* ((fields '((:cpu-usage . ?c) (:quality . ?q)))
+         (progress (slothbar-format-compile-plan
+                    '((:progress :cpu-usage 10 (20 50 80)))
+                    fields))
+         (progress-slot (car (slothbar-format-plan-slots progress)))
+         (zone (slothbar-format-compile-plan
+                '((:zone :quality 20 50 90 t))
+                fields))
+         (zone-slot (car (slothbar-format-plan-slots zone))))
+    (should (eq :progress (slothbar-format-slot-kind progress-slot)))
+    (should (eq :cpu-usage (slothbar-format-slot-source progress-slot)))
+    (should (string-match-p "\\["
+                            (slothbar-format-slot-value progress-slot 55)))
+    (should (eq :zone (slothbar-format-slot-kind zone-slot)))
+    (should (eq :quality (slothbar-format-slot-source zone-slot)))
+    (should (stringp (slothbar-format-slot-value zone-slot 10)))
+    (let ((zone-slot
+           (car (slothbar-format-plan-slots
+                 (slothbar-format-compile-plan
+                  '((:zone :quality 20 50 90))
+                  fields)))))
+      (should (equal (slothbar-format-slot-value zone-slot 95)
+                     "^4^;"))
+      (should (equal (slothbar-format-slot-value zone-slot nil) ""))))
+  (let* ((plan (slothbar-format-compile-plan
+                '((:progress :cpu-usage 10 (20 50 80)))
+                (slothbar-sysinfo-field-characters)))
+         (slot (car (slothbar-format-plan-slots plan)))
+         (spec (slothbar-sysinfo--format-values
+                '((:cpu-usage . 55)) plan)))
+    (should (string-match-p "\\[" (alist-get (slothbar-format-slot-char slot)
+                                               spec)))))
+
 (ert-deftest slothbar-unit-format-compile-format-spec ()
   "Compiled format strings work with `format-spec'."
   (let ((format
@@ -1283,6 +1318,16 @@
       (should (string-match-p "backend: test" text))
       (should (string-match-p "bar id=(0 \"test\")" text))
       (should (string-match-p "debug-module" text)))))
+
+(ert-deftest slothbar-unit-layout-format-spec-before-color ()
+  "Format-spec substitution happens before color parsing."
+  (let ((parsed nil))
+    (cl-letf (((symbol-function 'slothbar-color-parse-string)
+               (lambda (string)
+                 (setq parsed string)
+                 nil)))
+      (slothbar-module--layout-format "%z" '((?z . "^1red")) 0))
+    (should (equal parsed "^1red"))))
 
 (ert-deftest slothbar-unit-cl-print-objects ()
   "Custom printers keep live slothbar objects compact."

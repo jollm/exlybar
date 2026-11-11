@@ -821,15 +821,22 @@ When PLAN is non-nil, use its slots so per-token options such as :decimals
 are honored."
   (if plan
       (cl-loop for slot in (slothbar-format-plan-slots plan)
+               for kind = (or (slothbar-format-slot-kind slot) :field)
                for keyword = (slothbar-format-slot-keyword slot)
-               for field = (slothbar-sysinfo-find-field keyword)
+               for field = (and (eq kind :field)
+                                (slothbar-sysinfo-find-field keyword))
                collect
                (cons (slothbar-format-slot-char slot)
-                     (slothbar-sysinfo-format-value
-                      field
-                      (alist-get keyword values)
-                      (plist-get (slothbar-format-slot-options slot)
-                                 :decimals))))
+                     (if (eq kind :field)
+                         (slothbar-sysinfo-format-value
+                          field
+                          (alist-get keyword values)
+                          (plist-get (slothbar-format-slot-options slot)
+                                     :decimals))
+                       (slothbar-format-slot-value
+                        slot
+                        (alist-get (slothbar-format-slot-source slot)
+                                   values)))))
     (cl-loop for field in slothbar-sysinfo-fields
              collect
              (cons (slothbar-sysinfo-field-char field)

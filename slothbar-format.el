@@ -32,6 +32,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'slothbar-color)
 
 (defconst slothbar-format--option-keys
   '(:width :precision :pad :truncate :case :prefix :suffix :char :decimals)
@@ -44,7 +45,10 @@
   "One value slot in a compiled format plan."
   char
   keyword
-  options)
+  options
+  (kind :field)
+  source
+  args)
 
 (cl-defstruct
     (slothbar-format-plan
@@ -185,12 +189,53 @@ USED is a list of characters already assigned."
                   (slothbar-format--candidate-characters))
       (error "No free format characters remain")))
 
+(defun slothbar-format--directive-token-p (token)
+  "Return non-nil when TOKEN is a progress or zone directive."
+  (and (consp token)
+       (memq (car token) '(:progress :zone))))
+
+(defun slothbar-format--directive-source-p (source)
+  "Return non-nil when SOURCE can name a numeric format value."
+  (or (keywordp source)
+      (characterp source)
+      (and (stringp source) (> (length source) 0))))
+
+(defun slothbar-format--plan-directive (token fields used)
+  "Compile a progress/zone directive TOKEN with FIELDS and USED."
+  (let* ((kind (car token))
+         (source (nth 1 token))
+         (args (nthcdr 2 token))
+         (options (when (eq kind :progress) (nthcdr 2 args)))
+         (plist (when options (slothbar-format--validate-options options)))
+         (character (slothbar-format--allocate-character
+                     (if (eq kind :progress) ?P ?Z) used)))
+    (unless (slothbar-format--directive-source-p source)
+      (error "Invalid %s value source %S" kind source))
+    (when (eq kind :progress)
+      (unless (numberp (nth 0 args))
+        (error "Progress increment must be a number, got %S" (nth 0 args)))
+      (unless (or (null (nth 1 args)) (listp (nth 1 args)))
+        (error "Progress thresholds must be a list, got %S" (nth 1 args))))
+    (cons (slothbar-format--spec
+           kind plist fields character)
+          (slothbar-format-slot-create
+           :char character
+           :keyword kind
+           :options plist
+           :kind kind
+           :source source
+           :args (if (eq kind :progress)
+                     (append (list (nth 0 args) (nth 1 args)) options)
+                   args)))))
+
 (defun slothbar-format--plan-token (token fields used)
   "Return (STRING . SLOT) for TOKEN.
 SLOT is nil for literal strings.  USED is the characters already assigned."
   (cond
    ((stringp token)
     (cons (slothbar-format--escape token) nil))
+   ((slothbar-format--directive-token-p token)
+    (slothbar-format--plan-directive token fields used))
    ((or (keywordp token) (consp token))
     (let* ((keyword-options (slothbar-format--token-keyword-options token))
            (keyword (car keyword-options))
@@ -211,6 +256,30 @@ SLOT is nil for literal strings.  USED is the characters already assigned."
                :options plist)))))
    (t
     (error "Invalid format token %S" token))))
+
+(defun slothbar-format-slot-value (slot value)
+  "Render SLOT using numeric VALUE.
+For field slots return VALUE unchanged.  Progress and zone slots render
+through `slothbar-color-progress-bar' and `slothbar-color-zone'."
+  (pcase (or (slothbar-format-slot-kind slot) :field)
+    ((or :progress :zone)
+     (if (numberp value)
+         (pcase (slothbar-format-slot-kind slot)
+           (:progress
+            (apply #'slothbar-color-progress-bar value
+                   (slothbar-format-slot-args slot)))
+           (:zone
+            (let ((color (apply #'slothbar-color-zone value
+                                (slothbar-format-slot-args slot))))
+              ;; A color code ending in a digit followed immediately by a
+              ;; numeric field (for example ^4 followed by 002) would be
+              ;; parsed as ^40.  ^; is a no-op color code and keeps the
+              ;; field digits separate.
+              (if (> (length color) 0)
+                  (concat color "^;")
+                color))))
+       ""))
+    (_ value)))
 
 (defun slothbar-format-compile-plan (tokens fields)
   "Compile TOKENS into a `slothbar-format-plan'.

@@ -845,6 +845,15 @@ Return VALUE."
           (= 1 (seq-count (lambda (fn)
                             (eq fn #'slothbar-focus--on-change))
                           slothbar-backend-focused-window-change-hook))))
+    (slothbar-smoke--record
+     (format "shared sysinfo state: subscribers=%d timer=%S sys-a=%S sys-b=%S state-eq=%S\n"
+             (length slothbar-sysinfo--subscribers)
+             slothbar-sysinfo--provider-timer
+             (and sys-a (slothbar-module-initialized sys-a))
+             (and sys-b (slothbar-module-initialized sys-b))
+             (and sys-a sys-b
+                  (eq (slothbar-sysinfo-state sys-a)
+                      (slothbar-sysinfo-state sys-b)))))
     (slothbar-smoke--check
      "two sysinfo modules share one provider timer"
      (and (= 2 (length slothbar-sysinfo--subscribers))
