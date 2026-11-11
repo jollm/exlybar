@@ -47,6 +47,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'cl-print)
 (require 'pcase)
 
 ;; elwl is optional at package build/load time.  X11 users do not need it;
@@ -196,6 +197,24 @@
   retired
   frame
   (module-ops (make-hash-table :test 'eq) :type 'hash-table))
+
+(cl-defmethod cl-print-object
+    ((surface slothbar-backend-wayland-surface) stream)
+  "Print SURFACE compactly in Help and `cl-prin1'."
+  (let ((output (slothbar-backend-wayland-surface-output surface)))
+    (princ (format "#<slothbar-surface output=%S scale=%s logical=%dx%d frame=%dx%d visible=%S>"
+                   (if (and output (fboundp 'elwl-output-p)
+                            (elwl-output-p output))
+                       (elwl-output-name output)
+                     output)
+                   (slothbar-backend-wayland-surface-scale surface)
+                   (slothbar-backend-wayland-surface-logical-width surface)
+                   (slothbar-backend-wayland-surface-logical-height surface)
+                   (slothbar-backend-wayland-surface-frame-width surface)
+                   (slothbar-backend-wayland-surface-frame-height surface)
+                   (slothbar-visible
+                    (slothbar-backend-wayland-surface-bar surface)))
+           stream)))
 
 (defun slothbar-backend-wayland-create ()
   "Create an unopened Wayland backend."

@@ -63,6 +63,15 @@ RED, GREEN, BLUE, and ALPHA are integers in the range 0-65535."
   (blue 0 :type 'number)
   (alpha #xffff :type 'number))
 
+(cl-defmethod cl-print-object ((color slothbar-color-rgb) stream)
+  "Print COLOR compactly in Help and `cl-prin1'."
+  (princ (format "#<slothbar-color #%04x%04x%04x%04x>"
+                 (slothbar-color-rgb-red color)
+                 (slothbar-color-rgb-green color)
+                 (slothbar-color-rgb-blue color)
+                 (slothbar-color-rgb-alpha color))
+         stream))
+
 (defcustom slothbar-color-bright-factor 1.25
   "Factor used by ^B to brighten a foreground color."
   :type 'float

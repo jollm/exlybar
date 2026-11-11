@@ -49,6 +49,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'cl-print)
 
 (cl-defstruct
     (slothbar-backend
@@ -57,6 +58,13 @@
   "Base type for slothbar display backends."
   (kind nil :type 'symbol)
   bars)
+
+(cl-defmethod cl-print-object ((backend slothbar-backend) stream)
+  "Print BACKEND compactly in Help and `cl-prin1'."
+  (princ (format "#<slothbar-backend %s bars=%d>"
+                 (or (slothbar-backend-kind backend) "unknown")
+                 (length (slothbar-backend-bars backend)))
+         stream))
 
 (defvar slothbar--backend nil
   "The active `slothbar-backend', or nil when slothbar is stopped.")

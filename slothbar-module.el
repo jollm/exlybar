@@ -43,6 +43,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'cl-print)
 
 (require 'slothbar-backend)
 (require 'slothbar-color)
@@ -89,6 +90,32 @@
   (update-timer nil :type 'timer)
   backend
   bar)
+
+(defun slothbar-module--print-text (text)
+  "Return a short printable representation of TEXT."
+  (let ((text (or text "")))
+    (if (> (length text) 40)
+        (concat (substring text 0 40) "...")
+      text)))
+
+(cl-defmethod cl-print-object ((rgb slothbar-module-rgb) stream)
+  "Print RGB compactly in Help and `cl-prin1'."
+  (princ (format "#<slothbar-module-rgb bg=%s fg=%s>"
+                 (cl-prin1-to-string
+                  (slothbar-module-rgb-background-color rgb))
+                 (cl-prin1-to-string
+                  (slothbar-module-rgb-foreground-color rgb)))
+         stream))
+
+(cl-defmethod cl-print-object ((module slothbar-module) stream)
+  "Print MODULE compactly in Help and `cl-prin1'."
+  (princ (format "#<slothbar-module %s initialized=%S width=%s text=%S>"
+                 (or (slothbar-module-name module) "anonymous")
+                 (slothbar-module-initialized module)
+                 (slothbar-module-width module)
+                 (slothbar-module--print-text
+                  (slothbar-module-text module)))
+         stream))
 
 (defun slothbar-module--backend (m)
   "Return M's owning display backend, or the current backend."

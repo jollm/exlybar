@@ -113,6 +113,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'cl-print)
 (require 'fontsloth)
 (require 'pcase)
 (require 'seq)
@@ -156,6 +157,17 @@
 
 (defvar slothbar--bar nil
   "The current `slothbar' instance during a scoped operation.")
+
+(cl-defmethod cl-print-object ((bar slothbar) stream)
+  "Print BAR compactly in Help and `cl-prin1'."
+  (princ (format "#<slothbar id=%S size=%dx%d scale=%s visible=%S modules=%d>"
+                 (slothbar-id bar)
+                 (slothbar-pixel-width bar)
+                 (slothbar-pixel-height bar)
+                 (slothbar-scale bar)
+                 (slothbar-visible bar)
+                 (length (slothbar-module-list bar)))
+         stream))
 
 (defcustom slothbar-width (display-pixel-width)
   "Slothbar width.

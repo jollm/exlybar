@@ -1242,6 +1242,27 @@
       (should slothbar--geometry-changed?)
       (should refreshed))))
 
+(ert-deftest slothbar-unit-cl-print-objects ()
+  "Custom printers keep live slothbar objects compact."
+  (require 'cl-print)
+  (let* ((module (slothbar-module-create :name "printer" :width 12))
+         (bar (slothbar-create
+               :id '("test" "output")
+               :pixel-width 100
+               :pixel-height 20
+               :module-list (list module)))
+         (backend (slothbar-backend--make :kind 'test))
+         (color (slothbar-color-rgb-create
+                 :red 1 :green 2 :blue 3 :alpha 4)))
+    (should (string-prefix-p "#<slothbar "
+                             (cl-prin1-to-string bar)))
+    (should (string-prefix-p "#<slothbar-module "
+                             (cl-prin1-to-string module)))
+    (should (string-prefix-p "#<slothbar-backend "
+                             (cl-prin1-to-string backend)))
+    (should (string-prefix-p "#<slothbar-color "
+                             (cl-prin1-to-string color)))))
+
 (ert-deftest slothbar-unit-color-brighten ()
   "Brightening clamps channels and preserves alpha."
   (let* ((color (slothbar-color-rgb-create
