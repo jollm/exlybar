@@ -1287,6 +1287,183 @@ VALUE is the value being shown."
                    #'slothbar--helpful-pretty-print-advice))
   (message "Slothbar: Helpful pretty-printing advice disabled"))
 
+(defconst slothbar-debug-info-features
+  '(system-tray ewmh randr pointer-input focused-window ext-workspace
+    surface layer-shell buffer-scale exclusive-zone)
+  "Backend capabilities reported by `slothbar-debug-info'.")
+
+(defun slothbar--debug-truncate (text &optional limit)
+  "Return TEXT shortened to LIMIT characters."
+  (let ((text (or text ""))
+        (limit (or limit 60)))
+    (if (> (length text) limit)
+        (concat (substring text 0 limit) "...")
+      text)))
+
+(defun slothbar--debug-output-label (backend output)
+  "Return a printable label for OUTPUT on BACKEND."
+  (cond
+   ((null output) "nil")
+   ((stringp output) output)
+   ((and backend (fboundp 'slothbar-backend-output-name))
+    (condition-case nil
+        (or (slothbar-backend-output-name backend output) "unknown")
+      (error "unknown")))
+   (t "unknown")))
+
+(defun slothbar--debug-surface-info (bar)
+  "Return a diagnostic line for BAR's backend surface."
+  (let ((surface (slothbar-surface bar)))
+    (cond
+     ((null surface)
+      "  surface: none\n")
+     ((and (fboundp 'slothbar-backend-wayland-surface-p)
+           (slothbar-backend-wayland-surface-p surface))
+      (format
+       "  surface: wayland output=%S scale=%s logical=%dx%d frame=%dx%d configured=%S rendered=%S presented=%S pending=%S buffers=%d retired=%d\n"
+       (slothbar--debug-output-label
+        (slothbar-display-backend bar)
+        (slothbar-backend-wayland-surface-output surface))
+       (slothbar-backend-wayland-surface-scale surface)
+       (slothbar-backend-wayland-surface-logical-width surface)
+       (slothbar-backend-wayland-surface-logical-height surface)
+       (slothbar-backend-wayland-surface-frame-width surface)
+       (slothbar-backend-wayland-surface-frame-height surface)
+       (slothbar-backend-wayland-surface-configured-serial surface)
+       (slothbar-backend-wayland-surface-rendered surface)
+       (slothbar-backend-wayland-surface-presented surface)
+       (slothbar-backend-wayland-surface-pending surface)
+       (length (slothbar-backend-wayland-surface-buffers surface))
+       (length (slothbar-backend-wayland-surface-retired surface))))
+     ((and (fboundp 'slothbar-backend-xcb-surface-p)
+           (slothbar-backend-xcb-surface-p surface))
+      (format "  surface: xcb window=%S gc=%S pixmap=%S module-surfaces=%d\n"
+              (slothbar-backend-xcb-surface-window surface)
+              (and (slothbar-backend-xcb-surface-gc surface) t)
+              (and (slothbar-backend-xcb-surface-pixmap surface) t)
+              (hash-table-count
+               (slothbar-backend-xcb-surface-module-surfaces surface))))
+     (t
+      (format "  surface: %s\n" (type-of surface))))))
+
+(defun slothbar--debug-backend-info (backend)
+  "Return diagnostic lines for BACKEND."
+  (if (null backend)
+      "backend: none\n"
+    (let* ((kind (or (slothbar-backend-kind backend) 'unknown))
+           (outputs (condition-case err
+                        (slothbar-backend-output-names backend)
+                      (error (list (format "<error: %s>"
+                                           (error-message-string err))))))
+           (features
+            (mapcar
+             (lambda (feature)
+               (format "  %s: %s"
+                       feature
+                       (condition-case err
+                           (if (slothbar-backend-supports-p backend feature)
+                               "yes" "no")
+                         (error (format "<error: %s>"
+                                        (error-message-string err))))))
+             slothbar-debug-info-features)))
+      (concat
+       (format "backend: %s bars=%d\n" kind
+               (length (slothbar-backend-bars backend)))
+       (format "  outputs: %S\n" outputs)
+       (mapconcat #'identity features "\n")
+       "\n"))))
+
+(defun slothbar--debug-bar-info (backend bar)
+  "Return diagnostic lines for BACKEND BAR."
+  (let ((modules (slothbar-module-list bar)))
+    (concat
+     (format "bar id=%S output=%S visible=%S size=%dx%d offsets=%d,%d scale=%s bottom=%S modules=%d placements=%d\n"
+             (slothbar-id bar)
+             (slothbar--debug-output-label backend (slothbar-output bar))
+             (slothbar-visible bar)
+             (slothbar-pixel-width bar)
+             (slothbar-pixel-height bar)
+             (slothbar-x-offset bar)
+             (slothbar-y-offset bar)
+             (slothbar-scale bar)
+             (slothbar-bottom bar)
+             (length modules)
+             (length (slothbar-placements bar)))
+     (slothbar--debug-surface-info bar)
+     (if (null modules)
+         "  modules: none\n"
+       (concat
+        "  modules:\n"
+        (mapconcat
+         (lambda (module)
+           (if (slothbar-module-p module)
+               (format "    - %s initialized=%S needs-refresh=%S width=%s text=%S\n"
+                       (or (slothbar-module-name module) "anonymous")
+                       (slothbar-module-initialized module)
+                       (slothbar-module-needs-refresh? module)
+                       (slothbar-module-width module)
+                       (slothbar--debug-truncate
+                        (slothbar-module-text module)))
+             (format "    - layout %S\n" module)))
+         modules ""))))))
+
+(defun slothbar-debug-info-string ()
+  "Return a diagnostic report for the current slothbar state."
+  (let* ((backend slothbar--backend)
+         (bars (or slothbar--bars (and slothbar--bar (list slothbar--bar)))))
+    (concat
+     "Slothbar debug information\n"
+     (format "enabled: %S visible: %S mode: %S\n"
+             (slothbar-enabled-p)
+             slothbar--visible
+             (and (boundp 'slothbar-mode) slothbar-mode))
+     (format "preferred-display: %S width: %s height: %s font-scale: %s print-multiline: %S\n"
+             slothbar-preferred-display
+             slothbar-width
+             slothbar-height
+             slothbar-font-px-scale
+             slothbar-print-multiline)
+     (format "timers: module-refresh=%S output-change=%S\n"
+             (and (boundp 'slothbar--module-refresh-timer)
+                  slothbar--module-refresh-timer)
+             (and (boundp 'slothbar--output-change-timer)
+                  slothbar--output-change-timer))
+     (if (boundp 'slothbar-focus--subscribers)
+         (format "focus: subscribers=%s timer=%S\n"
+                 slothbar-focus--subscribers
+                 (and (boundp 'slothbar-focus--refresh-timer)
+                      slothbar-focus--refresh-timer))
+       "focus: module not loaded\n")
+     (if (boundp 'slothbar-sysinfo--subscribers)
+         (format "sysinfo: subscribers=%d timer=%S\n"
+                 (length slothbar-sysinfo--subscribers)
+                 (and (boundp 'slothbar-sysinfo--provider-timer)
+                      slothbar-sysinfo--provider-timer))
+       "sysinfo: module not loaded\n")
+     (format "reported module failures: %d\n\n"
+             (if (boundp 'slothbar--reported-module-failures)
+                 (hash-table-count slothbar--reported-module-failures)
+               0))
+     (slothbar--debug-backend-info backend)
+     (if (null bars)
+         "bars: none\n"
+       (mapconcat (lambda (bar) (slothbar--debug-bar-info backend bar))
+                  bars "\n")))))
+
+;;;###autoload
+(defun slothbar-debug-info ()
+  "Display a diagnostic report for slothbar in `*slothbar-debug-info*'."
+  (interactive)
+  (let ((buffer (get-buffer-create "*slothbar-debug-info*")))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (slothbar-debug-info-string))
+        (goto-char (point-min)))
+      (special-mode)
+      (setq buffer-read-only t))
+    (pop-to-buffer buffer)))
+
 (provide 'slothbar)
 
 ;;; slothbar.el ends here

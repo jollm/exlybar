@@ -240,6 +240,13 @@ while slothbar is running.
 Modifications to is-bottom, margin-y, and preferred-display take
 effect with =M-x slothbar-refresh=.
 
+** Diagnostics
+
+=M-x slothbar-debug-info= opens =*slothbar-debug-info*= with the current
+backend, output, bar, surface, module, provider, and timer state. It is
+useful when reporting output hotplug, visibility, or module lifecycle
+problems.
+
 ** Helpful integration
 
 If =C-h v= is provided by [[https://github.com/Wilfred/helpful][Helpful]], Helpful's value display uses

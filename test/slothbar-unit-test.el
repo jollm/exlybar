@@ -1242,6 +1242,33 @@
       (should slothbar--geometry-changed?)
       (should refreshed))))
 
+(ert-deftest slothbar-unit-debug-info-string ()
+  "Debug output works with no state and with a live bar."
+  (let ((slothbar--backend nil)
+        (slothbar--bars nil)
+        (slothbar--bar nil)
+        (slothbar--visible nil))
+    (let ((text (slothbar-debug-info-string)))
+      (should (string-match-p "backend: none" text))
+      (should (string-match-p "bars: none" text))))
+  (let* ((backend (slothbar-backend--make :kind 'test))
+         (module (slothbar-module-create :name "debug-module" :width 12))
+         (bar (slothbar-create
+               :id '(0 "test")
+               :output "test"
+               :display-backend backend
+               :pixel-width 100
+               :pixel-height 20
+               :module-list (list module)))
+         (slothbar--backend backend)
+         (slothbar--bars (list bar))
+         (slothbar--bar bar)
+         (slothbar--visible t))
+    (let ((text (slothbar-debug-info-string)))
+      (should (string-match-p "backend: test" text))
+      (should (string-match-p "bar id=(0 \"test\")" text))
+      (should (string-match-p "debug-module" text)))))
+
 (ert-deftest slothbar-unit-cl-print-objects ()
   "Custom printers keep live slothbar objects compact."
   (require 'cl-print)

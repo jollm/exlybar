@@ -117,6 +117,8 @@ This section covers the work since commit
   - XEmbed tray singleton behavior
   - shared focus/sysinfo providers
   - operation without elwl on X
+- Add a `slothbar-debug-info` command for inspecting backend, bar, surface,
+  module, provider, and timer state.
 - Add a cold-font-cache benchmark task.
 - Add a MELPA package build/install test that includes the Wayland backend
   and verifies it fails cleanly when elwl is unavailable.
