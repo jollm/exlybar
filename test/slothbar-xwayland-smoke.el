@@ -749,6 +749,65 @@ Return VALUE."
   (slothbar-exit)
   (setq slothbar-bars nil)
 
+  ;; `slothbar-modules' fallback must reload only inherited bars.
+  (let ((slothbar-modules
+         (list (lambda ()
+                 (slothbar-module-create
+                  :name "fallback-old" :format "old"
+                  :lpad 2 :rpad 2)))))
+    (setq slothbar-bars
+          (list (list :id "fallback"
+                      :output "HEADLESS-1"
+                      :width 300
+                      :height 20
+                      :offset-x 0
+                      :offset-y 0)
+                (list :id "explicit"
+                      :output "HEADLESS-1"
+                      :width 300
+                      :height 20
+                      :offset-x 0
+                      :offset-y 20
+                      :modules
+                      (list (lambda ()
+                              (slothbar-module-create
+                               :name "explicit" :format "explicit"
+                               :lpad 2 :rpad 2))))))
+    (slothbar--start)
+    (let* ((bar-fallback (car slothbar--bars))
+           (bar-explicit (cadr slothbar--bars))
+           (explicit-module (car (slothbar-module-list bar-explicit))))
+      (slothbar-smoke--check
+       "slothbar-modules fallback fills only the inherited bar"
+       (and (equal (mapcar #'slothbar-module-name
+                           (slothbar-module-list bar-fallback))
+                   '("fallback-old"))
+            (equal (mapcar #'slothbar-module-name
+                           (slothbar-module-list bar-explicit))
+                   '("explicit"))))
+      (setq slothbar-modules
+            (list (lambda ()
+                    (slothbar-module-create
+                     :name "fallback-new" :format "new"
+                     :lpad 2 :rpad 2))))
+      (slothbar-smoke--check
+       "changing slothbar-modules reloads the inherited bar"
+       (slothbar-smoke--wait-for
+        (lambda ()
+          (equal (mapcar #'slothbar-module-name
+                         (slothbar-module-list bar-fallback))
+                 '("fallback-new")))
+        3))
+      (slothbar-smoke--check
+       "changing slothbar-modules leaves explicit modules alone"
+       (and (eq explicit-module
+                (car (slothbar-module-list bar-explicit)))
+            (equal (mapcar #'slothbar-module-name
+                           (slothbar-module-list bar-explicit))
+                   '("explicit")))))
+    (slothbar-exit)
+    (setq slothbar-bars nil))
+
   ;; Live theme and font-scale fan-out to two X bars.
   (setq slothbar-bars
         (list (list :id "theme-a"
