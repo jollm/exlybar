@@ -808,6 +808,82 @@ Return VALUE."
     (slothbar-exit)
     (setq slothbar-bars nil))
 
+  ;; Shared providers must fan out to modules in both bars.
+  (require 'slothbar-focus)
+  (require 'slothbar-sysinfo)
+  (setq slothbar-bars
+        (list (list :id "shared-a"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda () (slothbar-focus-create))
+                          (lambda () (slothbar-sysinfo-create))))
+              (list :id "shared-b"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 20
+                    :modules
+                    (list (lambda () (slothbar-focus-create))
+                          (lambda () (slothbar-sysinfo-create))))))
+  (slothbar--start)
+  (let* ((focus-a (cl-find-if (lambda (m) (slothbar-focus-p m))
+                              (slothbar-module-list (car slothbar--bars))))
+         (focus-b (cl-find-if (lambda (m) (slothbar-focus-p m))
+                              (slothbar-module-list (cadr slothbar--bars))))
+         (sys-a (cl-find-if (lambda (m) (slothbar-sysinfo-p m))
+                            (slothbar-module-list (car slothbar--bars))))
+         (sys-b (cl-find-if (lambda (m) (slothbar-sysinfo-p m))
+                            (slothbar-module-list (cadr slothbar--bars)))))
+    (slothbar-smoke--check
+     "two focus modules share one backend hook"
+     (and (= 2 slothbar-focus--subscribers)
+          (= 1 (seq-count (lambda (fn)
+                            (eq fn #'slothbar-focus--on-change))
+                          slothbar-backend-focused-window-change-hook))))
+    (slothbar-smoke--check
+     "two sysinfo modules share one provider timer"
+     (and (= 2 (length slothbar-sysinfo--subscribers))
+          slothbar-sysinfo--provider-timer
+          (eq (slothbar-sysinfo-state sys-a)
+              (slothbar-sysinfo-state sys-b))))
+    (cl-letf (((symbol-function 'slothbar-backend-focused-window)
+               (lambda (_backend)
+                 '(:title "shared focus" :app-id "shared"))))
+      (run-hook-with-args 'slothbar-backend-focused-window-change-hook
+                          slothbar--backend)
+      (slothbar-smoke--check
+       "one focus hook update reaches both bars"
+       (slothbar-smoke--wait-for
+        (lambda ()
+          (and (equal "shared focus" (slothbar-module-text focus-a))
+               (equal "shared focus" (slothbar-module-text focus-b))))
+        3)))
+    (let ((state (slothbar-sysinfo-state sys-a)))
+      (cl-letf (((symbol-function 'slothbar-sysinfo-update)
+                 (lambda (state &optional _now _force)
+                   (setf (alist-get :cpu-usage
+                                    (slothbar-sysinfo-state-values state))
+                         7.5)
+                   state)))
+        (slothbar-sysinfo--provider-tick)
+        (slothbar-smoke--check
+         "one sysinfo provider update reaches both bars"
+         (and (equal (slothbar-module-text sys-a)
+                     (slothbar-module-text sys-b))
+              (not (string-empty-p (slothbar-module-text sys-a)))))))
+    (slothbar-exit)
+    (slothbar-smoke--check
+     "shared providers unsubscribe after exit"
+     (and (zerop slothbar-focus--subscribers)
+          (null slothbar-sysinfo--subscribers)
+          (null slothbar-sysinfo--provider-timer))))
+  (setq slothbar-bars nil)
+
   ;; Live theme and font-scale fan-out to two X bars.
   (setq slothbar-bars
         (list (list :id "theme-a"
