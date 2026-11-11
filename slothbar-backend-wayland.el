@@ -49,16 +49,95 @@
 (require 'cl-lib)
 (require 'pcase)
 
-(require 'elwl-connection)
-(require 'elwl-layer-shell)
-(require 'elwl-output)
-(require 'elwl-protocol)
-(require 'elwl-registry)
-(require 'elwl-foreign-toplevel)
-(require 'elwl-seat)
-(require 'elwl-shm)
-(require 'elwl-surface)
-(require 'elwl-workspace)
+;; elwl is optional at package build/load time.  X11 users do not need it;
+;; the Wayland backend reports a clear error only when requested.
+(defvar slothbar-backend-wayland--elwl-available-p nil)
+(defvar slothbar-backend-wayland--elwl-load-error nil)
+
+(condition-case err
+    (progn
+      (dolist (feature '(elwl
+                         elwl-connection
+                         elwl-layer-shell
+                         elwl-output
+                         elwl-protocol
+                         elwl-registry
+                         elwl-foreign-toplevel
+                         elwl-seat
+                         elwl-shm
+                         elwl-surface
+                         elwl-workspace))
+        (unless (require feature nil t)
+          (error "Missing elwl component %s" feature)))
+      (setq slothbar-backend-wayland--elwl-available-p t))
+  (error
+   (setq slothbar-backend-wayland--elwl-load-error
+         (error-message-string err))))
+
+;; elwl is loaded dynamically when available.  These declarations let the
+;; Wayland backend byte-compile in an X-only package.
+(declare-function elwl-compositor-create-surface "elwl" (&rest args))
+(declare-function elwl-connect "elwl" (&rest args))
+(declare-function elwl-disconnect "elwl" (&rest args))
+(declare-function elwl-dispatch "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-app-id "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-manager-bind "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-manager-dead-p "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-manager-focused "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-manager-stop "elwl" (&rest args))
+(declare-function elwl-foreign-toplevel-title "elwl" (&rest args))
+(declare-function elwl-get-registry "elwl" (&rest args))
+(declare-function elwl-layer-shell-bind "elwl" (&rest args))
+(declare-function elwl-layer-shell-create "elwl" (&rest args))
+(declare-function elwl-layer-surface-ack-configure "elwl" (&rest args))
+(declare-function elwl-layer-surface-destroy "elwl" (&rest args))
+(declare-function elwl-layer-surface-set-anchor "elwl" (&rest args))
+(declare-function elwl-layer-surface-set-exclusive-zone "elwl" (&rest args))
+(declare-function elwl-layer-surface-set-keyboard-interactivity "elwl" (&rest args))
+(declare-function elwl-layer-surface-set-margin "elwl" (&rest args))
+(declare-function elwl-layer-surface-set-size "elwl" (&rest args))
+(declare-function elwl-object-add-listener "elwl" (&rest args))
+(declare-function elwl-object-version "elwl" (&rest args))
+(declare-function elwl-output-list "elwl" (&rest args))
+(declare-function elwl-output-name "elwl" (&rest args))
+(declare-function elwl-output-object "elwl" (&rest args))
+(declare-function elwl-output-p "elwl" (&rest args))
+(declare-function elwl-output-scale "elwl" (&rest args))
+(declare-function elwl-output-sync "elwl" (&rest args))
+(declare-function elwl-output-watch "elwl" (&rest args))
+(declare-function elwl-pointer-object "elwl" (&rest args))
+(declare-function elwl-pointer-release "elwl" (&rest args))
+(declare-function elwl-protocol-load-ext-workspace "elwl" (&rest args))
+(declare-function elwl-protocol-load-layer-shell "elwl" (&rest args))
+(declare-function elwl-protocol-load-wayland "elwl" (&rest args))
+(declare-function elwl-protocol-load-wlr-foreign-toplevel "elwl" (&rest args))
+(declare-function elwl-registry-bind "elwl" (&rest args))
+(declare-function elwl-registry-find "elwl" (&rest args))
+(declare-function elwl-roundtrip "elwl" (&rest args))
+(declare-function elwl-seat-bind "elwl" (&rest args))
+(declare-function elwl-seat-capabilities "elwl" (&rest args))
+(declare-function elwl-seat-get-pointer "elwl" (&rest args))
+(declare-function elwl-seat-object "elwl" (&rest args))
+(declare-function elwl-seat-release "elwl" (&rest args))
+(declare-function elwl-shm-buffer-destroy "elwl" (&rest args))
+(declare-function elwl-shm-buffer-free-p "elwl" (&rest args))
+(declare-function elwl-shm-buffer-object "elwl" (&rest args))
+(declare-function elwl-shm-buffer-p "elwl" (&rest args))
+(declare-function elwl-shm-buffer-write "elwl" (&rest args))
+(declare-function elwl-shm-create-pool "elwl" (&rest args))
+(declare-function elwl-shm-pool-create-buffer "elwl" (&rest args))
+(declare-function elwl-shm-pool-destroy "elwl" (&rest args))
+(declare-function elwl-shm-pool-p "elwl" (&rest args))
+(declare-function elwl-surface-attach "elwl" (&rest args))
+(declare-function elwl-surface-commit "elwl" (&rest args))
+(declare-function elwl-surface-destroy "elwl" (&rest args))
+(declare-function elwl-surface-present "elwl" (&rest args))
+(declare-function elwl-surface-set-buffer-scale "elwl" (&rest args))
+(declare-function elwl-workspace-manager-bind "elwl" (&rest args))
+(declare-function elwl-workspace-manager-dead "elwl" (&rest args))
+(declare-function elwl-workspace-manager-done "elwl" (&rest args))
+(declare-function elwl-workspace-manager-stop "elwl" (&rest args))
+
 (require 'fontsloth)
 (require 'fontsloth-layout)
 
@@ -120,6 +199,11 @@
 
 (defun slothbar-backend-wayland-create ()
   "Create an unopened Wayland backend."
+  (unless slothbar-backend-wayland--elwl-available-p
+    (user-error
+     "Slothbar's Wayland backend requires elwl: %s"
+     (or slothbar-backend-wayland--elwl-load-error
+         "elwl is not installed or not loadable")))
   (slothbar-backend-wayland--make :kind 'wayland))
 
 (cl-defmethod slothbar-backend-supports-p

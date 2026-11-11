@@ -23,6 +23,10 @@
   "Measure cold-cache font loading with an isolated fontsloth cache."
   ($ '("bash test/slothbar-font-cache-benchmark.sh")))
 
+(define (melpa-test)
+  "Build and load the X-capable slothbar MELPA package in a Guix container."
+  ($ '("bash scripts/melpa-test.sh")))
+
 (define (test-xwayland-no-elwl)
   "Run the xcb smoke test with elwl unavailable."
   ($ '("env SLOTHBAR_TEST_NO_ELWL=1 bash test/slothbar-xwayland-smoke.sh")))
