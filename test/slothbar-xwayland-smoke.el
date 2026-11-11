@@ -112,6 +112,10 @@ Return VALUE."
                                 :plane-mask #xffffffff))))
     (vconcat (slot-value reply 'data))))
 
+(defun slothbar-smoke--set-bar-config (bar config)
+  "Set BAR's config to CONFIG without relying on a preloaded setf."
+  (aset bar (cl-struct-slot-offset 'slothbar 'config) config))
+
 (defun slothbar-smoke--window-geometry (window)
   "Return WINDOW's X/Y/WIDTH/HEIGHT geometry."
   (let ((reply (xcb:+request-unchecked+reply
@@ -656,6 +660,92 @@ Return VALUE."
           (equal (list (nth 2 geometry) (nth 3 geometry))
                  '(320 30))))
       3)))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
+  ;; Two-bar geometry refresh: both bars resize independently.
+  (setq slothbar-bars
+        (list (list :id "geometry-a"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 10
+                    :offset-y 10
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "geometry-a" :format "geometry-a"
+                             :lpad 2 :rpad 2))))
+              (list :id "geometry-b"
+                    :output "HEADLESS-1"
+                    :width 320
+                    :height 24
+                    :offset-x 20
+                    :offset-y 34
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "geometry-b" :format "geometry-b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (sit-for 0.2)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars)))
+    (let ((config-a (copy-sequence (slothbar-config bar-a)))
+          (config-b (copy-sequence (slothbar-config bar-b))))
+      (slothbar-smoke--set-bar-config
+       bar-a
+       (plist-put (plist-put (plist-put (plist-put config-a
+                                                   :width 340)
+                                      :height 26)
+                             :offset-x 30)
+                  :offset-y 40))
+      (slothbar-smoke--set-bar-config
+       bar-b
+       (plist-put (plist-put (plist-put (plist-put config-b
+                                                   :width 360)
+                                      :height 28)
+                             :offset-x 50)
+                  :offset-y 70)))
+    (slothbar-refresh)
+    (slothbar-refresh-modules)
+    (slothbar-smoke--check
+     "X two-bar geometry updates both bar models"
+     (slothbar-smoke--wait-for
+      (lambda ()
+        (and (= 340 (slothbar-pixel-width bar-a))
+             (= 26 (slothbar-pixel-height bar-a))
+             (= 30 (slothbar-x-offset bar-a))
+             (= 40 (slothbar-y-offset bar-a))
+             (= 360 (slothbar-pixel-width bar-b))
+             (= 28 (slothbar-pixel-height bar-b))
+             (= 50 (slothbar-x-offset bar-b))
+             (= 70 (slothbar-y-offset bar-b))))
+      3))
+    (let ((resized
+           (slothbar-smoke--wait-for
+            (lambda ()
+              (let* ((current-a (car slothbar--bars))
+                     (current-b (cadr slothbar--bars))
+                     (window-a (and current-a
+                                    (slothbar-backend-xcb-surface-window
+                                     (slothbar-surface current-a))))
+                     (window-b (and current-b
+                                    (slothbar-backend-xcb-surface-window
+                                     (slothbar-surface current-b))))
+                     (geometry-a (and window-a
+                                      (slothbar-smoke--window-geometry window-a)))
+                     (geometry-b (and window-b
+                                      (slothbar-smoke--window-geometry window-b))))
+                (and window-a window-b
+                     (equal (list (nth 2 geometry-a) (nth 3 geometry-a))
+                            '(340 26))
+                     (equal (list (nth 2 geometry-b) (nth 3 geometry-b))
+                            '(360 28)))))
+            3)))
+      (slothbar-smoke--check
+       "X two-bar geometry resizes both X windows"
+       resized)))
   (slothbar-exit)
   (setq slothbar-bars nil)
 
