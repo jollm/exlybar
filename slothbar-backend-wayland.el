@@ -549,7 +549,7 @@ When DAMAGE is nil, clear and redraw the whole frame."
     (setf (slothbar-backend-wayland-surface-retired surface) nil)))
 
 (defun slothbar-backend-wayland--present-frame (surface frame)
-  "Attach and commit FRAME on SURFACE.
+  "Present FRAME on SURFACE atomically.
 Return non-nil if a buffer was presented."
   (let ((buffer (cl-find-if #'elwl-shm-buffer-free-p
                             (slothbar-backend-wayland-surface-buffers surface))))
@@ -557,27 +557,23 @@ Return non-nil if a buffer was presented."
         (progn
           (setf (slothbar-backend-wayland-surface-pending surface) t)
           nil)
-      (elwl-shm-buffer-acquire buffer)
-      (condition-case err
-          (progn
-            (elwl-shm-buffer-write buffer frame)
-            (elwl-surface-attach (slothbar-backend-wayland-surface-surface surface)
-                                 (elwl-shm-buffer-object buffer))
-            (elwl-surface-damage
-             (slothbar-backend-wayland-surface-surface surface)
-             0 0
-             (slothbar-backend-wayland-surface-logical-width surface)
-             (slothbar-backend-wayland-surface-logical-height surface))
-            (elwl-surface-commit (slothbar-backend-wayland-surface-surface surface))
-            (elwl-shm-buffer-submit buffer)
-            (slothbar-backend-wayland--cleanup-retired surface)
-            (setf (slothbar-backend-wayland-surface-pending surface) nil
-                  (slothbar-backend-wayland-surface-presented surface) t)
-            t)
-        (error
-         (when (elwl-shm-buffer-leased-p buffer)
-           (ignore-errors (elwl-shm-buffer-unlease buffer)))
-         (signal (car err) (cdr err)))))))
+      (elwl-shm-buffer-write buffer frame)
+      (let ((wl-surface
+             (slothbar-backend-wayland-surface-surface surface))
+            (scale (slothbar-backend-wayland-surface-scale surface)))
+        (when (< (elwl-object-version wl-surface) 3)
+          (setq scale nil))
+        (elwl-surface-present
+         wl-surface buffer
+         :scale scale
+         :damage (list 0 0
+                       (slothbar-backend-wayland-surface-logical-width surface)
+                       (slothbar-backend-wayland-surface-logical-height surface))
+         :x 0 :y 0))
+      (slothbar-backend-wayland--cleanup-retired surface)
+      (setf (slothbar-backend-wayland-surface-pending surface) nil
+            (slothbar-backend-wayland-surface-presented surface) t)
+      t)))
 
 ;;; Layer-shell configuration
 
@@ -648,11 +644,9 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     (setf (slothbar-backend-wayland-surface-scale surface) scale)
     (when-let ((bar (slothbar-backend-wayland-surface-bar surface)))
       (setf (slothbar-scale bar) scale))
-    (when (>= (elwl-object-version
-               (slothbar-backend-wayland-surface-surface surface))
-              3)
-      (elwl-surface-set-buffer-scale
-       (slothbar-backend-wayland-surface-surface surface) scale))
+    ;; The buffer scale is applied by `elwl-surface-present' together with
+    ;; the next buffer, so the old frame is never committed under a new
+    ;; scale.
     (slothbar-backend-wayland--rebuild-frame surface)
     (setq slothbar--geometry-changed? t)
     (run-at-time 0 nil #'slothbar-refresh-modules)))

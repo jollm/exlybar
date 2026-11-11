@@ -83,10 +83,14 @@
 
 (defun slothbar-wayland--wait-for (predicate &optional seconds)
   "Wait up to SECONDS for PREDICATE while processing Wayland events."
-  (let ((deadline (+ (float-time) (or seconds 5))))
-    (while (and (not (funcall predicate)) (< (float-time) deadline))
-      (sit-for 0.1))
-    (funcall predicate)))
+  (let ((backend (and (boundp 'slothbar--backend) slothbar--backend)))
+    (if (and backend
+             (eq (slothbar-backend-kind backend) 'wayland))
+        (slothbar-backend-wayland--wait-for backend predicate (or seconds 5))
+      (let ((deadline (+ (float-time) (or seconds 5))))
+        (while (and (not (funcall predicate)) (< (float-time) deadline))
+          (sit-for 0.1))
+        (funcall predicate)))))
 
 (defun slothbar-wayland--run ()
   "Exercise the Wayland backend and the core lifecycle against sway."
@@ -579,6 +583,79 @@
      (slothbar-wayland--wait-for
       (lambda ()
         (= 2 (slothbar-backend-wayland-surface-scale state)))
+      5))
+    (sit-for 0.5))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
+  ;; A scale change must fan out to every bar on that output.
+  (setq slothbar-bars
+        (list (list :id "scale-a"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "scale-a" :format "scale-a"
+                             :lpad 2 :rpad 2))))
+              (list :id "scale-b"
+                    :output "HEADLESS-1"
+                    :width 300
+                    :height 24
+                    :offset-x 0
+                    :offset-y 24
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "scale-b" :format "scale-b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let* ((bar-a (car slothbar--bars))
+         (bar-b (cadr slothbar--bars))
+         (state-a (slothbar-surface bar-a))
+         (state-b (slothbar-surface bar-b)))
+    (slothbar-wayland-check
+     "two-bar scale test starts at scale 2"
+     (and (= 2 (slothbar-backend-wayland-surface-scale state-a))
+          (= 2 (slothbar-backend-wayland-surface-scale state-b))))
+    (slothbar-wayland--swaymsg "output" "HEADLESS-1" "scale" "3")
+    (slothbar-wayland-check
+     "output scale change updates both bars"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (let ((a (car slothbar--bars))
+              (b (cadr slothbar--bars)))
+          (and a b
+               (= 3 (slothbar-backend-wayland-surface-scale
+                     (slothbar-surface a)))
+               (= 3 (slothbar-backend-wayland-surface-scale
+                     (slothbar-surface b))))))
+      5))
+    (slothbar-wayland-check
+     "output scale change rebuilds both frames"
+     (and (= (* 3 (slothbar-backend-wayland-surface-logical-width state-a))
+             (slothbar-backend-wayland-surface-frame-width state-a))
+          (= (* 3 (slothbar-backend-wayland-surface-logical-height state-a))
+             (slothbar-backend-wayland-surface-frame-height state-a))
+          (= (* 3 (slothbar-backend-wayland-surface-logical-width state-b))
+             (slothbar-backend-wayland-surface-frame-width state-b))
+          (= (* 3 (slothbar-backend-wayland-surface-logical-height state-b))
+             (slothbar-backend-wayland-surface-frame-height state-b))))
+    (slothbar-wayland--swaymsg "output" "HEADLESS-1" "scale" "2")
+    (slothbar-wayland-check
+     "output scale restores both bars"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (let ((a (car slothbar--bars))
+              (b (cadr slothbar--bars)))
+          (and a b
+               (= 2 (slothbar-backend-wayland-surface-scale
+                     (slothbar-surface a)))
+               (= 2 (slothbar-backend-wayland-surface-scale
+                     (slothbar-surface b))))))
       5))
     (sit-for 0.5))
   (slothbar-exit)
