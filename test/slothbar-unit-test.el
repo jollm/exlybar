@@ -790,6 +790,21 @@
                  '("a" (:bg :reset) (:fg 1) (:reverse nil)
                    "b" (:bg :reset) (:fg 0) (:reverse nil) "c"))))
 
+(ert-deftest slothbar-unit-color-parse-balanced-forms ()
+  "Parenthesized color forms may contain nested data."
+  (should (equal (slothbar-color-parse-string
+                  "^(:progress %p 10 (20 50 80))")
+                 '((:progress %p 10 (20 50 80)))))
+  (should (equal (slothbar-color-parse-string
+                  "^(:zone %p -40 -64 -70 t)")
+                 '((:zone %p -40 -64 -70 t))))
+  (should (equal (slothbar-color-parse-string
+                  "a^(:label \"a)\")b")
+                 '("a" (:label "a)") "b")))
+  (should (equal (slothbar-color-parse-string
+                  "^(:outer (1 (2 3)))")
+                 '((:outer (1 (2 3)))))))
+
 (ert-deftest slothbar-unit-color-parse-extent-markers ()
   "Extent markers survive parsing as layout-only forms."
   (should (equal (slothbar-color-parse-string "^M0a^M;b")

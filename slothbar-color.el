@@ -328,9 +328,9 @@ ivals are expected to be in ascending order."
   (cdr (seq-find (pcase-lambda (`(,p . ,_)) (< val p)) icons)))
 
 (defvar slothbar-color--pattern
-  "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^M;\\|\\^M[^ ;]\\|\\^(.*?)"
-  "This is the same color code pattern used in stumpwm.
-Note that not yet all of these options are supported for slothbar.")
+  "\\^[][nrRbB>^;]\\|\\^[0-9*]\\{1,2\\}~?\\|\\^f[0-9]\\|\\^M;\\|\\^M[^ ;]"
+  "This is the color-code pattern for non-parenthesized codes.
+Parenthesized forms are read with `read-from-string' so nested lists work.")
 
 (defun slothbar-color-parse (color)
   "Parse a possible colorcode into a list of the appropriate modifiers.
@@ -381,6 +381,25 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
              (:reverse nil)))))
     (list color)))
 
+(defun slothbar-color--next-code (string pos)
+  "Return (START . END) for the next color code at or after POS.
+Parenthesized codes are read as complete Lisp forms.  Other codes use
+`slothbar-color--pattern'."
+  (let ((paren (string-match "\\^(" string pos))
+        (other (string-match slothbar-color--pattern string pos)))
+    (cond
+     ((and paren (or (null other) (< paren other)))
+      (let* ((read (condition-case nil
+                       (read-from-string string (1+ paren))
+                     (error nil)))
+             (end (and read (cdr read))))
+        ;; On malformed input, consume only the caret and let the rest
+        ;; remain literal text rather than looping forever.
+        (cons paren (or end (1+ paren)))))
+     (other
+      (cons other (match-end 0)))
+     (t nil))))
+
 (defun slothbar-color-parse-string (string)
   "Parse a color-coded STRING into strings and layout modifiers.
 
@@ -389,16 +408,17 @@ The result preserves text and splices in the forms returned by
 `^M;' produces `(:end-extent)'."
   (if (zerop (length string))
       (list "")
-    (let ((matches (s-matched-positions-all slothbar-color--pattern string))
-          (substrings nil)
+    (let ((substrings nil)
           (pos 0))
-      (dolist (match matches)
-        (let ((start (car match))
-              (end (cdr match)))
-          (when (< pos start)
-            (push (substring string pos start) substrings))
-          (push (substring string start end) substrings)
-          (setq pos end)))
+      (while (let ((match (slothbar-color--next-code string pos)))
+               (when match
+                 (let ((start (car match))
+                       (end (cdr match)))
+                   (when (< pos start)
+                     (push (substring string pos start) substrings))
+                   (push (substring string start end) substrings)
+                   (setq pos end))
+                 t)))
       (when (< pos (length string))
         (push (substring string pos) substrings))
       (cl-loop for substring in (nreverse substrings)
