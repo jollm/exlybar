@@ -453,9 +453,9 @@ Slothbar consists of the following primary components:
   in order to support CompositeGlyphs32 requests for loaded glyphs.
 
 * Usage caveats
-+This probably doesn’t work well with multiple screens at the moment.+
-It's tested in multi-monitor setups so far in EXWM and should work in
-herbstluftwm and xmonad.
+Multi-monitor and multi-bar support is exercised with Xwayland, headless
+sway, and EXWM.  Behavior can still vary with other window managers or
+compositors.
 
 +It’s not great at helping to find fonts.+ See the
 =slothbar-font-candidates= docstring in [[./slothbar-font.el][./slothbar-font.el]].

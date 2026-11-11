@@ -195,7 +195,7 @@ learns its width from a layer-surface configure event, not from
 | =slothbar-module-init= | primary allocates pixmap/GC/glyphset | primary is logical. backend resource creation is done by =slothbar-backend-add-module= from the core's init loop |
 | =slothbar-module-layout= | unchanged | unchanged (pure fontsloth layout) |
 | =slothbar-module-refresh= | primary draws to X pixmap | primary lays out and, if =needs-refresh?=, calls =slothbar-backend-draw-module= with the text ops |
-| =slothbar-module-reposition= | tray moves its X window | unchanged; X modules may override, Wayland ignores or uses it for click regions later |
+| =slothbar-module-reposition= | tray moves its X window | unchanged. X modules may override, Wayland uses it for click regions |
 | =slothbar-module-update-status= | unchanged | unchanged |
 | =slothbar-module-exit= | frees X resources | timer cancellation stays. backend frees resources via =slothbar-backend-remove-module= |
 
@@ -351,12 +351,11 @@ against the X glyphset path, then keep it in one helper.
 - Bind =wl_output= for each registry global via =elwl-output-bind=; use
   =elwl-output-name= (connector name) to match
   =slothbar-preferred-display=.  "Primary" is not a Wayland concept. With nil,
-  use the first output (later: focused output or one surface per output).
-- HiDPI: render at =scale ×= pixel density and send
-  =wl_surface.set_buffer_scale= (not yet wrapped by =elwl-surface.el=; send
-  it with =elwl-request=).  The first version may render in logical pixels
-  with =slothbar-height= as both logical and buffer height, and be sharpened
-  later.
+  use the first output.  =slothbar-bars= can select an output by name, and
+  =:output :each= creates one bar and layer surface per connected output.
+- HiDPI: render at =scale ×= pixel density.  =elwl-surface-present= applies
+  the buffer scale together with attach, damage, and commit, and frame
+  buffers use logical dimensions multiplied by scale.
 
 ** 7.6 Input
 
@@ -437,21 +436,14 @@ Each stage leaves the X bar working.
   glyphsets/pixmaps on X and pools/buffers on Wayland. Theme change and
   height change redraw both.
 
-* 11. Open questions and elwl API gaps
+* 11. Remaining elwl API gaps and open questions
 
-1. =elwl-shm.el=: add an offset-aware buffer write (needed for double
-   buffering and damage-only writes).  Until then, use one pool per buffer.
-2. =elwl-surface.el=: expose =set_buffer_scale= and possibly
-   =set_input_region= (for clickable module regions later).
-3. =elwl= version pin: the backend should declare a minimum elwl version and
+1. =elwl= version pin: the backend should declare a minimum elwl version and
    fail with a clear message when =fd-fairy= or a protocol global is missing.
-4. Whether the module struct keeps an opaque =render-data= slot or the backend
+2. Whether the module struct keeps an opaque =render-data= slot or the backend
    keeps a side table.  Side table is cleaner. The slot is easier for modules
    like =slothbar-tray= that want to stash backend state.
-5. Whether to eventually run one layer surface per output instead of one
-   selected output.  The backend interface supports it (=open= per output);
-   layout would need a per-output module list.
-6. Theme/background source under Wayland: keep using Emacs's selected-frame
+3. Theme/background source under Wayland: keep using Emacs's selected-frame
    background/foreground, or add explicit backend colors.  Current behavior is
    already based on Emacs frame parameters, which exist under pgtk.
 
