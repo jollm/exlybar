@@ -240,6 +240,26 @@ while slothbar is running.
 Modifications to is-bottom, margin-y, and preferred-display take
 effect with =M-x slothbar-refresh=.
 
+** Helpful integration
+
+If =C-h v= is provided by [[https://github.com/Wilfred/helpful][Helpful]], Helpful's value display uses
+=pp-to-string= and bypasses slothbar's compact =cl-print-object= methods.
+Enable the optional advice to make slothbar bars, modules, backends, and
+colors print compactly:
+
+#+begin_src emacs-lisp
+  (slothbar-install-helpful-pp-advice)
+#+end_src
+
+Disable it with:
+
+#+begin_src emacs-lisp
+  (slothbar-remove-helpful-pp-advice)
+#+end_src
+
+The advice only changes values containing slothbar structures. Ordinary
+values continue through Helpful's normal formatter.
+
 ** Minimal use-package
 
 #+begin_src emacs-lisp

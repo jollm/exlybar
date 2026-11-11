@@ -1241,6 +1241,52 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
       (slothbar-exit))
     (slothbar--cleanup-mode-hooks)))
 
+(defun slothbar--helpful-printable-value-p (value)
+  "Return non-nil when VALUE should use slothbar's `cl-print' methods."
+  (or (slothbar-p value)
+      (slothbar-module-p value)
+      (slothbar-backend-p value)
+      (slothbar-color-rgb-p value)
+      (slothbar-module-rgb-p value)
+      (and (proper-list-p value)
+           (seq-some #'slothbar--helpful-printable-value-p value))))
+
+(defun slothbar--helpful-pretty-print-advice (orig value)
+  "Use `cl-prin1' for slothbar structures in Helpful.
+ORIG is Helpful's pretty-printer
+VALUE is the value being shown."
+  (if (condition-case nil
+          (slothbar--helpful-printable-value-p value)
+        (error nil))
+      (condition-case nil
+          (let ((print-circle t))
+            (cl-prin1-to-string value))
+        (error (funcall orig value)))
+    (funcall orig value)))
+
+;;;###autoload
+(defun slothbar-install-helpful-pp-advice ()
+  "Make Helpful use slothbar's compact `cl-print-object' methods."
+  (interactive)
+  (unless (require 'helpful nil t)
+    (user-error "Helpful is not installed"))
+  (unless (advice-member-p #'slothbar--helpful-pretty-print-advice
+                           'helpful--pretty-print)
+    (advice-add 'helpful--pretty-print :around
+                #'slothbar--helpful-pretty-print-advice))
+  (message "Slothbar: Helpful pretty-printing advice enabled"))
+
+;;;###autoload
+(defun slothbar-remove-helpful-pp-advice ()
+  "Remove slothbar's Helpful pretty-printing advice."
+  (interactive)
+  (when (and (fboundp 'helpful--pretty-print)
+             (advice-member-p #'slothbar--helpful-pretty-print-advice
+                              'helpful--pretty-print))
+    (advice-remove 'helpful--pretty-print
+                   #'slothbar--helpful-pretty-print-advice))
+  (message "Slothbar: Helpful pretty-printing advice disabled"))
+
 (provide 'slothbar)
 
 ;;; slothbar.el ends here

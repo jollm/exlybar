@@ -1263,6 +1263,23 @@
     (should (string-prefix-p "#<slothbar-color "
                              (cl-prin1-to-string color)))))
 
+(ert-deftest slothbar-unit-helpful-pp-advice ()
+  "The Helpful advice uses compact printing only for slothbar values."
+  (let* ((module (slothbar-module-create :name "helpful" :width 12))
+         (bar (slothbar-create :id '("helpful" "output")
+                               :pixel-width 100
+                               :pixel-height 20
+                               :module-list (list module)))
+         (fallback (lambda (value) value)))
+    (should (slothbar--helpful-printable-value-p bar))
+    (should (slothbar--helpful-printable-value-p (list module)))
+    (should (string-prefix-p
+             "#<slothbar "
+             (slothbar--helpful-pretty-print-advice fallback bar)))
+    (should (equal "plain"
+                   (slothbar--helpful-pretty-print-advice
+                    fallback "plain")))))
+
 (ert-deftest slothbar-unit-color-brighten ()
   "Brightening clamps channels and preserves alpha."
   (let* ((color (slothbar-color-rgb-create
