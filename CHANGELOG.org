@@ -4,7 +4,7 @@
 All notable changes to slothbar are recorded here. Slothbar is pre-1.0, so
 internal and configuration APIs may still change between releases.
 
-* Unreleased: multi-backend refactor
+* 0.31.0 - 2026-11-10
 
 This section covers the work since commit
 =5b1b7f5c45e5e468754c6e676e97223529cd4575= (2026-09-13).
@@ -27,6 +27,9 @@ This section covers the work since commit
   reconfiguration and reconciliation
 - Add per-bar geometry, font sizes, theme colors, visibility, and damage
   state
+- Make elwl optional at package load time so X11-only builds and installs do
+  not require it. Requesting the Wayland backend without elwl now reports a
+  clear =user-error=.
 
 *** Input and interaction
 - Add pointer button and motion routing to the bar under the pointer on both
@@ -115,6 +118,8 @@ This section covers the work since commit
   - shared focus/sysinfo providers
   - operation without elwl on X
 - Add a cold-font-cache benchmark task.
+- Add a MELPA package build/install test that includes the Wayland backend
+  and verifies it fails cleanly when elwl is unavailable.
 - Add this changelog.
 
 * 0.30.2 - 2025-12-13
