@@ -15,6 +15,7 @@ On Xorg, slothbar uses xcb via xelb.  On Wayland it uses [[../elwl][elwl]] and t
 wlr-layer-shell protocol.  Both backends use fontsloth for glyph rasterization.
 
 Current version: *0.30.2* [[https://melpa.org/#/slothbar][file:https://melpa.org/packages/slothbar-badge.svg]]
+See [[./CHANGELOG.org][CHANGELOG.org]] for notable changes.
 #+BEGIN_export html
 <a href="https://melpa.org/#/slothbar"><img alt="MELPA" src="https://melpa.org/packages/slothbar-badge.svg"/></a>
 #+END_export
