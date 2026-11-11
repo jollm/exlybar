@@ -525,6 +525,64 @@
    (null slothbar--bars))
   (setq slothbar-bars nil)
 
+  ;; Two `:each' entries must produce two bars on every output.
+  (setq slothbar-bars
+        (list (list :id "each-a"
+                    :output :each
+                    :width 300
+                    :height 20
+                    :offset-x 0
+                    :offset-y 0
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "each-a" :format "a"
+                             :lpad 2 :rpad 2))))
+              (list :id "each-b"
+                    :output :each
+                    :width 300
+                    :height 24
+                    :offset-x 0
+                    :offset-y 24
+                    :modules
+                    (list (lambda ()
+                            (slothbar-module-create
+                             :name "each-b" :format "b"
+                             :lpad 2 :rpad 2))))))
+  (slothbar--start)
+  (let ((bar-outputs
+         (lambda ()
+           (sort (mapcar (lambda (bar)
+                           (slothbar-backend-output-name
+                            slothbar--backend (slothbar-output bar)))
+                         slothbar--bars)
+                 #'string<))))
+    (slothbar-wayland-check
+     "two :each entries make two bars per output"
+     (and (= 4 (length slothbar--bars))
+          (equal (funcall bar-outputs)
+                 '("HEADLESS-1" "HEADLESS-1" "HEADLESS-2" "HEADLESS-2"))))
+    (slothbar-wayland--swaymsg "output" "HEADLESS-2" "disable")
+    (slothbar-wayland-check
+     "disabling one output removes both of its :each bars"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (and (= 2 (length slothbar--bars))
+             (equal (funcall bar-outputs)
+                    '("HEADLESS-1" "HEADLESS-1"))))
+      5))
+    (slothbar-wayland--swaymsg "output" "HEADLESS-2" "enable")
+    (slothbar-wayland-check
+     "re-enabling one output restores both :each bars"
+     (slothbar-wayland--wait-for
+      (lambda ()
+        (and (= 4 (length slothbar--bars))
+             (equal (funcall bar-outputs)
+                    '("HEADLESS-1" "HEADLESS-1" "HEADLESS-2" "HEADLESS-2"))))
+      5)))
+  (slothbar-exit)
+  (setq slothbar-bars nil)
+
   ;; Geometry refresh must resize the Wayland surface and frame.
   (setq slothbar-bars
         (list (list :id "geometry"
