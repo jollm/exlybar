@@ -780,10 +780,13 @@ STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
 (defcustom slothbar-sysinfo-format
   (let ((percent "^[^2%^]"))
     `("^f2^2"
-      (:cpu-usage :width 3 :pad zero :suffix ,percent)
+      "^[" (:zone :cpu-usage 20 50 90)
+      (:cpu-usage
+       :width 3 :pad zero :suffix ,percent) "^]"
       "^[^f1 ^2^f4^]"
       " "
-      (:memory-usage :width 2 :pad zero :decimals 1 :suffix ,percent)
+      "^[" (:zone :memory-usage 20 50 90)
+      (:memory-usage :width 2 :pad zero :decimals 1 :suffix ,percent) "^]"
       "^[^f0 ^2^f4^]"
       " "
       "^[^f2"(:net-up :width 10 :pad right)"^]"
