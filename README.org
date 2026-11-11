@@ -260,6 +260,11 @@ Disable it with:
 The advice only changes values containing slothbar structures. Ordinary
 values continue through Helpful's normal formatter.
 
+Slothbar objects print with line breaks and indentation by default. Set
+=slothbar-print-multiline= to =nil= for compact single-line values in logs
+and backtraces.
+
+
 ** Minimal use-package
 
 #+begin_src emacs-lisp

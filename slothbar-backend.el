@@ -59,12 +59,32 @@
   (kind nil :type 'symbol)
   bars)
 
+(defcustom slothbar-print-multiline t
+  "Whether slothbar objects print with line breaks and indentation.
+Set this to nil for compact single-line values in logs and backtraces."
+  :type 'boolean
+  :group 'slothbar)
+
+(defun slothbar--print-object-fields (stream header fields)
+  "Print HEADER and FIELDS on STREAM.
+When `slothbar-print-multiline' is non-nil, place each field on its own
+indented line."
+  (if slothbar-print-multiline
+      (progn
+        (princ header stream)
+        (dolist (field fields)
+          (princ "\n  " stream)
+          (princ field stream))
+        (princ ">" stream))
+    (princ (format "%s %s>" header (mapconcat #'identity fields " "))
+           stream)))
+
 (cl-defmethod cl-print-object ((backend slothbar-backend) stream)
   "Print BACKEND compactly in Help and `cl-prin1'."
-  (princ (format "#<slothbar-backend %s bars=%d>"
-                 (or (slothbar-backend-kind backend) "unknown")
-                 (length (slothbar-backend-bars backend)))
-         stream))
+  (slothbar--print-object-fields
+   stream "#<slothbar-backend"
+   (list (format "kind=%s" (or (slothbar-backend-kind backend) "unknown"))
+         (format "bars=%d" (length (slothbar-backend-bars backend))))))
 
 (defvar slothbar--backend nil
   "The active `slothbar-backend', or nil when slothbar is stopped.")

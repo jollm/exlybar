@@ -202,19 +202,24 @@
     ((surface slothbar-backend-wayland-surface) stream)
   "Print SURFACE compactly in Help and `cl-prin1'."
   (let ((output (slothbar-backend-wayland-surface-output surface)))
-    (princ (format "#<slothbar-surface output=%S scale=%s logical=%dx%d frame=%dx%d visible=%S>"
-                   (if (and output (fboundp 'elwl-output-p)
-                            (elwl-output-p output))
-                       (elwl-output-name output)
-                     output)
-                   (slothbar-backend-wayland-surface-scale surface)
-                   (slothbar-backend-wayland-surface-logical-width surface)
-                   (slothbar-backend-wayland-surface-logical-height surface)
-                   (slothbar-backend-wayland-surface-frame-width surface)
-                   (slothbar-backend-wayland-surface-frame-height surface)
-                   (slothbar-visible
-                    (slothbar-backend-wayland-surface-bar surface)))
-           stream)))
+    (slothbar--print-object-fields
+     stream "#<slothbar-surface"
+     (list
+      (format "output=%S"
+              (if (and output (fboundp 'elwl-output-p)
+                       (elwl-output-p output))
+                  (elwl-output-name output)
+                output))
+      (format "scale=%s" (slothbar-backend-wayland-surface-scale surface))
+      (format "logical=%dx%d"
+              (slothbar-backend-wayland-surface-logical-width surface)
+              (slothbar-backend-wayland-surface-logical-height surface))
+      (format "frame=%dx%d"
+              (slothbar-backend-wayland-surface-frame-width surface)
+              (slothbar-backend-wayland-surface-frame-height surface))
+      (format "visible=%S"
+              (slothbar-visible
+               (slothbar-backend-wayland-surface-bar surface)))))))
 
 (defun slothbar-backend-wayland-create ()
   "Create an unopened Wayland backend."

@@ -109,13 +109,13 @@
 
 (cl-defmethod cl-print-object ((module slothbar-module) stream)
   "Print MODULE compactly in Help and `cl-prin1'."
-  (princ (format "#<slothbar-module %s initialized=%S width=%s text=%S>"
-                 (or (slothbar-module-name module) "anonymous")
-                 (slothbar-module-initialized module)
-                 (slothbar-module-width module)
-                 (slothbar-module--print-text
-                  (slothbar-module-text module)))
-         stream))
+  (slothbar--print-object-fields
+   stream "#<slothbar-module"
+   (list (format "name=%s" (or (slothbar-module-name module) "anonymous"))
+         (format "initialized=%S" (slothbar-module-initialized module))
+         (format "width=%s" (slothbar-module-width module))
+         (format "text=%S" (slothbar-module--print-text
+                            (slothbar-module-text module))))))
 
 (defun slothbar-module--backend (m)
   "Return M's owning display backend, or the current backend."

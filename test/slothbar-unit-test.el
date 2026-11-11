@@ -1254,14 +1254,18 @@
          (backend (slothbar-backend--make :kind 'test))
          (color (slothbar-color-rgb-create
                  :red 1 :green 2 :blue 3 :alpha 4)))
-    (should (string-prefix-p "#<slothbar "
+    (should (string-prefix-p "#<slothbar"
                              (cl-prin1-to-string bar)))
-    (should (string-prefix-p "#<slothbar-module "
+    (should (string-prefix-p "#<slothbar-module"
                              (cl-prin1-to-string module)))
-    (should (string-prefix-p "#<slothbar-backend "
+    (should (string-prefix-p "#<slothbar-backend"
                              (cl-prin1-to-string backend)))
     (should (string-prefix-p "#<slothbar-color "
-                             (cl-prin1-to-string color)))))
+                             (cl-prin1-to-string color)))
+    (let ((slothbar-print-multiline nil))
+      (should (string-prefix-p "#<slothbar "
+                               (cl-prin1-to-string bar)))
+      (should-not (string-match-p "\n" (cl-prin1-to-string bar))))))
 
 (ert-deftest slothbar-unit-helpful-pp-advice ()
   "The Helpful advice uses compact printing only for slothbar values."
@@ -1274,7 +1278,7 @@
     (should (slothbar--helpful-printable-value-p bar))
     (should (slothbar--helpful-printable-value-p (list module)))
     (should (string-prefix-p
-             "#<slothbar "
+             "#<slothbar"
              (slothbar--helpful-pretty-print-advice fallback bar)))
     (should (equal "plain"
                    (slothbar--helpful-pretty-print-advice

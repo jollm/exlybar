@@ -160,14 +160,14 @@
 
 (cl-defmethod cl-print-object ((bar slothbar) stream)
   "Print BAR compactly in Help and `cl-prin1'."
-  (princ (format "#<slothbar id=%S size=%dx%d scale=%s visible=%S modules=%d>"
-                 (slothbar-id bar)
-                 (slothbar-pixel-width bar)
-                 (slothbar-pixel-height bar)
-                 (slothbar-scale bar)
-                 (slothbar-visible bar)
-                 (length (slothbar-module-list bar)))
-         stream))
+  (slothbar--print-object-fields
+   stream "#<slothbar"
+   (list (format "id=%S" (slothbar-id bar))
+         (format "size=%dx%d" (slothbar-pixel-width bar)
+                 (slothbar-pixel-height bar))
+         (format "scale=%s" (slothbar-scale bar))
+         (format "visible=%S" (slothbar-visible bar))
+         (format "modules=%d" (length (slothbar-module-list bar))))))
 
 (defcustom slothbar-width (display-pixel-width)
   "Slothbar width.
