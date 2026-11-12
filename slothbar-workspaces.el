@@ -355,6 +355,12 @@ workspace is occupied, so inactive workspaces use :inactive."
         ((null b) nil)
         (t (< (car a) (car b)))))
 
+(defun slothbar-workspaces--workspace-coordinates (workspace)
+  "Return WORKSPACE's ext-workspace coordinates.
+This indirection keeps the sort testable without depending on elwl's
+compiled accessor implementation."
+  (elwl-workspace-coordinates workspace))
+
 (defun slothbar-workspaces--ext-workspace-sort (workspaces)
   "Return WORKSPACES ordered by their ext-workspace coordinates.
 Workspaces without coordinates keep their relative order after those with
@@ -367,8 +373,8 @@ coordinates."
      (sort
       indexed
       (lambda (a b)
-        (let ((ca (elwl-workspace-coordinates (car a)))
-              (cb (elwl-workspace-coordinates (car b))))
+        (let ((ca (slothbar-workspaces--workspace-coordinates (car a)))
+              (cb (slothbar-workspaces--workspace-coordinates (car b))))
           (cond ((and ca cb)
                  (if (equal ca cb)
                      (< (cdr a) (cdr b))
@@ -379,13 +385,22 @@ coordinates."
 
 (defun slothbar-workspaces--ext-workspace-group (manager)
   "Return the workspace group for the bar's output in MANAGER.
-Fall back to the first group."
+Match outputs by name so raw wl_output objects, `elwl-output' wrappers, and
+configuration strings all compare consistently.  Fall back to the first
+group."
   (let* ((groups (elwl-workspace-manager-groups manager))
-         (output (slothbar-backend-output slothbar--backend)))
-    (or (and output
+         (output (and slothbar--bar (slothbar-output slothbar--bar)))
+         (name (and output
+                    (slothbar-backend-output-name slothbar--backend output))))
+    (or (and name
              (cl-find-if
               (lambda (group)
-                (memq output (elwl-workspace-group-outputs group)))
+                (cl-find name
+                         (elwl-workspace-group-outputs group)
+                         :key (lambda (group-output)
+                                (slothbar-backend-output-name
+                                 slothbar--backend group-output))
+                         :test #'equal))
               groups))
         (car groups))))
 

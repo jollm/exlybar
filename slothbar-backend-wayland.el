@@ -351,16 +351,30 @@
          (not (elwl-workspace-manager-dead manager))
          manager)))
 
-(cl-defmethod slothbar-backend-output ((_backend slothbar-backend-wayland))
-  "Return BACKEND's selected Wayland output object."
+(cl-defmethod slothbar-backend-output ((backend slothbar-backend-wayland))
+  "Return BACKEND's selected Wayland output object.
+The bar may hold either a resolved `elwl-output' or the output name from
+its configuration; resolve names against the backend's output list."
   (let ((output (and slothbar--bar (slothbar-output slothbar--bar))))
-    (and output (elwl-output-object output))))
+    (cond
+     ((elwl-output-p output) (elwl-output-object output))
+     ((stringp output)
+      (let ((found (cl-find output
+                            (slothbar-backend-wayland-outputs backend)
+                            :key #'elwl-output-name :test #'equal)))
+        (and found (elwl-output-object found))))
+     (t nil))))
 
 (cl-defmethod slothbar-backend-output-name
-    ((_backend slothbar-backend-wayland) output)
+    ((backend slothbar-backend-wayland) output)
   "Return OUTPUT's wl_output name."
   (cond
    ((elwl-output-p output) (elwl-output-name output))
+   ((and (fboundp 'elwl-object-p) (elwl-object-p output))
+    (let ((wrapped (cl-find output
+                            (slothbar-backend-wayland-outputs backend)
+                            :key #'elwl-output-object :test #'eq)))
+      (and wrapped (elwl-output-name wrapped))))
    ((stringp output) output)
    (t nil)))
 

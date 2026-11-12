@@ -941,12 +941,15 @@ changes.  Recreate only the backend surface/modules that actually changed."
           (ignore-errors (slothbar-backend-destroy-bar backend bar))))
       (setf (slothbar-config bar) config
             (slothbar-id bar) (list (or (plist-get config :id) index) output)
-            (slothbar-output bar) output
             (slothbar-pixel-height bar) height
             (slothbar-pixel-width bar) width
             (slothbar-x-offset bar) x-offset
             (slothbar-y-offset bar) y-offset
             (slothbar-bottom bar) bottom)
+      (when surface-changed
+        ;; Let the backend replace the configuration string with its
+        ;; resolved output object for Wayland; otherwise retain it.
+        (setf (slothbar-output bar) output))
       (slothbar--refresh-bar-font-px-sizes bar)
       (when (or surface-changed modules-changed)
         (slothbar--with-bar bar

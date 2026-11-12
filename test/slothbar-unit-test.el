@@ -768,7 +768,7 @@
                '(1 0) '(1)))
   (should-not (slothbar-workspaces--ext-workspace-coordinate-lessp
                '(1) '(1)))
-  (cl-letf (((symbol-function 'elwl-workspace-coordinates)
+  (cl-letf (((symbol-function 'slothbar-workspaces--workspace-coordinates)
              (lambda (workspace) (plist-get workspace :coordinates))))
     (should
      (equal (mapcar (lambda (workspace)
