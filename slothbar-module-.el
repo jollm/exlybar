@@ -88,29 +88,28 @@ FIDX is the index into `slothbar-color-map-fg'."
   "Collect all `fonsloth-layout's necessary to render FORMAT.
 SPEC is a `format-spec' spec for the parts of FORMAT that are not color codes.
 LPAD is the module left padding."
-  (let ((format (format-spec format spec 'ignore)))
-    (cl-loop for part in (slothbar-color-parse-string format)
-             with fidx = 0 with font-stack = nil with ls = nil
-             for prev-x = lpad
-             then (if ls (max prev-x (fontsloth-layout-current-pos (car ls)))
-                    prev-x) collect
-             (if (stringp part)
-                 (if-let ((font-path (slothbar-font-find fidx)))
-                     (let* ((txt part)
-                            (font (fontsloth-load-font font-path))
+  (cl-loop for part in (slothbar-color-parse-string format)
+           with fidx = 0 with font-stack = nil with ls = nil
+           for prev-x = lpad
+           then (if ls (max prev-x (fontsloth-layout-current-pos (car ls)))
+                  prev-x) collect
+           (if (stringp part)
+               (if-let ((font-path (slothbar-font-find fidx)))
+                   (let* ((txt (format-spec part spec 'ignore))
+                          (font (fontsloth-load-font font-path))
                           (px (+ (aref slothbar-font-px-size fidx)
                                  (aref slothbar-font-px-delta fidx)))
                           (l (slothbar-module--create-layout
                               txt font fidx px prev-x)))
                      (push l ls) l)
-                   (let ((empty-layout (fontsloth-layout-create
-                                        :current-pos (1+ prev-x))))
-                     (push empty-layout ls) empty-layout))
-               (cl-case (car part)
-                 (:push (push fidx font-stack) part)
-                 (:pop (setq fidx (pop font-stack)) part)
-                 (:font (setq fidx (cadr part)) part)
-                 (t part))))))
+                 (let ((empty-layout (fontsloth-layout-create
+                                      :current-pos (1+ prev-x))))
+                   (push empty-layout ls) empty-layout))
+             (cl-case (car part)
+               (:push (push fidx font-stack) part)
+               (:pop (setq fidx (pop font-stack)) part)
+               (:font (setq fidx (cadr part)) part)
+               (t part)))))
 
 (defsubst slothbar-module--collect-layout-output (layouts)
   "Collect all layout output from LAYOUTS interspersed with any color codes."

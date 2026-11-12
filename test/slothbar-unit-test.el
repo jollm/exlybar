@@ -1153,6 +1153,19 @@
                    " 42%  17%"))
     (should (equal (slothbar-sysinfo--render "%c" nil) "--"))))
 
+(ert-deftest slothbar-unit-sysinfo-directives-before-layout ()
+  "Sysinfo directives become trusted markup before field substitution."
+  (let* ((plan (slothbar-format-compile-plan
+                '((:zone :cpu-usage 20 50 90)
+                  (:cpu-usage :width 3 :pad zero))
+                (slothbar-sysinfo-field-characters)))
+         (values '((:cpu-usage . 95)))
+         (format (slothbar-sysinfo--expand-directives plan values)))
+    (should (string-match-p "\\^4\\^;" format))
+    (should (string-match-p "%" format))
+    (should (equal (slothbar-sysinfo--render-plan plan values)
+                   "^4^;095"))))
+
 (ert-deftest slothbar-unit-sysinfo-module-update ()
   "The sysinfo module updates its format spec and text."
   (let ((m (slothbar-sysinfo-create))
@@ -1319,15 +1332,35 @@
       (should (string-match-p "bar id=(0 \"test\")" text))
       (should (string-match-p "debug-module" text)))))
 
-(ert-deftest slothbar-unit-layout-format-spec-before-color ()
-  "Format-spec substitution happens before color parsing."
+(ert-deftest slothbar-unit-layout-substituted-values-literal ()
+  "Substituted format values are never interpreted as color codes."
+  (dolist (value '("*slothbar-eshell*"
+                   "123title"
+                   "^1title"
+                   "a^1b^2c"))
+    (let ((text nil))
+      (cl-letf (((symbol-function 'slothbar-font-find)
+                 (lambda (_fidx) "font"))
+                ((symbol-function 'fontsloth-load-font)
+                 (lambda (_path) 'font))
+                ((symbol-function 'slothbar-module--create-layout)
+                 (lambda (txt &rest _args)
+                   (setq text txt)
+                   nil)))
+        (let ((slothbar-font-px-size (vector 10))
+              (slothbar-font-px-delta (vector 0)))
+          (slothbar-module--layout-format "^8%z" `((?z . ,value)) 0)))
+      (should (equal text value)))))
+
+(ert-deftest slothbar-unit-layout-format-parse-before-spec ()
+  "Colors are parsed in the format before literal values are substituted."
   (let ((parsed nil))
     (cl-letf (((symbol-function 'slothbar-color-parse-string)
                (lambda (string)
                  (setq parsed string)
                  nil)))
       (slothbar-module--layout-format "%z" '((?z . "^1red")) 0))
-    (should (equal parsed "^1red"))))
+    (should (equal parsed "%z"))))
 
 (ert-deftest slothbar-unit-cl-print-objects ()
   "Custom printers keep live slothbar objects compact."

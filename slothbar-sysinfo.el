@@ -847,13 +847,30 @@ are honored."
                     field
                     (alist-get (slothbar-sysinfo-field-keyword field) values))))))
 
+(defun slothbar-sysinfo--expand-directives (plan values)
+  "Expand PLAN's progress/zone directives using VALUES.
+The returned format string contains trusted color/bar markup, while ordinary
+field placeholders remain for `format-spec'.  Substituted field values are
+therefore never reparsed as color codes."
+  (format-spec
+   (slothbar-format-plan-format plan)
+   (cl-loop for slot in (slothbar-format-plan-slots plan)
+            for kind = (or (slothbar-format-slot-kind slot) :field)
+            when (memq kind '(:progress :zone))
+            collect
+            (cons (slothbar-format-slot-char slot)
+                  (slothbar-format-slot-value
+                   slot
+                   (alist-get (slothbar-format-slot-source slot) values))))
+   'ignore))
+
 (defun slothbar-sysinfo--render (format values)
   "Render FORMAT using sysinfo VALUES."
   (format-spec format (slothbar-sysinfo--format-values values) 'ignore))
 
 (defun slothbar-sysinfo--render-plan (plan values)
   "Render PLAN using sysinfo VALUES, including per-token decimals."
-  (format-spec (slothbar-format-plan-format plan)
+  (format-spec (slothbar-sysinfo--expand-directives plan values)
                (slothbar-sysinfo--format-values values plan)
                'ignore))
 
@@ -869,7 +886,7 @@ are honored."
          (values (or slothbar-sysinfo--batch-values
                      (slothbar-sysinfo-collect state)))
          (plan (slothbar-sysinfo-compile-plan))
-         (format (slothbar-format-plan-format plan))
+         (format (slothbar-sysinfo--expand-directives plan values))
          (spec (slothbar-sysinfo--format-values values plan))
          (text (format-spec format spec 'ignore))
          (changed (not (equal text (slothbar-module-text m)))))
