@@ -198,7 +198,11 @@ event."
   :group 'slothbar)
 
 (defcustom slothbar-margin-y 2
-  "Bar vertical margin in pixels."
+  "Gap in pixels between the bar and its anchored screen edge.
+The gap is included in the X strut and Wayland exclusive zone, so tiled
+windows stop at the bar's inner edge.  This currently applies globally to
+all bars.  Per-bar margins and independent top/bottom margins are not yet
+supported."
   :type 'integer
   :group 'slothbar)
 

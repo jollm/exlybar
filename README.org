@@ -229,7 +229,10 @@ category is read.  The default format shows CPU and memory percentages with thei
   corresponds to format color codes =^f0=-=^f9=
 + =slothbar-is-bottom= set to =t= to position the bar on the bottom of the
   display
-+ =slothbar-margin-y= margin in pixels for the gap between bar and struts
++ =slothbar-margin-y= gap in pixels between the bar and the screen edge.
+  The gap is included in the X strut and Wayland exclusive zone, so tiled
+  windows stop at the bar's inner edge.  This is global to all bars for
+  now. Per-bar and independent top/bottom margins are future work.
 + =slothbar-preferred-display= the name of the preferred display or nil
   to use the primary display
 + ~(slothbar-randr-mode)~ to enable multi-screen support
@@ -238,7 +241,8 @@ Modifications to height and font-candidates will reflect automatically
 while slothbar is running.
 
 Modifications to is-bottom, margin-y, and preferred-display take
-effect with =M-x slothbar-refresh=.
+effect with =M-x slothbar-refresh=.  Setting =slothbar-margin-y= to 0
+removes the intentional gap between the bar and the screen edge.
 
 ** Diagnostics
 
