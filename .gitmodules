@@ -1,0 +1,3 @@
+[submodule "wiki"]
+	path = wiki
+	url = ssh://git@codeberg.org/agnes-li/slothbar.wiki.git
