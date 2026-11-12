@@ -12,13 +12,10 @@
 (define (default)
   ($ '("maak --list")))
 
-;; Run the live xcb backend smoke test under headless sway + Xwayland.
-;; Override EMACS or SLOTHBAR_FONTSLOTH_DIR in the environment as needed.
-(define (test-xwayland)
-  "Run the xcb backend smoke test under headless sway and Xwayland."
-  ($ '("bash test/slothbar-xwayland-smoke.sh")))
+(define (export-wiki)
+  "Export wiki/*.org files to Markdown."
+  ($ (list (string-append emacs " -Q --batch -l wiki/export.el"))))
 
-;; Run the live Wayland backend smoke test under headless sway.
 (define (test-font-cache)
   "Measure cold-cache font loading with an isolated fontsloth cache."
   ($ '("bash test/slothbar-font-cache-benchmark.sh")))
@@ -27,10 +24,17 @@
   "Build and load the X-capable slothbar MELPA package in a Guix container."
   ($ '("bash scripts/melpa-test.sh")))
 
+;; Run the live xcb backend smoke test under headless sway + Xwayland.
+;; Override EMACS or SLOTHBAR_FONTSLOTH_DIR in the environment as needed.
+(define (test-xwayland)
+  "Run the xcb backend smoke test under headless sway and Xwayland."
+  ($ '("bash test/slothbar-xwayland-smoke.sh")))
+
 (define (test-xwayland-no-elwl)
   "Run the xcb smoke test with elwl unavailable."
   ($ '("env SLOTHBAR_TEST_NO_ELWL=1 bash test/slothbar-xwayland-smoke.sh")))
 
+;; Run the live Wayland backend smoke test under headless sway.
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
   ($ '("bash test/slothbar-wayland-smoke.sh")))
