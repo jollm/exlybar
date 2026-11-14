@@ -452,6 +452,18 @@
                                       (nth 0 button-events))
                                 (list (list bar 11 7 :left)
                                       (list bar-b 21 9 :right))))
+                        (slothbar-backend-wayland--pointer-axis
+                         backend '((axis . 0) (value . 1)))
+                        (slothbar-backend-wayland--pointer-axis
+                         backend '((axis . 0) (value . -1)))
+                        (slothbar-wayland-record
+                         (format "button-events=%S\n" button-events))
+                        (slothbar-wayland-check
+                         "multi-bar pointer axes map to scroll actions"
+                         (equal (list (nth 1 button-events)
+                                      (nth 0 button-events))
+                                (list (list bar 13 8 :scroll-down)
+                                      (list bar 13 8 :scroll-up))))
                         (slothbar-wayland-check
                          "multi-bar pointer motion routes to the receiving bar"
                          (equal motion-events

@@ -457,6 +457,34 @@ Return VALUE."
                                     (nth 0 button-events))
                               (list (list bar 12 5 :left)
                                     (list bar-b 21 9 :right))))
+                      (slothbar-backend-xcb--on-ButtonPress
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:ButtonPress
+                                       :detail 4 :time 0 :root root
+                                       :event window-a :child 0
+                                       :root-x 12 :root-y 5
+                                       :event-x 12 :event-y 5
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-backend-xcb--on-ButtonPress
+                       backend
+                       (xcb:marshal
+                        (make-instance 'xcb:ButtonPress
+                                       :detail 5 :time 0 :root root
+                                       :event window-b :child 0
+                                       :root-x 21 :root-y 9
+                                       :event-x 21 :event-y 9
+                                       :state 0 :same-screen 1)
+                        connection)
+                       nil)
+                      (slothbar-smoke--check
+                       "X wheel buttons map to scroll actions"
+                       (equal (list (nth 1 button-events)
+                                    (nth 0 button-events))
+                              (list (list bar 12 5 :scroll-up)
+                                    (list bar-b 21 9 :scroll-down))))
                       (slothbar-smoke--check
                        "X multi-bar pointer motion routes to the receiving bar"
                        (equal motion-events
