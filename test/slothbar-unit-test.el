@@ -202,6 +202,46 @@
   "Pretend this module needs X-only facilities."
   nil)
 
+(defvar slothbar-unit-action-capture nil
+  "Capture data from the module action test command.")
+
+(defun slothbar-unit-action-command ()
+  "Record the current module action context for tests."
+  (interactive)
+  (setq slothbar-unit-action-capture
+        (list slothbar-current-module
+              slothbar-current-action
+              slothbar-current-action-x
+              slothbar-current-action-y))
+  t)
+
+(ert-deftest slothbar-unit-module-actions ()
+  "Module keymaps and :actions sugar dispatch pointer actions."
+  (let ((slothbar-unit-action-capture nil)
+        (m (slothbar-module-create
+            :name "actions"
+            :actions
+            '(:left slothbar-unit-action-command
+              :scroll-up slothbar-unit-action-command))))
+    (should (keymapp (slothbar-module--ensure-keymap m)))
+    (should (slothbar-module-action m :left 7 8))
+    (should (eq (nth 0 slothbar-unit-action-capture) m))
+    (should (eq (nth 1 slothbar-unit-action-capture) :left))
+    (should (= (nth 2 slothbar-unit-action-capture) 7))
+    (should (= (nth 3 slothbar-unit-action-capture) 8))
+    (should (slothbar-module-action m :scroll-up 0 0))
+    (should (eq (nth 1 slothbar-unit-action-capture) :scroll-up))
+    (should-not (slothbar-module-action m :scroll-down 0 0)))
+  (let ((m (slothbar-unit-clickable-create :name "fallback" :width 10)))
+    (should (slothbar-module-action m :left 2 3))
+    (should (equal (slothbar-unit-clickable-clicks m)
+                   '((2 3 :left))))
+    (should-not (slothbar-module-action m :scroll-up 0 0)))
+  (let* ((map (make-sparse-keymap))
+         (m (slothbar-module-create :name "keymap" :keymap map)))
+    (define-key map [mouse-1] (lambda () (interactive) t))
+    (should (eq (slothbar-module--ensure-keymap m) map))))
+
 (ert-deftest slothbar-unit-make-bar-geometry ()
   "Bar construction honors per-bar geometry overrides and fallbacks."
   (let* ((slothbar-height 20)

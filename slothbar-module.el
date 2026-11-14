@@ -88,6 +88,9 @@
   (initialized nil :type 'boolean)
   (needs-refresh? nil :type 'boolean)
   (update-timer nil :type 'timer)
+  (keymap nil :documentation "Canonical action keymap for this module.")
+  (actions nil :documentation "Syntactic sugar for `keymap'.
+A plist or alist of action keywords to commands.")
   backend
   bar)
 
@@ -155,6 +158,74 @@ construction.")
   "Ordinary modules are not singletons."
   nil)
 
+(defvar slothbar-current-module nil
+  "Module currently handling a pointer action.")
+
+(defvar slothbar-current-action nil
+  "Action keyword currently being handled.")
+
+(defvar slothbar-current-action-x nil
+  "Module-local x coordinate of the current action.")
+
+(defvar slothbar-current-action-y nil
+  "Module-local y coordinate of the current action.")
+
+(defconst slothbar-module--action-events
+  '((:left . mouse-1)
+    (:middle . mouse-2)
+    (:right . mouse-3)
+    (:scroll-up . wheel-up)
+    (:scroll-down . wheel-down))
+  "Pointer action keywords and their Emacs event names.")
+
+(defun slothbar-module--action-event (action)
+  "Return the Emacs event for ACTION, or nil."
+  (cond
+   ((assq action slothbar-module--action-events)
+    (cdr (assq action slothbar-module--action-events)))
+   ((and (symbolp action) (not (keywordp action)))
+    action)
+   (t nil)))
+
+(defun slothbar-module--actions-keymap (actions)
+  "Return a sparse keymap built from ACTIONS.
+ACTIONS may already be a keymap, a plist of action keywords to commands,
+or an alist of the same."
+  (cond
+   ((keymapp actions) actions)
+   ((and (listp actions) (consp (car actions)))
+    (let ((map (make-sparse-keymap)))
+      (dolist (pair actions map)
+        (let ((event (slothbar-module--action-event (car pair))))
+          (unless event
+            (error "Unknown module action %S" (car pair)))
+          (define-key map (vector event) (cdr pair))))))
+   ((listp actions)
+    (let ((map (make-sparse-keymap)))
+      (cl-loop for (action command) on actions by #'cddr do
+               (let ((event (slothbar-module--action-event action)))
+                 (unless event
+                   (error "Unknown module action %S" action))
+                 (define-key map (vector event) command)))
+      map))
+   (t
+    (error "Invalid module actions %S" actions))))
+
+(defun slothbar-module--ensure-keymap (m)
+  "Return M's keymap, normalizing its :actions sugar if needed."
+  (or (slothbar-module-keymap m)
+      (let ((actions (slothbar-module-actions m)))
+        (when actions
+          (let ((map (slothbar-module--actions-keymap actions)))
+            (setf (slothbar-module-keymap m) map)
+            map)))))
+
+(cl-defgeneric slothbar-module-action (m action x y)
+  "Handle ACTION at module-local X,Y on M.
+ACTION is a keyword such as `:left' or `:scroll-up'.  A binding in M's
+keymap takes precedence.  Unbound click actions fall back to
+`slothbar-module-click'.")
+
 (cl-defgeneric slothbar-module-click (m x y button)
   "Handle a pointer click at X,Y with BUTTON on module M.
 X and Y are relative to M's top-left corner.  BUTTON is one of `:left',
@@ -179,6 +250,25 @@ M.")
   ((_m slothbar-module) (_x t) (_y t))
   "By default a module ignores hover."
   nil)
+
+(cl-defmethod slothbar-module-action ((m slothbar-module) action x y)
+  "Handle ACTION at X,Y using M's keymap or click fallback."
+  (let* ((event (slothbar-module--action-event action))
+         (keymap (slothbar-module--ensure-keymap m))
+         (binding (and event keymap
+                       (lookup-key keymap (vector event)))))
+    (cond
+     ((commandp binding)
+      (let ((slothbar-current-module m)
+            (slothbar-current-action action)
+            (slothbar-current-action-x x)
+            (slothbar-current-action-y y))
+        (call-interactively binding)))
+     ((functionp binding)
+      (funcall binding m x y))
+     ((and (null binding) (memq action '(:left :middle :right)))
+      (slothbar-module-click m x y action))
+     (t nil))))
 
 (provide 'slothbar-module)
 

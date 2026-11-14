@@ -307,7 +307,32 @@
          (elwl-pointer-object pointer) 'button
          (lambda (_object arguments)
            (slothbar-backend-wayland--pointer-button
+            backend arguments)))
+        (elwl-object-add-listener
+         (elwl-pointer-object pointer) 'axis
+         (lambda (_object arguments)
+           (slothbar-backend-wayland--pointer-axis
             backend arguments)))))))
+
+(defun slothbar-backend-wayland--pointer-axis (backend arguments)
+  "Dispatch a vertical pointer axis event from ARGUMENTS on BACKEND."
+  (let ((axis (alist-get 'axis arguments))
+        (value (alist-get 'value arguments)))
+    (when (and (or (null axis) (memq axis '(vertical 0)))
+               (numberp value)
+               (/= value 0))
+      (when-let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
+        (let ((action (if (> value 0) :scroll-down :scroll-up)))
+          (condition-case err
+              (run-hook-with-args
+               'slothbar-backend-pointer-button-hook
+               backend bar
+               (round (or (slothbar-backend-wayland-pointer-x backend) 0))
+               (round (or (slothbar-backend-wayland-pointer-y backend) 0))
+               action)
+            (error
+             (slothbar--log-debug*
+              "pointer axis hook error: %S" err))))))))
 
 (defun slothbar-backend-wayland--pointer-button (backend arguments)
   "Dispatch a pointer button event from ARGUMENTS on BACKEND."

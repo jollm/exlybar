@@ -725,7 +725,9 @@ DATA the event data"
           (let ((button (pcase detail
                           (1 :left)
                           (2 :middle)
-                          (3 :right))))
+                          (3 :right)
+                          (4 :scroll-up)
+                          (5 :scroll-down))))
             (when button
               (condition-case err
                   (run-hook-with-args

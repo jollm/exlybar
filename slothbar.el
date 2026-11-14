@@ -649,7 +649,7 @@ X and Y are bar-local logical coordinates."
   (let ((placement (slothbar--module-placement-at x y bar)))
     (when placement
       (pcase-let ((`((,px ,py) ,m) placement))
-        (slothbar-module-click m (- x px) (- y py) button)))))
+        (slothbar-module-action m button (- x px) (- y py))))))
 
 (defun slothbar--clear-hover (&optional bar)
   "Tell BAR's hovered module that the pointer has left it."
