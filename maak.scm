@@ -14,7 +14,7 @@
 
 (define (export-wiki)
   "Export wiki/*.org files to Markdown."
-  ($ (list (string-append emacs " -Q --batch -l wiki/export.el"))))
+  ($ (list (string-append emacs " --batch -l wiki/export.el"))))
 
 (define (test-font-cache)
   "Measure cold-cache font loading with an isolated fontsloth cache."
