@@ -495,6 +495,10 @@ Slothbar consists of the following primary components:
   + [[./slothbar-module.el][./slothbar-module.el]]
   + [[./slothbar-module-.el][./slothbar-module-.el]]
 
+  See the
+  [[https://codeberg.org/agnes-li/slothbar/wiki/Development#generic-module-actions][Development wiki]]
+  for the generic module keymap and action API.
+
   At present it consists of a cl-struct base type ~slothbar-module~ and a set
   of generic functions and default primary methods for dispatch on objects of
   that type.
