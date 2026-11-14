@@ -14,6 +14,8 @@ internal and configuration APIs may still change between releases.
   =slothbar-color-progress-bar=:
   - =(:zone :cpu-usage 20 50 90 t)= applies a color zone.
   - =(:progress :cpu-usage 10 (20 50 80))= renders a progress bar.
+  - Progress bars accept =:fill=, =:blank=, =:left=, and =:right= styling
+    options, alongside the regular format options.
 - Resolve directive values in the sysinfo module before layout and keep
   ordinary field values as substituted data.
 - Add default color zones for sysinfo CPU and memory usage.

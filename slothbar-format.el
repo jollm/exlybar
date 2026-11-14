@@ -38,6 +38,10 @@
   '(:width :precision :pad :truncate :case :prefix :suffix :char :decimals)
   "Options accepted in a token list.")
 
+(defconst slothbar-format--progress-option-keys
+  '(:fill :blank :right :left)
+  "Progress-bar styling options accepted by :progress directives.")
+
 (cl-defstruct
     (slothbar-format-slot
      (:constructor slothbar-format-slot-create)
@@ -200,13 +204,39 @@ USED is a list of characters already assigned."
       (characterp source)
       (and (stringp source) (> (length source) 0))))
 
+(defun slothbar-format--split-progress-options (options)
+  "Split OPTIONS into (FORMAT-OPTIONS . PROGRESS-OPTIONS)."
+  (let (format-options progress-options)
+    (cl-loop for (key value) on options by #'cddr do
+             (if (memq key slothbar-format--progress-option-keys)
+                 (setq progress-options
+                       (plist-put progress-options key value))
+               (setq format-options
+                     (plist-put format-options key value))))
+    (cons format-options progress-options)))
+
+(defun slothbar-format--validate-progress-options (plist)
+  "Validate progress-bar styling PLIST and return it."
+  (cl-loop for (key value) on plist by #'cddr do
+           (unless (or (characterp value)
+                       (and (memq key '(:right :left))
+                            (null value)))
+             (error "Invalid %s progress option %S" key value)))
+  plist)
+
 (defun slothbar-format--plan-directive (token fields used)
   "Compile a progress/zone directive TOKEN with FIELDS and USED."
   (let* ((kind (car token))
          (source (nth 1 token))
          (args (nthcdr 2 token))
          (options (when (eq kind :progress) (nthcdr 2 args)))
-         (plist (when options (slothbar-format--validate-options options)))
+         (split (when options
+                  (slothbar-format--split-progress-options options)))
+         (plist (when split
+                  (slothbar-format--validate-options (car split))))
+         (progress-options
+          (when split
+            (slothbar-format--validate-progress-options (cdr split))))
          (character (slothbar-format--allocate-character
                      (if (eq kind :progress) ?P ?Z) used)))
     (unless (slothbar-format--directive-source-p source)
@@ -225,7 +255,8 @@ USED is a list of characters already assigned."
            :kind kind
            :source source
            :args (if (eq kind :progress)
-                     (append (list (nth 0 args) (nth 1 args)) options)
+                     (append (list (nth 0 args) (nth 1 args))
+                             progress-options)
                    args)))))
 
 (defun slothbar-format--plan-token (token fields used)

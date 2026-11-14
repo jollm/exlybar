@@ -922,6 +922,15 @@
       (should (equal (slothbar-format-slot-value zone-slot 95)
                      "^4^;"))
       (should (equal (slothbar-format-slot-value zone-slot nil) ""))))
+  (let* ((fields '((:cpu-usage . ?c) (:quality . ?q)))
+         (styled (slothbar-format-compile-plan
+                  '((:progress :cpu-usage 10 (20 50 80)
+                    :fill ?# :blank ?. :right ?\] :left ?\[))
+                  fields))
+         (styled-slot (car (slothbar-format-plan-slots styled))))
+    (should (equal (slothbar-format-slot-args styled-slot)
+                   '(10 (20 50 80) :fill ?# :blank ?. :right ?\] :left ?\[)))
+    (should (string-match-p "#" (slothbar-format-slot-value styled-slot 55))))
   (let* ((plan (slothbar-format-compile-plan
                 '((:progress :cpu-usage 10 (20 50 80)))
                 (slothbar-sysinfo-field-characters)))
