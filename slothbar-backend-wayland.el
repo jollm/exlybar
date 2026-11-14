@@ -318,7 +318,7 @@
   "Dispatch a vertical pointer axis event from ARGUMENTS on BACKEND."
   (let ((axis (alist-get 'axis arguments))
         (value (alist-get 'value arguments)))
-    (when (and (or (null axis) (memq axis '(vertical 0)))
+    (when (and (or (null axis) (memq axis '(vertical vertical-scroll 0)))
                (numberp value)
                (/= value 0))
       (when-let* ((bar (slothbar-backend-wayland--bar-for-pointer backend)))

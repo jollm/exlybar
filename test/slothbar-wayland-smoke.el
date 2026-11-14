@@ -474,9 +474,9 @@
                                 (list (list bar 11 7 :left)
                                       (list bar-b 21 9 :right))))
                         (slothbar-backend-wayland--pointer-axis
-                         backend '((axis . 0) (value . 1)))
+                         backend '((axis . vertical-scroll) (value . 1)))
                         (slothbar-backend-wayland--pointer-axis
-                         backend '((axis . 0) (value . -1)))
+                         backend '((axis . vertical-scroll) (value . -1)))
                         (slothbar-wayland-check
                          "multi-bar pointer axes map to scroll actions"
                          (equal (list (nth 1 button-events)
