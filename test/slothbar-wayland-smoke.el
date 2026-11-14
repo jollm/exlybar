@@ -241,6 +241,27 @@
                 (slothbar-wayland-check
                  "workspace click dispatches to the module"
                  (slothbar--click (nth 1 (car regions)) 5 :left))))
+            ;; Workspace scroll actions must dispatch through the core click path.
+            (let ((cache (slothbar-module-cache workspaces))
+                  (activated nil))
+              (map-put! cache 'ws-list
+                        '(("1" (:current))
+                          ("2" (:inactive))
+                          ("3" (:inactive))))
+              (cl-letf (((symbol-function 'slothbar-workspaces--activate)
+                         (lambda (index)
+                           (push index activated)
+                           t)))
+                (let ((slothbar--last-layout
+                       (list (list (list 0 0) workspaces))))
+                  (slothbar-wayland-check
+                   "Wayland workspace scroll-down dispatches"
+                   (and (slothbar--click 0 0 :scroll-down)
+                        (equal activated '(1))))
+                  (slothbar-wayland-check
+                   "Wayland workspace scroll-up wraps"
+                   (and (slothbar--click 0 0 :scroll-up)
+                        (equal activated '(2 1)))))))
             (slothbar-module-exit workspaces))
           ;; X-only modules are filtered out during construction.
           (require 'slothbar-tray)

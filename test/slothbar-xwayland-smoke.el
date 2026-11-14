@@ -253,6 +253,33 @@ Return VALUE."
                                   module
                                   (slothbar-backend-xcb-module-surfaces
                                    backend)))
+          ;; Workspace scroll actions must dispatch through the core click path.
+          (require 'slothbar-workspaces)
+          (let* ((workspaces (slothbar-workspaces-create))
+                 (cache (make-hash-table :test 'equal))
+                 (activated nil))
+            (aset workspaces
+                  (cl-struct-slot-offset 'slothbar-module 'cache)
+                  cache)
+            (map-put! cache 'ws-list
+                      '(("1" (:current))
+                        ("2" (:inactive))
+                        ("3" (:inactive))))
+            (cl-letf (((symbol-function 'slothbar-workspaces--activate)
+                       (lambda (index)
+                         (push index activated)
+                         t)))
+              (let ((slothbar--last-layout
+                     (list (list (list 0 0) workspaces))))
+                (slothbar-smoke--check
+                 "X workspace scroll-down dispatches"
+                 (and (slothbar--click 0 0 :scroll-down)
+                      (equal activated '(1))))
+                (slothbar-smoke--check
+                 "X workspace scroll-up wraps"
+                 (and (slothbar--click 0 0 :scroll-up)
+                      (equal activated '(2 1)))))))
+
           ;; Regression: a refreshed module can keep its width while its text
           ;; shrinks.  The old glyphs must not survive the redraw.
           (let ((previous-width (slothbar-module-width module))
