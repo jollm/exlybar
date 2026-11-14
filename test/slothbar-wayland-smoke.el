@@ -456,8 +456,6 @@
                          backend '((axis . 0) (value . 1)))
                         (slothbar-backend-wayland--pointer-axis
                          backend '((axis . 0) (value . -1)))
-                        (slothbar-wayland-record
-                         (format "button-events=%S\n" button-events))
                         (slothbar-wayland-check
                          "multi-bar pointer axes map to scroll actions"
                          (equal (list (nth 1 button-events)
