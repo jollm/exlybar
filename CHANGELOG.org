@@ -4,6 +4,39 @@
 All notable changes to slothbar are recorded here. Slothbar is pre-1.0, so
 internal and configuration APIs may still change between releases.
 
+* Unreleased: generic module actions
+
+** Added
+
+- Add a canonical per-module =keymap= slot and =:actions= constructor sugar.
+  =:actions= accepts a plist or alist of action keywords to commands and is
+  normalized into an Emacs sparse keymap.
+- Add =slothbar-module-action= as the generic pointer-action dispatcher.
+  Keymap bindings take precedence. Unbound click actions fall back to the
+  existing =slothbar-module-click= generic.
+- Add standard action mappings:
+  - =:left=, =:middle=, =:right= to =mouse-1=, =mouse-2=, =mouse-3=
+  - =:scroll-up= and =:scroll-down= to =wheel-up= and =wheel-down=
+- Expose the current action context through
+  =slothbar-current-module=, =slothbar-current-action=,
+  =slothbar-current-action-x=, and =slothbar-current-action-y=.
+- Route X button 4/5 and Wayland vertical pointer-axis events as scroll
+  actions.
+- Add workspaces scroll actions: scrolling up or down activates the previous
+  or next visible workspace, wrapping at either end.
+
+** Changed
+
+- Route core pointer clicks through =slothbar-module-action= instead of
+  calling =slothbar-module-click= directly.  Existing module click methods
+  remain compatible.
+
+** Tests
+
+- Add unit coverage for keymap normalization, =:actions= dispatch, action
+  context, click fallback, and workspace scroll navigation.
+- Add Xwayland wheel-button and Wayland pointer-axis smoke coverage.
+
 * Unreleased: color format modifiers
 
 ** Added
