@@ -674,6 +674,34 @@
                     '((0 10) (5 15) (20 30)))
                    '((0 15) (20 30))))))
 
+(ert-deftest slothbar-unit-shifted-module-damage ()
+  "A width change damages modules shifted by right alignment."
+  (let* ((backend (make-slothbar-unit-backend :kind 'test))
+         (module-a (slothbar-module-create :name "a" :width 10))
+         (module-b (slothbar-module-create :name "b" :width 10))
+         (bar (slothbar-create :display-backend backend
+                               :pixel-width 100 :pixel-height 20
+                               :module-list (list :right module-a module-b)))
+         (slothbar--bars (list bar))
+         (slothbar--bar bar)
+         (slothbar--enabled t)
+         (slothbar-modules (list :right module-a module-b))
+         (presents nil))
+    (setf (slothbar-placements bar)
+          (slothbar-layout-coordinate
+           (slothbar-layout (list :right module-a module-b)) 0 0 100))
+    (setf (slothbar-module-needs-refresh? module-b) t)
+    (cl-letf (((symbol-function 'slothbar-module-refresh)
+               (lambda (module)
+                 (when (eq module module-b)
+                   (setf (slothbar-module-width module-b) 20))
+                 nil))
+              ((symbol-function 'slothbar-backend-present)
+               (lambda (_backend _bar _layout damage)
+                 (setq presents damage))))
+      (slothbar-refresh-modules nil bar))
+    (should (equal presents '((70 100))))))
+
 (ert-deftest slothbar-unit-bar-local-refresh ()
   "Refreshing with a bar refreshes only that bar."
   (let* ((backend (make-slothbar-unit-backend :kind 'test))

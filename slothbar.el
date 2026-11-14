@@ -502,6 +502,16 @@ Remap colors in every bar and refresh the display."
                         (slothbar--module-init-safe module))
                  collect module)))
 
+(defun slothbar--changed-placement-modules (old-layout new-layout modules)
+  "Return MODULES whose placement differs between OLD-LAYOUT and NEW-LAYOUT."
+  (cl-remove-if-not
+   (lambda (module)
+     (when (slothbar-module-p module)
+       (let ((old (cl-find module old-layout :key #'cadr :test #'eq))
+             (new (cl-find module new-layout :key #'cadr :test #'eq)))
+         (not (and old new (equal (car old) (car new)))))))
+   modules))
+
 (defvar slothbar--geometry-changed? nil
   "Non-nil when the bar geometry changed.
 Cleared by `slothbar-refresh-modules' after the change is processed.")
@@ -570,6 +580,9 @@ When BAR is non-nil, only that bar is refreshed."
                         (unless (equal prev-extents new-extents)
                           (slothbar-layout-subtract-extents
                            new-extents prev-extents)))
+                       (changed-modules
+                        (slothbar--changed-placement-modules
+                         old-layout new-layout modules))
                        (damage
                         (unless first
                           (slothbar--merge-damage
@@ -577,7 +590,7 @@ When BAR is non-nil, only that bar is refreshed."
                             extent-damage
                             (slothbar--content-damage
                              old-layout old-widths new-layout
-                             dirty-modules))))))
+                             (append dirty-modules changed-modules)))))))
                   (setq slothbar--last-layout new-layout)
                   (setf (slothbar-placements bar) new-layout)
                   (when backend
