@@ -77,6 +77,13 @@ internal and configuration APIs may still change between releases.
   literal-value regression coverage for titles and field values containing
   color-like text.
 
+** Fixed
+
+- Fix partial redraw when a module width change shifts sibling modules, such
+  as the battery expanding for a charging icon.  Changed placements now
+  contribute damage for both their old and new positions.  This was noticed
+  on X11, but the shared damage path affects Wayland too.
+
 * 0.31.0 - 2026-11-10
 
 This section covers the work since commit
