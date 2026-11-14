@@ -4,6 +4,44 @@
 All notable changes to slothbar are recorded here. Slothbar is pre-1.0, so
 internal and configuration APIs may still change between releases.
 
+* Unreleased: color format modifiers
+
+** Added
+
+- Add value-aware =:zone= and =:progress= directives to the format-plan
+  layer.  Each directive takes a numeric source, such as a sysinfo field
+  keyword, and renders through =slothbar-color-zone= or
+  =slothbar-color-progress-bar=:
+  - =(:zone :cpu-usage 20 50 90 t)= applies a color zone.
+  - =(:progress :cpu-usage 10 (20 50 80))= renders a progress bar.
+- Resolve directive values in the sysinfo module before layout and keep
+  ordinary field values as substituted data.
+- Add default color zones for sysinfo CPU and memory usage.
+- Parse parenthesized color forms with =read-from-string=, allowing nested
+  Lisp forms in =^(= ... =)= color directives.
+
+** Changed
+
+- Parse color codes in the trusted format template before =format-spec=
+  substitutes values.  Window titles, field values, interface names, and
+  other arbitrary text are therefore never interpreted as color codes.
+- Expand sysinfo progress and zone directives into trusted format markup
+  before layout.
+- Insert a =^;= no-op separator after directive zone colors so a following
+  numeric field cannot be consumed as part of a two-character color code.
+
+** Fixed
+
+- Fix focused-window and other substituted text beginning with a digit, =*=,
+  or caret sequence being misinterpreted as color markup.
+- Preserve zero padding when a zone directive precedes a numeric field.
+
+** Tests
+
+- Add format-plan directive tests, sysinfo directive expansion tests, and
+  literal-value regression coverage for titles and field values containing
+  color-like text.
+
 * 0.31.0 - 2026-11-10
 
 This section covers the work since commit
