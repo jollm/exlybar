@@ -462,6 +462,24 @@ first group.  Hidden workspaces are omitted."
                       (elwl-workspace-active-p workspace)
                       (elwl-workspace-urgent-p workspace)))))))
 
+(defvar slothbar-workspaces--ext-subscribers 0
+  "Number of workspaces modules using ext-workspace updates.")
+
+(defun slothbar-workspaces--subscribe-ext-workspace ()
+  "Subscribe the workspaces module to ext-workspace changes."
+  (when (zerop slothbar-workspaces--ext-subscribers)
+    (add-hook 'slothbar-backend-workspace-change-hook
+              #'slothbar-workspaces--ext-workspace-change))
+  (cl-incf slothbar-workspaces--ext-subscribers))
+
+(defun slothbar-workspaces--unsubscribe-ext-workspace ()
+  "Unsubscribe one workspaces module from ext-workspace changes."
+  (setq slothbar-workspaces--ext-subscribers
+        (max 0 (1- slothbar-workspaces--ext-subscribers)))
+  (when (zerop slothbar-workspaces--ext-subscribers)
+    (remove-hook 'slothbar-backend-workspace-change-hook
+                 #'slothbar-workspaces--ext-workspace-change)))
+
 (defun slothbar-workspaces--ext-workspace-change (backend)
   "Refresh workspaces modules when BACKEND's workspace state changes."
   (when (eq backend slothbar--backend)
@@ -475,14 +493,12 @@ Return non-nil when ext-workspace was selected."
     (require 'elwl-workspace nil t)
     (setq slothbar-workspaces-generate-list-fn
           #'slothbar-workspaces-generate-list-fn-ext-workspace)
-    (add-hook 'slothbar-backend-workspace-change-hook
-              #'slothbar-workspaces--ext-workspace-change)
+    (slothbar-workspaces--subscribe-ext-workspace)
     t))
 
 (defun slothbar-workspaces--teardown-ext-workspace ()
   "Stop using ext-workspace for workspace updates."
-  (remove-hook 'slothbar-backend-workspace-change-hook
-               #'slothbar-workspaces--ext-workspace-change))
+  (slothbar-workspaces--unsubscribe-ext-workspace))
 
 ;;; ewmh (extended window manager hints)
 

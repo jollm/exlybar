@@ -896,6 +896,23 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-workspaces-ext-subscription ()
+  "Multiple workspaces modules share one ext-workspace hook."
+  (let ((slothbar-workspaces--ext-subscribers 0)
+        (slothbar-backend-workspace-change-hook nil))
+    (slothbar-workspaces--subscribe-ext-workspace)
+    (slothbar-workspaces--subscribe-ext-workspace)
+    (should (= 1 (seq-count
+                  (lambda (fn)
+                    (eq fn #'slothbar-workspaces--ext-workspace-change))
+                  slothbar-backend-workspace-change-hook)))
+    (slothbar-workspaces--unsubscribe-ext-workspace)
+    (should (memq #'slothbar-workspaces--ext-workspace-change
+                  slothbar-backend-workspace-change-hook))
+    (slothbar-workspaces--unsubscribe-ext-workspace)
+    (should-not (memq #'slothbar-workspaces--ext-workspace-change
+                      slothbar-backend-workspace-change-hook))))
+
 (ert-deftest slothbar-unit-workspaces-scroll-actions ()
   "Workspace scroll actions move through the visible workspace list."
   (let* ((m (slothbar-workspaces-create))
