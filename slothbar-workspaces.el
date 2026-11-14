@@ -246,6 +246,36 @@ Return non-nil when an activation request was sent."
       (slothbar-workspaces--activate-exwm index)
       (slothbar-workspaces--activate-ewmh index)))
 
+(defun slothbar-workspaces--scroll (m action)
+  "Activate the previous or next workspace for ACTION on M.
++:scroll-up+ selects the previous visible workspace and +:scroll-down+
++the next, wrapping at either end.  Return non-nil when activation was
++attempted."
+  (slothbar-workspaces--with-bar m
+    (let* ((ws-list (or (map-elt (slothbar-module-cache m) 'ws-list)
+                        (funcall slothbar-workspaces-generate-list-fn)))
+           (count (length ws-list))
+           (current (cl-position-if
+                     (lambda (workspace)
+                       (memq :current (cadr workspace)))
+                     ws-list)))
+      (when (and current (> count 1))
+        (let ((index (pcase action
+                       (:scroll-up (1- current))
+                       (:scroll-down (1+ current))
+                       (_ current))))
+          (setq index (mod index count))
+          (slothbar-workspaces--activate index)
+          t)))))
+
+(cl-defmethod slothbar-module-action
+  ((m slothbar-workspaces) action _x _y)
+  "Handle workspace ACTION on M."
+  (pcase action
+    ((or :scroll-up :scroll-down)
+     (slothbar-workspaces--scroll m action))
+    (_ (cl-call-next-method))))
+
 (cl-defmethod slothbar-module-click
   ((m slothbar-workspaces) x _y button)
   "Activate the workspace extent at X in M when BUTTON is :left."

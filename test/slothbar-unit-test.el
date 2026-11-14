@@ -868,6 +868,29 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-workspaces-scroll-actions ()
+  "Workspace scroll actions move through the visible workspace list."
+  (let* ((m (slothbar-workspaces-create))
+         (cache (make-hash-table :test 'equal))
+         (activated nil))
+    (setf (slothbar-module-cache m) cache)
+    (map-put! cache 'ws-list
+              '(("1" (:current))
+                ("2" (:inactive))
+                ("3" (:inactive))))
+    (cl-letf (((symbol-function 'slothbar-workspaces--activate)
+               (lambda (index)
+                 (push index activated)
+                 t)))
+      (should (slothbar-module-action m :scroll-down 0 0))
+      (should (slothbar-module-action m :scroll-up 0 0))
+      (should (equal activated '(2 1)))))
+  (let* ((m (slothbar-workspaces-create))
+         (cache (make-hash-table :test 'equal)))
+    (setf (slothbar-module-cache m) cache)
+    (map-put! cache 'ws-list '(("only" (:current))))
+    (should-not (slothbar-module-action m :scroll-down 0 0))))
+
 (ert-deftest slothbar-unit-workspaces-click-regions ()
   "Workspace extent markers produce clickable x ranges."
   (let* ((m (slothbar-workspaces-create))
