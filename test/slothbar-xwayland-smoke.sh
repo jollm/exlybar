@@ -33,6 +33,11 @@ if ! command -v timeout >/dev/null 2>&1; then
   exit 77
 fi
 
+if ! "$EMACS" -Q --batch --eval "(kill-emacs (if (featurep 'x) 0 1))" >/dev/null 2>&1; then
+  echo "SKIP: $EMACS has no X11 support; set EMACS to an X-capable build"
+  exit 77
+fi
+
 if [ ! -d /tmp/.X11-unix ]; then
   if ! mkdir -p /tmp/.X11-unix; then
     echo "ERROR: cannot create /tmp/.X11-unix"
@@ -142,11 +147,13 @@ if [ -n "${SLOTHBAR_FONTSLOTH_DIR:-}" ]; then
   EXTRA_LOAD_PATH=(-L "$SLOTHBAR_FONTSLOTH_DIR")
 fi
 
-DISPLAY=":$DISPLAY_NUM" \
-XDG_RUNTIME_DIR="$RUNTIME" \
-SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
-SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
-SLOTHBAR_EXPECT_NO_ELWL="$NO_ELWL" \
+env -u WAYLAND_DISPLAY \
+  DISPLAY=":$DISPLAY_NUM" \
+  GDK_BACKEND=x11 \
+  XDG_RUNTIME_DIR="$RUNTIME" \
+  SLOTHBAR_SMOKE_RESULTS="$WORK/results.txt" \
+  SLOTHBAR_TEST_LOAD_PATH="${SLOTHBAR_TEST_LOAD_PATH:-}" \
+  SLOTHBAR_EXPECT_NO_ELWL="$NO_ELWL" \
   timeout 120 "$EMACS" -Q --display=":$DISPLAY_NUM" \
   -L "$ROOT" "${EXTRA_LOAD_PATH[@]}" \
   -l "$TEST_ELISP" > "$WORK/emacs.log" 2>&1
