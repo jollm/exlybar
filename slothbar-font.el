@@ -116,7 +116,7 @@ By default, CANDIDATES is the value of `slothbar-font-candidates'."
            for i = 0 then (1+ i)
            with font-map = (make-vector 10 nil)
            do
-           (when-let (path (slothbar-font--filename-search f-list))
+           (when-let* ((path (slothbar-font--filename-search f-list)))
              (aset font-map i path))
            finally return font-map))
 

@@ -114,7 +114,7 @@ CHARGING? t if battery status indicates charging, otherwise nil"
   (let* ((default-directory (f-full "~")) ; ensure status checks don't remote
          (status (or (map-elt (slothbar-module-cache m) 'status)
                      (funcall battery-status-function)))
-         (pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
+         (pct (if-let* ((pct (map-elt status ?p))) (string-to-number pct) 100))
          (charging? (equal "+" (map-elt status ?b)))
          (zone-color (if charging? slothbar-battery-charge-color-command
                        (apply #'slothbar-color-zone
@@ -124,7 +124,7 @@ CHARGING? t if battery status indicates charging, otherwise nil"
 
 (defun slothbar-battery--format-spec (status)
   "Given STATUS, build the `format-spec' spec used to generate module text."
-  (let* ((pct (if-let ((pct (map-elt status ?p))) (string-to-number pct) 100))
+  (let* ((pct (if-let* ((pct (map-elt status ?p))) (string-to-number pct) 100))
          (charging? (equal "+" (map-elt status ?b)))
          (icon (if charging? slothbar-battery-charge-icon
                  (slothbar-color-choose-icon pct slothbar-battery-icons))))

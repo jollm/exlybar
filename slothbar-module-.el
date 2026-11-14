@@ -94,7 +94,7 @@ LPAD is the module left padding."
            then (if ls (max prev-x (fontsloth-layout-current-pos (car ls)))
                   prev-x) collect
            (if (stringp part)
-               (if-let ((font-path (slothbar-font-find fidx)))
+               (if-let* ((font-path (slothbar-font-find fidx)))
                    (let* ((txt (format-spec part spec 'ignore))
                           (font (fontsloth-load-font font-path))
                           (px (+ (aref slothbar-font-px-size fidx)
@@ -162,7 +162,7 @@ This default primary method uses a result from fontsloth-layout to set
       (setf (slothbar-module-update-timer m)
             (run-at-time nil 10 #'slothbar-module--update-status-safe m))))
   (when (slothbar-module-format m)
-    (when-let ((backend (slothbar-module--backend m)))
+    (when-let* ((backend (slothbar-module--backend m)))
       (slothbar-backend-draw-module backend m)))
   (setf (slothbar-module-initialized m) t))
 
@@ -175,7 +175,7 @@ This default primary method uses a result from fontsloth-layout to set
   "Refresh module M.
 This default primary method redraws M through the display backend."
   (when (slothbar-module-needs-refresh? m)
-    (when-let ((backend (slothbar-module--backend m)))
+    (when-let* ((backend (slothbar-module--backend m)))
       (slothbar-backend-draw-module backend m))))
 
 (cl-defmethod slothbar-module-refresh :after ((m slothbar-module))
@@ -196,7 +196,7 @@ This default primary method redraws M through the display backend."
 (cl-defmethod slothbar-module-exit ((m slothbar-module))
   "Tear down module M."
   (slothbar--log-debug* "slothbar-module-exit %s" (slothbar-module-name m))
-  (when-let ((backend (slothbar-module--backend m)))
+  (when-let* ((backend (slothbar-module--backend m)))
     (slothbar-backend-remove-module backend m))
   (setf (slothbar-module-backend m) nil
         (slothbar-module-cache m) nil

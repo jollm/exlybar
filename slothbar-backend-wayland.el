@@ -256,7 +256,7 @@
 
 (defun slothbar-backend-wayland--pointer-motion (backend x y)
   "Dispatch pointer motion at X,Y on BACKEND when over a bar."
-  (when-let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
+  (when-let* ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
     (condition-case err
         (run-hook-with-args
          'slothbar-backend-pointer-motion-hook
@@ -321,7 +321,7 @@
     (when (and (or (null axis) (memq axis '(vertical 0)))
                (numberp value)
                (/= value 0))
-      (when-let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
+      (when-let* ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
         (let ((action (if (> value 0) :scroll-down :scroll-up)))
           (condition-case err
               (run-hook-with-args
@@ -789,7 +789,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
   "Apply output SCALE to SURFACE and rebuild its frame."
   (unless (eql scale (slothbar-backend-wayland-surface-scale surface))
     (setf (slothbar-backend-wayland-surface-scale surface) scale)
-    (when-let ((bar (slothbar-backend-wayland-surface-bar surface)))
+    (when-let* ((bar (slothbar-backend-wayland-surface-bar surface)))
       (setf (slothbar-scale bar) scale))
     ;; The buffer scale is applied by `elwl-surface-present' together with
     ;; the next buffer, so the old frame is never committed under a new
@@ -1033,7 +1033,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-show
     ((_backend slothbar-backend-wayland) (bar slothbar))
   "Show BAR and reserve its exclusive zone."
-  (when-let ((surface (slothbar-surface bar)))
+  (when-let* ((surface (slothbar-surface bar)))
     (let ((width (max 1 (or (slothbar-pixel-width bar) slothbar-width 1)))
           (height (max 1 (or (slothbar-pixel-height bar) slothbar-height))))
       (when (or (/= width
@@ -1054,7 +1054,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-hide
     ((_backend slothbar-backend-wayland) (bar slothbar))
   "Hide BAR and release its exclusive zone."
-  (when-let ((surface (slothbar-surface bar)))
+  (when-let* ((surface (slothbar-surface bar)))
     (setf (slothbar-backend-wayland-surface-pending surface) nil
           (slothbar-backend-wayland-surface-presented surface) nil)
     (elwl-layer-surface-set-exclusive-zone
@@ -1072,7 +1072,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-add-module
     ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Register MODULE with BACKEND."
-  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+  (when-let* ((surface (slothbar-backend-wayland--module-surface module)))
     (puthash module nil
              (slothbar-backend-wayland-surface-module-ops surface)))
   module)
@@ -1080,14 +1080,14 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-remove-module
     ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Forget MODULE in BACKEND."
-  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+  (when-let* ((surface (slothbar-backend-wayland--module-surface module)))
     (remhash module
              (slothbar-backend-wayland-surface-module-ops surface))))
 
 (cl-defmethod slothbar-backend-draw-module
     ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Compute MODULE's draw operations for BACKEND."
-  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+  (when-let* ((surface (slothbar-backend-wayland--module-surface module)))
     (puthash module
              (slothbar-text-draw-ops (slothbar-module-text-layout module))
              (slothbar-backend-wayland-surface-module-ops surface))))
@@ -1095,14 +1095,14 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-reset-module-cache
     ((_backend slothbar-backend-wayland) (module slothbar-module))
   "Forget MODULE's cached draw operations in BACKEND."
-  (when-let ((surface (slothbar-backend-wayland--module-surface module)))
+  (when-let* ((surface (slothbar-backend-wayland--module-surface module)))
     (remhash module
              (slothbar-backend-wayland-surface-module-ops surface))))
 
 (cl-defmethod slothbar-backend-present
     ((_backend slothbar-backend-wayland) (bar slothbar) layout damage)
   "Compose LAYOUT into BAR's frame and present it when visible."
-  (when-let ((surface (slothbar-surface bar)))
+  (when-let* ((surface (slothbar-surface bar)))
     (let ((frame (slothbar-backend-wayland--compose-frame
                   surface layout damage)))
       (setf (slothbar-backend-wayland-surface-rendered surface) t)

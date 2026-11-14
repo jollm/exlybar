@@ -276,7 +276,7 @@ SHOULD-REFRESH? optional (defaults to t) nil to forgo module refresh"
 
 (defun slothbar-tray--resize-icon (window width height)
   "Resize icon window WINDOW given WIDTH and HEIGHT."
-  (when-let ((attr (cdr (assoc window slothbar-tray--list))))
+  (when-let* ((attr (cdr (assoc window slothbar-tray--list))))
     (setf (slothbar-tray--icon-height attr) slothbar-height
           (slothbar-tray--icon-width attr)
           (round (* width (/ (float (slothbar-tray--icon-height attr))

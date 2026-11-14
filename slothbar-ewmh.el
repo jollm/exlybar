@@ -146,7 +146,7 @@ The root window is determined by `slothbar-xcb-root-window-id'."
 
 If the _NET_DESKTOP_NAMES property is not supported, the names will be
 the stringified desktop numbers."
-  (if-let ((names (slothbar-ewmh--get-root-win-prop 'xcb:ewmh:get-_NET_DESKTOP_NAMES)))
+  (if-let* ((names (slothbar-ewmh--get-root-win-prop 'xcb:ewmh:get-_NET_DESKTOP_NAMES)))
       (string-split names "\0" t)
     (cl-loop for i from 0 below slothbar-ewmh--num-desktops
              collect (number-to-string i))))
@@ -184,10 +184,10 @@ the stringified desktop numbers."
 (defun slothbar-ewmh--update-active-window ()
   "Update the value of `slothbar-ewmh--active-window'."
   (slothbar--log-debug* "active_window notify")
-  (when-let ((active-win (slothbar-ewmh--get-root-win-prop
-                          'xcb:ewmh:get-_NET_ACTIVE_WINDOW)))
+  (when-let* ((active-win (slothbar-ewmh--get-root-win-prop
+                           'xcb:ewmh:get-_NET_ACTIVE_WINDOW)))
     (setq slothbar-ewmh--active-window active-win)
-    (when-let ((active-desktop (map-elt slothbar-ewmh--client-desktop-map active-win)))
+    (when-let* ((active-desktop (map-elt slothbar-ewmh--client-desktop-map active-win)))
       (setq slothbar-ewmh--current-desktop active-desktop))))
 
 (defun slothbar-ewmh--update-client-list ()

@@ -294,7 +294,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (defun slothbar-backend-xcb--configure-geom (backend bar)
   "Configure BAR's window geometry on BACKEND."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((ecw (xcb:+request-checked+request-check
                    (slothbar-backend-xcb-connection backend)
                  (make-instance 'xcb:ConfigureWindow
@@ -313,7 +313,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (defun slothbar-backend-xcb--configure-pos (backend bar)
   "Configure BAR's window position on BACKEND."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((ecw (xcb:+request-checked+request-check
                    (slothbar-backend-xcb-connection backend)
                  (make-instance 'xcb:ConfigureWindow
@@ -328,7 +328,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (defun slothbar-backend-xcb--change-background (backend bar &optional color)
   "Change BAR's background pixel attribute with optional COLOR."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((connection (slothbar-backend-xcb-connection backend))
           (window (slothbar-backend-xcb-surface-window surface))
           (gc (slothbar-backend-xcb-surface-gc surface))
@@ -353,7 +353,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (defun slothbar-backend-xcb--configure-wm-hints (backend bar)
   "Configure BAR's icccm and ewmh hints on BACKEND."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((connection (slothbar-backend-xcb-connection backend))
           (window (slothbar-backend-xcb-surface-window surface)))
       (xcb:+request-checked connection
@@ -374,7 +374,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 (cl-defmethod slothbar-backend-show
     ((backend slothbar-backend-xcb) (bar slothbar))
   "Map BAR and reserve its space."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (slothbar-backend-xcb--configure-geom backend bar)
     (slothbar-backend-xcb--change-background backend bar)
     (slothbar-backend-xcb--configure-struts backend bar)
@@ -390,7 +390,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 (cl-defmethod slothbar-backend-hide
     ((backend slothbar-backend-xcb) (bar slothbar))
   "Unmap BAR and release its reserved space."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (slothbar-backend-xcb--configure-struts backend bar t)
     (let ((connection (slothbar-backend-xcb-connection backend)))
       (xcb:+request connection
@@ -412,7 +412,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 (cl-defmethod slothbar-backend-present
     ((backend slothbar-backend-xcb) (bar slothbar) layout damage)
   "Draw LAYOUT into BAR and update its X window."
-  (when-let ((surface (slothbar-backend-xcb--surface bar)))
+  (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((connection (slothbar-backend-xcb-connection backend))
           (window (slothbar-backend-xcb-surface-window surface))
           (gc (slothbar-backend-xcb-surface-gc surface))
@@ -466,13 +466,13 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 (defun slothbar-backend-xcb--module-surface-table (module)
   "Return MODULE's owning bar surface table, if any."
   (let ((bar (slothbar-module--bar module)))
-    (when-let ((surface (and bar (slothbar-surface bar))))
+    (when-let* ((surface (and bar (slothbar-surface bar))))
       (slothbar-backend-xcb-surface-module-surfaces surface))))
 
 (cl-defmethod slothbar-backend-add-module
     ((backend slothbar-backend-xcb) (module slothbar-module))
   "Give BACKEND the pixel resources MODULE needs to draw."
-  (when-let ((table (slothbar-backend-xcb--module-surface-table module)))
+  (when-let* ((table (slothbar-backend-xcb--module-surface-table module)))
     (pcase-let* ((bar (slothbar-module--bar module))
            (bar-surface (slothbar-surface bar))
            (connection (slothbar-backend-xcb-connection backend))

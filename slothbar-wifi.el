@@ -89,7 +89,7 @@ consider its output stable.\\=' :(
 This should be deprecated in favor of something better."
   (let ((default-directory (f-full "~")) ; ensure status checks don't remote
         )
-    (when-let ((dev (slothbar-wifi-guess-device)))
+    (when-let* ((dev (slothbar-wifi-guess-device)))
       (->> (concat "iw " dev " info")
           (shell-command-to-string)
           (s-lines)

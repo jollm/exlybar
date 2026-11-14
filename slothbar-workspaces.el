@@ -656,9 +656,9 @@ Remove chnage functions when ADD? is non-nil."
 (defun slothbar-workspaces-generate-list-fn-herbstluftwm ()
   "Implement `slothbar-workspaces-generate-list-fn' for herbstluftwm."
   (when (executable-find "herbstclient")
-    (when-let ((tags (with-temp-buffer
-                       (when (eq 0 (call-process "herbstclient" nil t nil "tag_status"))
-                         (buffer-string)))))
+    (when-let* ((tags (with-temp-buffer
+                        (when (eq 0 (call-process "herbstclient" nil t nil "tag_status"))
+                          (buffer-string)))))
       (cl-loop for tag in (string-split tags)
                for name = (substring tag 1)
                collect
