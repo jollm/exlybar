@@ -62,15 +62,27 @@
   "A system tray module."
   transport)
 
+(defun slothbar-tray--sni-available-p ()
+  "Return non-nil when a StatusNotifier host can be started."
+  (and (require 'dbus nil t)
+       (getenv "DBUS_SESSION_BUS_ADDRESS")))
+
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-tray) (backend slothbar-backend))
   "System tray requires an available tray transport."
-  (slothbar-backend-supports-p backend 'system-tray))
+  (or (slothbar-backend-supports-p backend 'system-tray)
+      (slothbar-tray--sni-available-p)))
 
 (cl-defmethod slothbar-module-singleton-id ((_m slothbar-tray))
   "There can be only one tray across all bars."
   'system-tray)
 
+(declare-function slothbar-tray-sni-init "slothbar-tray-sni" (m))
+(declare-function slothbar-tray-sni-layout "slothbar-tray-sni" (m))
+(declare-function slothbar-tray-sni-refresh "slothbar-tray-sni" (m))
+(declare-function slothbar-tray-sni-reposition "slothbar-tray-sni" (m x y))
+(declare-function slothbar-tray-sni-exit "slothbar-tray-sni" (m))
+(declare-function slothbar-tray-sni-click "slothbar-tray-sni" (m x y button))
 (declare-function slothbar-tray-xembed-init "slothbar-tray-xembed" (m))
 (declare-function slothbar-tray-xembed-layout "slothbar-tray-xembed" (m))
 (declare-function slothbar-tray-xembed-refresh "slothbar-tray-xembed" (m))
@@ -85,6 +97,9 @@
            (slothbar-backend-supports-p backend 'system-tray))
       (require 'slothbar-tray-xembed)
       'xembed)
+     ((slothbar-tray--sni-available-p)
+      (require 'slothbar-tray-sni)
+      'sni)
      (t nil))))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-tray))
@@ -94,7 +109,8 @@
       (error "No system tray transport for the active backend"))
     (setf (slothbar-tray-transport m) transport)
     (pcase transport
-      ('xembed (slothbar-tray-xembed-init m)))))
+      ('xembed (slothbar-tray-xembed-init m))
+      ('sni (slothbar-tray-sni-init m)))))
 
 (cl-defmethod slothbar-module-init ((m slothbar-tray))
   "Initialize M.  The transport owns the protocol connection."
@@ -103,23 +119,33 @@
 (cl-defmethod slothbar-module-layout ((m slothbar-tray))
   "Lay out M through its tray transport."
   (pcase (slothbar-tray-transport m)
-    ('xembed (slothbar-tray-xembed-layout m))))
+    ('xembed (slothbar-tray-xembed-layout m))
+    ('sni (slothbar-tray-sni-layout m))))
 
 (cl-defmethod slothbar-module-refresh ((m slothbar-tray))
   "Refresh M through its tray transport."
   (pcase (slothbar-tray-transport m)
-    ('xembed (slothbar-tray-xembed-refresh m))))
+    ('xembed (slothbar-tray-xembed-refresh m))
+    ('sni (slothbar-tray-sni-refresh m))))
 
 (cl-defmethod slothbar-module-reposition ((m slothbar-tray) x y)
   "Reposition M through its tray transport."
   (pcase (slothbar-tray-transport m)
-    ('xembed (slothbar-tray-xembed-reposition m x y))))
+    ('xembed (slothbar-tray-xembed-reposition m x y))
+    ('sni (slothbar-tray-sni-reposition m x y))))
 
 (cl-defmethod slothbar-module-exit :before ((m slothbar-tray))
   "Tear down M's tray transport."
   (pcase (slothbar-tray-transport m)
-    ('xembed (slothbar-tray-xembed-exit m)))
+    ('xembed (slothbar-tray-xembed-exit m))
+    ('sni (slothbar-tray-sni-exit m)))
   (setf (slothbar-tray-transport m) nil))
+
+(cl-defmethod slothbar-module-click ((m slothbar-tray) x y button)
+  "Dispatch a tray click through the active transport."
+  (pcase (slothbar-tray-transport m)
+    ('sni (slothbar-tray-sni-click m x y button))
+    (_ nil)))
 
 (provide 'slothbar-tray)
 ;;; slothbar-tray.el ends here

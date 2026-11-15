@@ -270,10 +270,15 @@
                  (list #'slothbar-tray-create
                        #'slothbar-workspaces-create)))
             (slothbar--construct-modules)
-            (slothbar-wayland-check
-             "X-only modules are gated on Wayland"
-             (equal (mapcar #'slothbar-module-name slothbar--modules)
-                    '("workspaces"))))
+            (if (slothbar-tray--sni-available-p)
+                (slothbar-wayland-check
+                 "Wayland tray is available through StatusNotifier"
+                 (equal (mapcar #'slothbar-module-name slothbar--modules)
+                        '("tray" "workspaces")))
+              (slothbar-wayland-check
+               "X-only modules are gated on Wayland"
+               (equal (mapcar #'slothbar-module-name slothbar--modules)
+                      '("workspaces")))))
           (require 'slothbar-ewmh)
           (require 'slothbar-randr)
           (slothbar-ewmh-mode 1)
