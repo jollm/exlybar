@@ -1679,6 +1679,20 @@
                          (slothbar-tray-sni--find-icon "steam" dir))))
       (delete-directory dir t))))
 
+(ert-deftest slothbar-unit-tray-sni-unique-owner-removal ()
+  "Unique-name StatusNotifierItems are removed when their owner exits."
+  (require 'slothbar-tray-sni)
+  (let* ((item (slothbar-tray-sni--item-create
+                :service ":1.99" :path "/org/ayatana/NotificationItem/probe"))
+         (slothbar-tray-sni--items (list item))
+         (removed nil))
+    (cl-letf (((symbol-function 'slothbar-tray-sni--remove-item)
+               (lambda (service path)
+                 (setq removed (list service path)))))
+      (slothbar-tray-sni--on-name-owner-changed ":1.99" ":1.99" ""))
+    (should (equal removed
+                   '(":1.99" "/org/ayatana/NotificationItem/probe")))))
+
 (ert-deftest slothbar-unit-ewmh-destroyed-window ()
   "A vanished client window yields nil EWMH properties."
   (require 'slothbar-ewmh)

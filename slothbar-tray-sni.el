@@ -289,10 +289,11 @@ THEME-PATHS may be a string or a list of strings."
   (slothbar-tray-sni--refresh-module))
 
 (defun slothbar-tray-sni--on-name-owner-changed (name _old new)
-  "Remove items whose bus NAME lost its owner."
+  "Remove items whose bus NAME lost its owner.
+NAME can be a well-known item service or the unique sender name used
+for an object-path registration."
   (when (and (stringp name)
-             (string-empty-p (or new ""))
-             (string-prefix-p "org.kde.StatusNotifierItem" name))
+             (string-empty-p (or new "")))
     (let ((matches (cl-remove-if-not
                     (lambda (item)
                       (equal (slothbar-tray-sni-item-service item) name))
