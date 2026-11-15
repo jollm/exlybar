@@ -719,7 +719,10 @@ for an object-path registration."
             (slothbar--log-debug* "SNI menu unavailable for %s"
                                   (slothbar-tray-sni-item-id item)))
       (when-let* ((method (pcase button
-                            (:left "Activate")
+                            (:left
+                             (if (slothbar-tray-sni-item-item-is-menu item)
+                                 "ContextMenu"
+                               "Activate"))
                             (:middle "SecondaryActivate")
                             (:right "ContextMenu")))
                   (service (slothbar-tray-sni-item-service item))

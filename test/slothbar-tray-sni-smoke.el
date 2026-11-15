@@ -29,6 +29,28 @@
   '(:array (:struct :int32 1 :int32 1
             (:array :byte 255 :byte 0 :byte 0 :byte 255))))
 
+(defun slothbar-sni-test--menu-layout ()
+  "Return a minimal dbusmenu layout with one Quit item."
+  (list :struct
+        (list :uint32 5)
+        (list :struct
+              (list :int32 0)
+              (list :array
+                    (list :dict-entry
+                          :string "label" (list :variant :string "Root")))
+              (list :array
+                    (list :variant
+                          (list :struct
+                                (list :int32 1)
+                                (list :array
+                                      (list :dict-entry
+                                            :string "label"
+                                            (list :variant :string "Quit"))
+                                      (list :dict-entry
+                                            :string "enabled"
+                                            (list :variant :boolean t)))
+                                (list :array)))))))
+
 (defun slothbar-sni-test--check (label value)
   "Record LABEL as passing when VALUE is non-nil."
   (princ (format "%s: %s\n" (if value "ok" "FAILED") label))
@@ -40,8 +62,25 @@
 
 (let ((activated nil)
       (secondary nil)
-      (context nil))
+      (context nil)
+      (menu-about nil)
+      (menu-event nil))
   (dbus-register-service :session slothbar-sni-test--item :do-not-queue)
+  (dbus-register-method
+   :session slothbar-sni-test--item "/MenuBar"
+   "com.canonical.dbusmenu" "GetLayout"
+   (lambda (_parent _depth _properties)
+     (slothbar-sni-test--menu-layout)))
+  (dbus-register-method
+   :session slothbar-sni-test--item "/MenuBar"
+   "com.canonical.dbusmenu" "AboutToShow"
+   (lambda (id) (push id menu-about) t))
+  (dbus-register-method
+   :session slothbar-sni-test--item "/MenuBar"
+   "com.canonical.dbusmenu" "Event"
+   (lambda (id event data timestamp)
+     (setq menu-event (list id event data timestamp))
+     :ignore))
   (dolist (property '(("Id" . "test-item")
                       ("Title" . "Test Item")
                       ("Status" . "Active")
@@ -180,6 +219,34 @@
                               (+ (slothbar-module-lpad module) 1) 0 :left)
       (slothbar-sni-test--check "ItemIsMenu opens ContextMenu"
                                 (equal context '(5 0)))
+      (dbus-register-property
+       :session slothbar-sni-test--item "/StatusNotifierItem"
+       "org.kde.StatusNotifierItem" "Menu" :readwrite "/MenuBar")
+      (slothbar-tray-sni--refresh-item slothbar-sni-test--item
+                                       "/StatusNotifierItem")
+      (setf (slothbar-module-bar module) (slothbar-create :id 'menu-test))
+      (let ((captured nil))
+        (cl-letf (((symbol-function 'slothbar-menu-show)
+                   (lambda (menu bar x y)
+                     (setq captured (list menu bar x y))
+                     t)))
+          (slothbar-tray-sni-click module
+                                  (+ (slothbar-module-lpad module) 1) 0 :right))
+        (slothbar-sni-test--check "SNI right click opens dbusmenu"
+                                  captured)
+        (let* ((menu (nth 0 captured))
+               (rows (slothbar-menu-rows menu)))
+          (slothbar-sni-test--check "dbusmenu layout parsed"
+                                    (and rows
+                                         (equal "Quit"
+                                                (slothbar-menu-row-label
+                                                 (car rows)))))
+          (slothbar-sni-test--check "AboutToShow prepared the menu"
+                                    (member 0 menu-about))
+          (slothbar-menu-click menu 5 5 :left)
+          (slothbar-sni-test--check "menu row click emits clicked"
+                                    (and (equal 1 (nth 0 menu-event))
+                                         (equal "clicked" (nth 1 menu-event))))))
       (dbus-set-property :session slothbar-sni-test--item
                          "/StatusNotifierItem"
                          "org.kde.StatusNotifierItem"
