@@ -76,6 +76,9 @@
   (format-fn nil :type 'function)
   (format-spec nil :type 'string)
   (text-layout nil :type 'list)
+  (images nil :type 'list
+          :documentation "Backend-neutral RGBA image placements.
+Each entry is (X Y WIDTH HEIGHT DATA), with DATA as unibyte RGBA bytes.")
   (lpad 14 :type 'fixed)
   (rpad 14 :type 'fixed)
   (colors (slothbar-module-rgb-create) :type 'slothbar-module-rgb)

@@ -592,7 +592,54 @@ placement."
     (slothbar-backend-wayland--draw-ops
      surface module
      (gethash module (slothbar-backend-wayland-surface-module-ops surface))
-     placement-x placement-y)))
+     placement-x placement-y)
+    (slothbar-backend-wayland--draw-images
+     surface module placement-x placement-y)))
+
+(defun slothbar-backend-wayland--blend-image
+    (frame stride frame-width frame-height left top width height data)
+  "Blend an RGBA image into FRAME.
+DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
+  (dotimes (row height)
+    (let ((y (+ top row)))
+      (when (and (>= y 0) (< y frame-height))
+        (dotimes (col width)
+          (let ((x (+ left col)))
+            (when (and (>= x 0) (< x frame-width))
+              (let* ((src (+ (* row width 4) (* col 4)))
+                     (alpha (aref data (+ src 3))))
+                (when (> alpha 0)
+                  (let* ((index (+ (* y stride) (* x 4)))
+                         (inverse (- 255 alpha)))
+                    (aset frame index
+                          (/ (+ (* (aref data src) alpha)
+                                (* (aref frame index) inverse))
+                             255))
+                    (aset frame (1+ index)
+                          (/ (+ (* (aref data (1+ src)) alpha)
+                                (* (aref frame (1+ index)) inverse))
+                             255))
+                    (aset frame (+ index 2)
+                          (/ (+ (* (aref data (+ src 2)) alpha)
+                                (* (aref frame (+ index 2)) inverse))
+                             255))
+                    (aset frame (+ index 3) 255)))))))))))
+
+(defun slothbar-backend-wayland--draw-images
+    (surface module placement-x placement-y)
+  "Draw MODULE's image placements into SURFACE."
+  (let* ((scale (slothbar-backend-wayland-surface-scale surface))
+         (frame (slothbar-backend-wayland-surface-frame surface))
+         (stride (slothbar-backend-wayland-surface-frame-stride surface))
+         (frame-width (slothbar-backend-wayland-surface-frame-width surface))
+         (frame-height (slothbar-backend-wayland-surface-frame-height surface)))
+    (dolist (image (slothbar-module-images module))
+      (pcase-let ((`(,x ,y ,width ,height ,data) image))
+        (slothbar-backend-wayland--blend-image
+         frame stride frame-width frame-height
+         (truncate (* scale (+ placement-x x)))
+         (truncate (* scale (+ placement-y y)))
+         (truncate (* scale width)) (truncate (* scale height)) data)))))
 
 (defun slothbar-backend-wayland--damage-intersects-p (x width damage)
   "Return non-nil when X..X+WIDTH intersects one of DAMAGE's spans."
