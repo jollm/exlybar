@@ -103,17 +103,17 @@
      (t nil))))
 
 (cl-defmethod slothbar-module-init :before ((m slothbar-tray))
-  "Set up M's tray transport before layout."
+  "Select M's tray transport before any layout runs."
   (let ((transport (slothbar-tray--transport-for-module m)))
     (unless transport
       (error "No system tray transport for the active backend"))
-    (setf (slothbar-tray-transport m) transport)
-    (pcase transport
-      ('xembed (slothbar-tray-xembed-init m))
-      ('sni (slothbar-tray-sni-init m)))))
+    (setf (slothbar-tray-transport m) transport)))
 
 (cl-defmethod slothbar-module-init ((m slothbar-tray))
-  "Initialize M.  The transport owns the protocol connection."
+  "Initialize M after the base pre-init layout, as XEmbed expects."
+  (pcase (slothbar-tray-transport m)
+    ('xembed (slothbar-tray-xembed-init m))
+    ('sni (slothbar-tray-sni-init m)))
   m)
 
 (cl-defmethod slothbar-module-layout ((m slothbar-tray))
