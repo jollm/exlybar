@@ -58,6 +58,14 @@ Return a `slothbar-popup', or nil when the backend has no popup support."
         (slothbar-popup-backend popup)
         (slothbar-popup-state popup))))
 
+(defun slothbar-popup-present (popup frame)
+  "Present FRAME in POPUP."
+  (when popup
+    (slothbar-backend-present-popup
+     (slothbar-popup-backend popup)
+     (slothbar-popup-state popup)
+     frame)))
+
 (defun slothbar-popup-destroy (popup)
   "Destroy POPUP."
   (when popup

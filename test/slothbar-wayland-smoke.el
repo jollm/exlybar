@@ -98,6 +98,8 @@
   (require 'slothbar-module-)
   (require 'slothbar-backend-wayland)
   (require 'slothbar-popup)
+  (require 'slothbar-dbusmenu)
+  (require 'slothbar-menu)
   (let ((font (getenv "SLOTHBAR_TEST_FONT")))
     (unless (and font (file-exists-p font))
       (error "SLOTHBAR_TEST_FONT must name an existing font file"))
@@ -357,15 +359,28 @@
             (slothbar-wayland-check
              "glyphs are not clipped at the bottom"
              (and max-y (< max-y (1- height)))))
-          ;; Popup infrastructure anchored to the bar.
-          (let ((popup (slothbar-popup-create bar 10 5 80 40)))
-            (slothbar-wayland-check "popup was created" popup)
-            (slothbar-wayland-check "popup configured"
+          ;; Popup infrastructure and a single-level menu frame.
+          (let* ((item (slothbar-dbusmenu-item--make
+                        :id 1 :label "Quit" :enabled t :visible t))
+                 (root (slothbar-dbusmenu-item--make
+                        :id 0 :label "Root" :children (list item)))
+                 (menu (slothbar-menu-create
+                        (slothbar-dbusmenu--make :root root)))
+                 (frame (slothbar-menu-render-frame menu))
+                 (popup (slothbar-popup-create
+                         bar 10 5 (slothbar-menu-width menu)
+                         (slothbar-menu-height menu))))
+            (slothbar-wayland-check "menu frame has pixels"
+                                    (cl-loop for byte across frame
+                                             thereis (> byte 0)))
+            (slothbar-wayland-check "menu popup was created" popup)
+            (slothbar-wayland-check "menu popup configured"
                                     (slothbar-popup-configured-p popup))
-            (slothbar-wayland-check "popup is not dismissed"
+            (slothbar-wayland-check "menu popup is not dismissed"
                                     (not (slothbar-popup-done-p popup)))
+            (slothbar-popup-present popup frame)
             (slothbar-popup-destroy popup)
-            (slothbar-wayland-check "popup was destroyed"
+            (slothbar-wayland-check "menu popup was destroyed"
                                     (null (slothbar-popup-state popup))))
           ;; Backend-neutral image placements must composite into the frame.
           (let* ((data (apply #'unibyte-string

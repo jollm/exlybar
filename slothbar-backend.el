@@ -143,6 +143,14 @@ Return a backend-specific popup state, or nil when unsupported.")
   "Default: unknown popups are not dismissed."
   nil)
 
+(cl-defgeneric slothbar-backend-present-popup (backend popup frame)
+  "Present FRAME in BACKEND's POPUP.
+FRAME is a logical-width-by-logical-height unibyte RGBA string.")
+
+(cl-defmethod slothbar-backend-present-popup ((_backend t) (_popup t) (_frame t))
+  "Default: no popup presentation."
+  nil)
+
 (cl-defgeneric slothbar-backend-destroy-popup (backend popup)
   "Destroy BACKEND's POPUP.")
 

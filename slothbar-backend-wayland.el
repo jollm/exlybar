@@ -879,14 +879,7 @@ Return non-nil if a buffer was presented."
            (buffers (list (elwl-shm-pool-create-buffer
                            pool pixel-width pixel-height 'argb8888 0))))
       (setf (slothbar-backend-wayland-popup-pool popup) pool
-            (slothbar-backend-wayland-popup-buffers popup) buffers)
-      (let ((buffer (car buffers)))
-        (elwl-shm-buffer-write buffer (make-string bytes 0))
-        (elwl-surface-present surface buffer
-                              :scale (if (>= (elwl-object-version surface) 3)
-                                         scale nil)
-                              :damage (list 0 0 width height)
-                              :x 0 :y 0)))
+            (slothbar-backend-wayland-popup-buffers popup) buffers))
     popup))
 
 (cl-defmethod slothbar-backend-create-popup
@@ -905,6 +898,43 @@ Return non-nil if a buffer was presented."
     ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
   "Return non-nil when POPUP has been dismissed."
   (slothbar-backend-wayland-popup-done popup))
+
+(defun slothbar-backend-wayland--rgba->bgra (data)
+  "Convert straight RGBA DATA to the BGRA byte order used by shm buffers."
+  (let ((out (make-string (length data) 0)))
+    (cl-loop for i from 0 below (length data) by 4
+             do (aset out i (aref data (+ i 2)))
+                (aset out (1+ i) (aref data (1+ i)))
+                (aset out (+ i 2) (aref data i))
+                (aset out (+ i 3) (aref data (+ i 3))))
+    out))
+
+(cl-defmethod slothbar-backend-present-popup
+    ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup)
+     frame)
+  "Present logical RGBA FRAME in POPUP."
+  (let* ((scale (slothbar-backend-wayland-popup-scale popup))
+         (width (slothbar-backend-wayland-popup-width popup))
+         (height (slothbar-backend-wayland-popup-height popup))
+         (buffer-width (* width scale))
+         (buffer-height (* height scale))
+         (scaled (slothbar-backend-wayland--scale-image
+                  frame width height buffer-width buffer-height))
+         (buffer
+          (cl-find-if #'elwl-shm-buffer-free-p
+                      (slothbar-backend-wayland-popup-buffers popup))))
+    (when buffer
+      (elwl-shm-buffer-write buffer (slothbar-backend-wayland--rgba->bgra scaled))
+      (elwl-surface-present
+       (slothbar-backend-wayland-popup-surface popup)
+       buffer
+       :scale (if (>= (elwl-object-version
+                       (slothbar-backend-wayland-popup-surface popup))
+                      3)
+                  scale nil)
+       :damage (list 0 0 width height)
+       :x 0 :y 0)
+      t)))
 
 (cl-defmethod slothbar-backend-destroy-popup
     ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
