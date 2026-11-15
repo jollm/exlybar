@@ -108,6 +108,15 @@
       (slothbar-tray-sni--layout module)
       (slothbar-sni-test--check "icon layout produced an image placement"
                                 (= 1 (length (slothbar-module-images module))))
+      (let ((module-b (slothbar-tray-create)))
+        (slothbar-tray-sni-init module-b)
+        (slothbar-sni-test--check "second SNI tray shares the watcher"
+                                  (= 2 (length slothbar-tray-sni--modules)))
+        (slothbar-sni-test--check "second SNI tray has the shared item image"
+                                  (= 1 (length (slothbar-module-images module-b))))
+        (slothbar-tray-sni-exit module-b)
+        (slothbar-sni-test--check "one tray exit keeps the watcher alive"
+                                  slothbar-tray-sni--service-owned))
       (dbus-set-property
        :session slothbar-sni-test--item "/StatusNotifierItem"
        "org.kde.StatusNotifierItem" "IconPixmap"

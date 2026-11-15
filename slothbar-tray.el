@@ -73,9 +73,12 @@
   (or (slothbar-backend-supports-p backend 'system-tray)
       (slothbar-tray--sni-available-p)))
 
-(cl-defmethod slothbar-module-singleton-id ((_m slothbar-tray))
-  "There can be only one tray across all bars."
-  'system-tray)
+(cl-defmethod slothbar-module-singleton-id ((m slothbar-tray))
+  "XEmbed is a global singleton.  Statusnotifier trays may be repeated."
+  (let ((backend (slothbar-module--backend m)))
+    (when (and backend
+               (slothbar-backend-supports-p backend 'system-tray))
+      'system-tray)))
 
 (declare-function slothbar-tray-sni-init "slothbar-tray-sni" (m))
 (declare-function slothbar-tray-sni-layout "slothbar-tray-sni" (m))

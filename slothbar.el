@@ -765,6 +765,11 @@ NVAL is check against the existing value for any changes."
                       (t (error "Unsupported type in slothbar-bars: %s"
                                 val))))
                    constructors))))
+    ;; Set the backend before singleton filtering so backend-specific
+    ;; singleton policies can inspect it.
+    (dolist (m built)
+      (when (slothbar-module-p m)
+        (setf (slothbar-module-backend m) backend)))
     (let ((claimed
            (cl-loop for other in slothbar--bars
                     unless (eq other bar)
@@ -785,8 +790,7 @@ NVAL is check against the existing value for any changes."
       (setq built (nreverse kept)))
     (dolist (m built)
       (when (slothbar-module-p m)
-        (setf (slothbar-module-backend m) backend
-              (slothbar-module-bar m) bar)))
+        (setf (slothbar-module-bar m) bar)))
     (if bar
         (setf (slothbar-module-list bar) built)
       (setq slothbar--modules built))
