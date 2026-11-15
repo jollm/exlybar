@@ -97,6 +97,7 @@
   (require 'slothbar)
   (require 'slothbar-module-)
   (require 'slothbar-backend-wayland)
+  (require 'slothbar-popup)
   (let ((font (getenv "SLOTHBAR_TEST_FONT")))
     (unless (and font (file-exists-p font))
       (error "SLOTHBAR_TEST_FONT must name an existing font file"))
@@ -356,6 +357,16 @@
             (slothbar-wayland-check
              "glyphs are not clipped at the bottom"
              (and max-y (< max-y (1- height)))))
+          ;; Popup infrastructure anchored to the bar.
+          (let ((popup (slothbar-popup-create bar 10 5 80 40)))
+            (slothbar-wayland-check "popup was created" popup)
+            (slothbar-wayland-check "popup configured"
+                                    (slothbar-popup-configured-p popup))
+            (slothbar-wayland-check "popup is not dismissed"
+                                    (not (slothbar-popup-done-p popup)))
+            (slothbar-popup-destroy popup)
+            (slothbar-wayland-check "popup was destroyed"
+                                    (null (slothbar-popup-state popup))))
           ;; Backend-neutral image placements must composite into the frame.
           (let* ((data (apply #'unibyte-string
                               (cl-loop repeat 16 append '(255 0 0 255))))

@@ -67,7 +67,8 @@
                          elwl-seat
                          elwl-shm
                          elwl-surface
-                         elwl-workspace))
+                         elwl-workspace
+                         elwl-xdg))
         (unless (require feature nil t)
           (error "Missing elwl component %s" feature)))
       (setq slothbar-backend-wayland--elwl-available-p t))
@@ -96,6 +97,7 @@
 (declare-function elwl-layer-surface-set-exclusive-zone "elwl" (&rest args))
 (declare-function elwl-layer-surface-set-keyboard-interactivity "elwl" (&rest args))
 (declare-function elwl-layer-surface-set-margin "elwl" (&rest args))
+(declare-function elwl-layer-surface-get-popup "elwl" (&rest args))
 (declare-function elwl-layer-surface-set-size "elwl" (&rest args))
 (declare-function elwl-object-add-listener "elwl" (&rest args))
 (declare-function elwl-object-version "elwl" (&rest args))
@@ -111,6 +113,7 @@
 (declare-function elwl-protocol-load-ext-workspace "elwl" (&rest args))
 (declare-function elwl-protocol-load-layer-shell "elwl" (&rest args))
 (declare-function elwl-protocol-load-wayland "elwl" (&rest args))
+(declare-function elwl-protocol-load-xdg-shell "elwl" (&rest args))
 (declare-function elwl-protocol-load-wlr-foreign-toplevel "elwl" (&rest args))
 (declare-function elwl-registry-bind "elwl" (&rest args))
 (declare-function elwl-registry-find "elwl" (&rest args))
@@ -129,6 +132,19 @@
 (declare-function elwl-shm-pool-create-buffer "elwl" (&rest args))
 (declare-function elwl-shm-pool-destroy "elwl" (&rest args))
 (declare-function elwl-shm-pool-p "elwl" (&rest args))
+(declare-function elwl-xdg-create-popup "elwl" (&rest args))
+(declare-function elwl-xdg-create-positioner "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-destroy "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-anchor "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-anchor-rect "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-constraint-adjustment "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-gravity "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-reactive "elwl" (&rest args))
+(declare-function elwl-xdg-positioner-set-size "elwl" (&rest args))
+(declare-function elwl-xdg-popup-configured-p "elwl" (&rest args))
+(declare-function elwl-xdg-popup-destroy "elwl" (&rest args))
+(declare-function elwl-xdg-popup-done-p "elwl" (&rest args))
+(declare-function elwl-xdg-shell-bind "elwl" (&rest args))
 (declare-function elwl-surface-attach "elwl" (&rest args))
 (declare-function elwl-surface-commit "elwl" (&rest args))
 (declare-function elwl-surface-destroy "elwl" (&rest args))
@@ -161,6 +177,7 @@
   compositor
   shm
   layer-shell
+  xdg-wm
   outputs
   scale-watched
   ext-workspace-manager
@@ -198,6 +215,24 @@
   frame
   (module-ops (make-hash-table :test 'eq) :type 'hash-table))
 
+(cl-defstruct
+    (slothbar-backend-wayland-popup
+     (:constructor slothbar-backend-wayland-popup--make)
+     (:copier nil))
+  "A Wayland xdg popup anchored to a slothbar bar."
+  backend
+  bar
+  surface
+  xdg-popup
+  positioner
+  width
+  height
+  scale
+  (configured nil)
+  (done nil)
+  pool
+  buffers)
+
 (cl-defmethod cl-print-object
     ((surface slothbar-backend-wayland-surface) stream)
   "Print SURFACE compactly in Help and `cl-prin1'."
@@ -233,7 +268,7 @@
 (cl-defmethod slothbar-backend-supports-p
   ((backend slothbar-backend-wayland) feature)
   "The Wayland backend has no X-only facilities."
-  (or (memq feature '(surface exclusive-zone layer-shell buffer-scale))
+  (or (memq feature '(surface exclusive-zone layer-shell buffer-scale popup))
       (and (eq feature 'pointer-input)
            (slothbar-backend-wayland-pointer backend))
       (and (eq feature 'ext-workspace)
@@ -793,6 +828,103 @@ Return non-nil if a buffer was presented."
             (slothbar-backend-wayland-surface-presented surface) t)
       t)))
 
+;;; Popups
+
+(defun slothbar-backend-wayland--popup-create (backend bar x y width height)
+  "Create a popup for BAR at X,Y with WIDTH and HEIGHT."
+  (let* ((xdg-wm (slothbar-backend-wayland-xdg-wm backend))
+         (bar-state (slothbar-surface bar))
+         (scale (if bar-state
+                    (slothbar-backend-wayland-surface-scale bar-state)
+                  1))
+         (surface (elwl-compositor-create-surface
+                   (slothbar-backend-wayland-compositor backend)))
+         (positioner (elwl-xdg-create-positioner xdg-wm))
+         (popup (slothbar-backend-wayland-popup--make
+                 :backend backend :bar bar :surface surface
+                 :positioner positioner :width width :height height
+                 :scale scale))
+         (xdg-popup nil))
+    (elwl-xdg-positioner-set-size positioner width height)
+    (elwl-xdg-positioner-set-anchor-rect positioner x y 1 1)
+    (elwl-xdg-positioner-set-anchor positioner '(bottom right))
+    (elwl-xdg-positioner-set-gravity positioner '(bottom right))
+    (elwl-xdg-positioner-set-constraint-adjustment positioner '(slide-x slide-y))
+    (elwl-xdg-positioner-set-reactive positioner)
+    (setq xdg-popup
+          (elwl-xdg-create-popup
+           xdg-wm surface nil positioner
+           :on-configure
+           (lambda (_popup _arguments)
+             (setf (slothbar-backend-wayland-popup-configured popup) t))
+           :on-done
+           (lambda (_popup)
+             (setf (slothbar-backend-wayland-popup-done popup) t))))
+    (setf (slothbar-backend-wayland-popup-xdg-popup popup) xdg-popup)
+    (elwl-layer-surface-get-popup
+     (slothbar-backend-wayland-surface-layer-surface bar-state)
+     xdg-popup)
+    (elwl-surface-commit surface)
+    (unless (slothbar-backend-wayland--wait-for
+             backend
+             (lambda () (slothbar-backend-wayland-popup-configured popup))
+             5)
+      (slothbar-backend-destroy-popup backend popup)
+      (error "Wayland popup did not configure"))
+    (let* ((pixel-width (* width scale))
+           (pixel-height (* height scale))
+           (bytes (* pixel-width pixel-height 4))
+           (shm (slothbar-backend-wayland-shm backend))
+           (pool (elwl-shm-create-pool shm bytes))
+           (buffers (list (elwl-shm-pool-create-buffer
+                           pool pixel-width pixel-height 'argb8888 0))))
+      (setf (slothbar-backend-wayland-popup-pool popup) pool
+            (slothbar-backend-wayland-popup-buffers popup) buffers)
+      (let ((buffer (car buffers)))
+        (elwl-shm-buffer-write buffer (make-string bytes 0))
+        (elwl-surface-present surface buffer
+                              :scale (if (>= (elwl-object-version surface) 3)
+                                         scale nil)
+                              :damage (list 0 0 width height)
+                              :x 0 :y 0)))
+    popup))
+
+(cl-defmethod slothbar-backend-create-popup
+    ((backend slothbar-backend-wayland) bar x y width height)
+  "Create a Wayland popup for BAR."
+  (when (and (slothbar-backend-wayland-xdg-wm backend)
+             (slothbar-surface bar))
+    (slothbar-backend-wayland--popup-create backend bar x y width height)))
+
+(cl-defmethod slothbar-backend-popup-configured-p
+    ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
+  "Return non-nil when POPUP has configured."
+  (slothbar-backend-wayland-popup-configured popup))
+
+(cl-defmethod slothbar-backend-popup-done-p
+    ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
+  "Return non-nil when POPUP has been dismissed."
+  (slothbar-backend-wayland-popup-done popup))
+
+(cl-defmethod slothbar-backend-destroy-popup
+    ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
+  "Destroy POPUP and its Wayland resources."
+  (when-let* ((xdg-popup (slothbar-backend-wayland-popup-xdg-popup popup)))
+    (elwl-xdg-popup-destroy xdg-popup))
+  (when-let* ((surface (slothbar-backend-wayland-popup-surface popup)))
+    (elwl-surface-destroy surface))
+  (when-let* ((positioner (slothbar-backend-wayland-popup-positioner popup)))
+    (elwl-xdg-positioner-destroy positioner))
+  (slothbar-backend-wayland--destroy-pool
+   (slothbar-backend-wayland-popup-pool popup)
+   (slothbar-backend-wayland-popup-buffers popup))
+  (setf (slothbar-backend-wayland-popup-xdg-popup popup) nil
+        (slothbar-backend-wayland-popup-surface popup) nil
+        (slothbar-backend-wayland-popup-positioner popup) nil
+        (slothbar-backend-wayland-popup-pool popup) nil
+        (slothbar-backend-wayland-popup-buffers popup) nil)
+  nil)
+
 ;;; Layer-shell configuration
 
 (defun slothbar-backend-wayland--exclusive-zone (surface)
@@ -906,6 +1038,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
   (condition-case err
       (let* ((protocols (list (elwl-protocol-load-wayland)
                               (elwl-protocol-load-layer-shell)
+                              (elwl-protocol-load-xdg-shell)
                               (elwl-protocol-load-ext-workspace)
                               (elwl-protocol-load-wlr-foreign-toplevel)))
              (connection (elwl-connect protocols)))
@@ -918,7 +1051,9 @@ VISIBLE non-nil reserves the bar's exclusive zone."
                 (slothbar-backend-wayland-shm backend)
                 (elwl-registry-bind registry 'wl-shm 1)
                 (slothbar-backend-wayland-layer-shell backend)
-                (elwl-layer-shell-bind registry))
+                (elwl-layer-shell-bind registry)
+                (slothbar-backend-wayland-xdg-wm backend)
+                (elwl-xdg-shell-bind registry))
           (when (elwl-registry-find registry 'wl-seat)
             (let ((seat (elwl-seat-bind registry)))
               (setf (slothbar-backend-wayland-seat backend) seat)
