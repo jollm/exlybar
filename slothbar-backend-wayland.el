@@ -154,6 +154,8 @@
 (declare-function elwl-workspace-manager-dead "elwl" (&rest args))
 (declare-function elwl-workspace-manager-done "elwl" (&rest args))
 (declare-function elwl-workspace-manager-stop "elwl" (&rest args))
+(declare-function slothbar-popup-dispatch-motion "slothbar-popup" (backend surface x y))
+(declare-function slothbar-popup-dispatch-button "slothbar-popup" (backend surface x y button))
 
 (require 'fontsloth)
 (require 'fontsloth-layout)
@@ -290,16 +292,20 @@
    (slothbar-backend-bars backend)))
 
 (defun slothbar-backend-wayland--pointer-motion (backend x y)
-  "Dispatch pointer motion at X,Y on BACKEND when over a bar."
-  (when-let* ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
-    (condition-case err
-        (run-hook-with-args
-         'slothbar-backend-pointer-motion-hook
-         backend bar
-         (and x (round x))
-         (and y (round y)))
-      (error
-       (slothbar--log-debug* "pointer motion hook error: %S" err)))))
+  "Dispatch pointer motion at X,Y on BACKEND over a bar or popup."
+  (if-let* ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
+      (condition-case err
+          (run-hook-with-args
+           'slothbar-backend-pointer-motion-hook
+           backend bar
+           (and x (round x))
+           (and y (round y)))
+        (error
+         (slothbar--log-debug* "pointer motion hook error: %S" err)))
+    (when (fboundp 'slothbar-popup-dispatch-motion)
+      (slothbar-popup-dispatch-motion
+       backend (slothbar-backend-wayland-pointer-surface backend)
+       (and x (round x)) (and y (round y))))))
 
 (defun slothbar-backend-wayland--ensure-pointer (backend)
   "Create BACKEND's pointer when the seat advertises one."
@@ -371,25 +377,28 @@
 
 (defun slothbar-backend-wayland--pointer-button (backend arguments)
   "Dispatch a pointer button event from ARGUMENTS on BACKEND."
-  (let ((bar (slothbar-backend-wayland--bar-for-pointer backend)))
-    (when (and bar
-               (or (eq (alist-get 'state arguments) 'pressed)
-                   (eql (alist-get 'state arguments) 1)))
-    (let ((button (pcase (alist-get 'button arguments)
-                    (272 :left)
-                    (273 :right)
-                    (274 :middle))))
+  (when (or (eq (alist-get 'state arguments) 'pressed)
+            (eql (alist-get 'state arguments) 1))
+    (let* ((button (pcase (alist-get 'button arguments)
+                     (272 :left)
+                     (273 :right)
+                     (274 :middle)))
+           (x (round (or (slothbar-backend-wayland-pointer-x backend) 0)))
+           (y (round (or (slothbar-backend-wayland-pointer-y backend) 0)))
+           (bar (slothbar-backend-wayland--bar-for-pointer backend)))
       (when button
-        (condition-case err
-            (run-hook-with-args
-             'slothbar-backend-pointer-button-hook
-             backend bar
-             (round (or (slothbar-backend-wayland-pointer-x backend) 0))
-             (round (or (slothbar-backend-wayland-pointer-y backend) 0))
-             button)
-          (error
-           (slothbar--log-debug*
-            "pointer button hook error: %S" err))))))))
+        (if bar
+            (condition-case err
+                (run-hook-with-args
+                 'slothbar-backend-pointer-button-hook
+                 backend bar x y button)
+              (error
+               (slothbar--log-debug*
+                "pointer button hook error: %S" err)))
+          (when (fboundp 'slothbar-popup-dispatch-button)
+            (slothbar-popup-dispatch-button
+             backend (slothbar-backend-wayland-pointer-surface backend)
+             x y button)))))))
 
 (cl-defmethod slothbar-backend-focused-window
   ((backend slothbar-backend-wayland))
@@ -888,6 +897,11 @@ Return non-nil if a buffer was presented."
   (when (and (slothbar-backend-wayland-xdg-wm backend)
              (slothbar-surface bar))
     (slothbar-backend-wayland--popup-create backend bar x y width height)))
+
+(cl-defmethod slothbar-backend-popup-surface
+    ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))
+  "Return POPUP's raw wl_surface."
+  (slothbar-backend-wayland-popup-surface popup))
 
 (cl-defmethod slothbar-backend-popup-configured-p
     ((_backend slothbar-backend-wayland) (popup slothbar-backend-wayland-popup))

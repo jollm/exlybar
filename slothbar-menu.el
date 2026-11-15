@@ -49,7 +49,10 @@
   rows
   width
   height
-  default-row-height)
+  default-row-height
+  dbusmenu
+  popup
+  selected)
 
 (defun slothbar-menu--font ()
   "Return the primary menu font, or nil."
@@ -97,7 +100,8 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
     (slothbar-menu--make
      :root root :rows (nreverse rows)
      :width (max 1 (round width)) :height (max 1 (round y))
-     :default-row-height row-height)))
+     :default-row-height row-height
+     :dbusmenu (and (slothbar-dbusmenu-p menu-or-root) menu-or-root))))
 
 (defun slothbar-menu--rgba (color)
   "Return COLOR as an RGBA byte list."
@@ -183,22 +187,80 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
          (foreground (or (slothbar--foreground-color)
                          (slothbar-color-from-name "#ffffff"))))
     (slothbar-menu--fill frame width height background)
-    (dolist (row (slothbar-menu-rows menu))
-      (let ((row-y (slothbar-menu-row-y row))
-            (row-height (slothbar-menu-row-height row)))
-        (if (equal "separator" (slothbar-menu-row-type row))
+    (let ((index 0))
+      (dolist (row (slothbar-menu-rows menu))
+        (let ((row-y (slothbar-menu-row-y row))
+              (row-height (slothbar-menu-row-height row)))
+          (when (and (slothbar-menu-selected menu)
+                     (= index (slothbar-menu-selected menu)))
             (slothbar-menu--fill-row
-             frame width slothbar-menu-padding
-             (+ row-y (max 0 (1- (/ row-height 2))))
-             (max 1 (- width (* 2 slothbar-menu-padding))) 1 foreground)
-          (slothbar-menu--render-label
-           frame width height slothbar-menu-padding row-y
-           (slothbar-menu-row-label row)
-           (if (eq t (slothbar-dbusmenu-item-enabled
-                      (slothbar-menu-row-item row)))
-               foreground
-             (slothbar-color-brighten background 0.5))))))
+             frame width 0 row-y width row-height
+             (slothbar-color-brighten background 1.4)))
+          (if (equal "separator" (slothbar-menu-row-type row))
+              (slothbar-menu--fill-row
+               frame width slothbar-menu-padding
+               (+ row-y (max 0 (1- (/ row-height 2))))
+               (max 1 (- width (* 2 slothbar-menu-padding))) 1 foreground)
+            (slothbar-menu--render-label
+             frame width height slothbar-menu-padding row-y
+             (slothbar-menu-row-label row)
+             (if (eq t (slothbar-dbusmenu-item-enabled
+                        (slothbar-menu-row-item row)))
+                 foreground
+               (slothbar-color-brighten background 0.5)))))
+        (setq index (1+ index))))
     frame))
+
+(defun slothbar-menu--row-index-at-y (menu y)
+  "Return MENU's row index at Y, or nil."
+  (cl-loop for row in (slothbar-menu-rows menu)
+           for index from 0
+           when (and (>= y (slothbar-menu-row-y row))
+                     (< y (+ (slothbar-menu-row-y row)
+                             (slothbar-menu-row-height row))))
+           return index))
+
+(defun slothbar-menu-select (menu index)
+  "Select row INDEX in MENU and redraw it."
+  (setf (slothbar-menu-selected menu) index)
+  (when-let* ((popup (slothbar-menu-popup menu)))
+    (slothbar-popup-present popup (slothbar-menu-render-frame menu)))
+  index)
+
+(defun slothbar-menu-motion (menu x y)
+  "Update MENU's selected row for pointer position X,Y."
+  (ignore x)
+  (if (numberp y)
+      (slothbar-menu-select menu (slothbar-menu--row-index-at-y menu y))
+    (slothbar-menu-select menu nil)))
+
+(defun slothbar-menu-close (menu)
+  "Close MENU's popup."
+  (when-let* ((popup (slothbar-menu-popup menu)))
+    (slothbar-popup-destroy popup))
+  (setf (slothbar-menu-popup menu) nil
+        (slothbar-menu-selected menu) nil))
+
+(defun slothbar-menu-click (menu x y button)
+  "Handle a BUTTON press at X,Y on MENU."
+  (let* ((index (slothbar-menu--row-index-at-y menu y))
+         (row (and index (nth index (slothbar-menu-rows menu))))
+         (item (and row (slothbar-menu-row-item row)))
+         (dbusmenu (slothbar-menu-dbusmenu menu)))
+    (cond
+     ((and (eq button :left) row item dbusmenu
+           (slothbar-dbusmenu-item-enabled item)
+           (not (equal "separator" (slothbar-dbusmenu-item-type item))))
+      (slothbar-dbusmenu-click dbusmenu
+                               (slothbar-dbusmenu-item-id item))
+      (slothbar-menu-close menu)
+      t)
+     ((eq button :right)
+      (slothbar-menu-close menu)
+      t)
+     (t
+      (ignore x y)
+      nil))))
 
 (defun slothbar-menu-show (menu bar x y)
   "Show MENU as a popup on BAR at X,Y.
@@ -208,6 +270,12 @@ Return the `slothbar-popup' or nil."
                  bar x y (slothbar-menu-width menu)
                  (slothbar-menu-height menu))))
     (when popup
+      (setf (slothbar-menu-popup menu) popup
+            (slothbar-popup-motion-function popup)
+            (lambda (px py) (slothbar-menu-motion menu px py))
+            (slothbar-popup-button-function popup)
+            (lambda (px py button)
+              (slothbar-menu-click menu px py button)))
       (slothbar-popup-present popup frame)
       popup)))
 

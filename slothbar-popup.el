@@ -29,7 +29,37 @@
   y
   width
   height
-  state)
+  state
+  motion-function
+  button-function)
+
+(defvar slothbar-popup--active nil
+  "Popups currently eligible for pointer input.")
+
+(defun slothbar-popup--at-surface (backend surface)
+  "Return the active popup on BACKEND at SURFACE."
+  (when surface
+    (cl-find-if
+     (lambda (popup)
+       (and (eq backend (slothbar-popup-backend popup))
+            (eq surface
+                (slothbar-backend-popup-surface
+                 backend (slothbar-popup-state popup)))))
+     slothbar-popup--active)))
+
+(defun slothbar-popup-dispatch-motion (backend surface x y)
+  "Forward motion at X,Y on SURFACE to an active popup."
+  (when-let* ((popup (slothbar-popup--at-surface backend surface))
+              (function (slothbar-popup-motion-function popup)))
+    (funcall function x y)
+    t))
+
+(defun slothbar-popup-dispatch-button (backend surface x y button)
+  "Forward a BUTTON press at X,Y on SURFACE to an active popup."
+  (when-let* ((popup (slothbar-popup--at-surface backend surface))
+              (function (slothbar-popup-button-function popup)))
+    (funcall function x y button)
+    t))
 
 (defun slothbar-popup-create (bar x y width height)
   "Create a popup anchored to BAR at X,Y with WIDTH and HEIGHT.
@@ -38,11 +68,13 @@ Return a `slothbar-popup', or nil when the backend has no popup support."
     (when backend
       (when-let* ((state (slothbar-backend-create-popup
                           backend bar x y width height)))
-        (slothbar-popup--make
-         :backend backend
-         :bar bar
-         :x x :y y :width width :height height
-         :state state)))))
+        (let ((popup (slothbar-popup--make
+                      :backend backend
+                      :bar bar
+                      :x x :y y :width width :height height
+                      :state state)))
+          (push popup slothbar-popup--active)
+          popup)))))
 
 (defun slothbar-popup-configured-p (popup)
   "Return non-nil when POPUP has been configured."
@@ -69,6 +101,7 @@ Return a `slothbar-popup', or nil when the backend has no popup support."
 (defun slothbar-popup-destroy (popup)
   "Destroy POPUP."
   (when popup
+    (setq slothbar-popup--active (delq popup slothbar-popup--active))
     (slothbar-backend-destroy-popup
      (slothbar-popup-backend popup)
      (slothbar-popup-state popup))

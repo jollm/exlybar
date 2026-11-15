@@ -36,6 +36,8 @@
 
 (require 'slothbar-log)
 (require 'slothbar-module-)
+(require 'slothbar-dbusmenu)
+(require 'slothbar-menu)
 (require 'slothbar-tray)
 
 (declare-function umbra-png-read "umbra-png" (path))
@@ -693,29 +695,47 @@ for an object-path registration."
              return item
              do (setq left (+ left width gap)))))
 
+(defun slothbar-tray-sni--show-menu (m item x)
+  "Open ITEM's dbusmenu popup on M at X."
+  (when-let* ((path (slothbar-tray-sni-item-menu item))
+              (service (slothbar-tray-sni-item-service item))
+              (bar (slothbar-module--bar m)))
+    (let* ((dbusmenu (slothbar-dbusmenu--make
+                      :service service :path path))
+           (menu (and (slothbar-dbusmenu-refresh dbusmenu)
+                      (slothbar-menu-create dbusmenu))))
+      (when menu
+        (ignore-errors (slothbar-dbusmenu-about-to-show dbusmenu 0))
+        (slothbar-menu-show menu bar (round x) 0)))))
+
 (defun slothbar-tray-sni-click (m x y button)
   "Activate the SNI item at X,Y on M for BUTTON."
-  (when-let* ((item (slothbar-tray-sni--item-at-x m x))
-              (method (pcase button
-                        (:left (if (slothbar-tray-sni-item-item-is-menu item)
-                                   "ContextMenu"
-                                 "Activate"))
-                        (:middle "SecondaryActivate")
-                        (:right "ContextMenu")))
-              (service (slothbar-tray-sni-item-service item))
-              (path (slothbar-tray-sni-item-path item)))
-    (condition-case err
-        (progn
-          (slothbar--log-debug* "SNI %s %s%s at %d,%d"
-                                method service path (round x) (round y))
-          (dbus-call-method :session service path
-                            slothbar-tray-sni--item-interface
-                            method (round x) (round y))
-          t)
-      (error
-       (slothbar--log-debug* "SNI %s failed for %s: %S"
-                             method service err)
-       nil))))
+  (when-let* ((item (slothbar-tray-sni--item-at-x m x)))
+    (if (and (slothbar-tray-sni-item-menu item)
+             (or (eq button :right)
+                 (and (eq button :left)
+                      (slothbar-tray-sni-item-item-is-menu item))))
+        (or (slothbar-tray-sni--show-menu m item x)
+            (slothbar--log-debug* "SNI menu unavailable for %s"
+                                  (slothbar-tray-sni-item-id item)))
+      (when-let* ((method (pcase button
+                            (:left "Activate")
+                            (:middle "SecondaryActivate")
+                            (:right "ContextMenu")))
+                  (service (slothbar-tray-sni-item-service item))
+                  (path (slothbar-tray-sni-item-path item)))
+        (condition-case err
+            (progn
+              (slothbar--log-debug* "SNI %s %s%s at %d,%d"
+                                    method service path (round x) (round y))
+              (dbus-call-method :session service path
+                                slothbar-tray-sni--item-interface
+                                method (round x) (round y))
+              t)
+          (error
+           (slothbar--log-debug* "SNI %s failed for %s: %S"
+                                 method service err)
+           nil))))))
 
 (defun slothbar-tray-sni-exit (m)
   "Stop M's SNI transport, tearing down the watcher after the last module."

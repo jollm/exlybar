@@ -143,6 +143,13 @@ Return a backend-specific popup state, or nil when unsupported.")
   "Default: unknown popups are not dismissed."
   nil)
 
+(cl-defgeneric slothbar-backend-popup-surface (backend popup)
+  "Return BACKEND's raw surface for POPUP, if any.")
+
+(cl-defmethod slothbar-backend-popup-surface ((_backend t) (_popup t))
+  "Default: unknown popup surface."
+  nil)
+
 (cl-defgeneric slothbar-backend-present-popup (backend popup frame)
   "Present FRAME in BACKEND's POPUP.
 FRAME is a logical-width-by-logical-height unibyte RGBA string.")
