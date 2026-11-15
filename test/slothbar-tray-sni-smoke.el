@@ -19,6 +19,16 @@
 
 (defconst slothbar-sni-test--item "org.kde.StatusNotifierItem-Test")
 
+(defconst slothbar-sni-test--icon
+  '(:array (:struct :int32 1 :int32 1
+            (:array :byte 255 :byte 0 :byte 255 :byte 0))))
+(defconst slothbar-sni-test--attention-icon
+  '(:array (:struct :int32 1 :int32 1
+            (:array :byte 255 :byte 255 :byte 0 :byte 0))))
+(defconst slothbar-sni-test--overlay-icon
+  '(:array (:struct :int32 1 :int32 1
+            (:array :byte 255 :byte 0 :byte 0 :byte 255))))
+
 (defun slothbar-sni-test--check (label value)
   "Record LABEL as passing when VALUE is non-nil."
   (princ (format "%s: %s\n" (if value "ok" "FAILED") label))
@@ -39,6 +49,10 @@
     (dbus-register-property
      :session slothbar-sni-test--item "/StatusNotifierItem"
      "org.kde.StatusNotifierItem" (car property) :readwrite (cdr property)))
+  (dbus-register-property
+   :session slothbar-sni-test--item "/StatusNotifierItem"
+   "org.kde.StatusNotifierItem" "IconPixmap" :readwrite
+   slothbar-sni-test--icon)
   (dbus-register-method
    :session slothbar-sni-test--item "/StatusNotifierItem"
    "org.kde.StatusNotifierItem" "Activate"
@@ -73,13 +87,57 @@
                                      (equal "Test Item"
                                             (slothbar-tray-sni-item-title
                                              (car items)))))
-      ;; No IconPixmap was supplied by the fake item.  Inject a synthetic
-      ;; image to exercise layout, hit testing, and activation.
-      (setf (slothbar-tray-sni-item-image (car items))
-            (list 8 8 (make-string (* 8 8 4) 255)))
+      (slothbar-sni-test--check "IconPixmap produced an image"
+                                (slothbar-tray-sni-item-image (car items)))
       (slothbar-tray-sni--layout module)
       (slothbar-sni-test--check "icon layout produced an image placement"
                                 (= 1 (length (slothbar-module-images module))))
+      (dbus-set-property
+       :session slothbar-sni-test--item "/StatusNotifierItem"
+       "org.kde.StatusNotifierItem" "IconPixmap"
+       '(:array (:struct :int32 1 :int32 1
+                 (:array :byte 255 :byte 0 :byte 0 :byte 255))))
+      (dbus-send-signal :session nil "/StatusNotifierItem"
+                        "org.kde.StatusNotifierItem" "NewIcon")
+      (read-event nil nil 0.2)
+      (slothbar-sni-test--check "NewIcon replaces the icon"
+                                (equal '(0 0 255 255)
+                                       (list (aref (nth 2 (slothbar-tray-sni-item-image
+                                                           (car slothbar-tray-sni--items)))
+                                                   0)
+                                             (aref (nth 2 (slothbar-tray-sni-item-image
+                                                           (car slothbar-tray-sni--items)))
+                                                   1)
+                                             (aref (nth 2 (slothbar-tray-sni-item-image
+                                                           (car slothbar-tray-sni--items)))
+                                                   2)
+                                             (aref (nth 2 (slothbar-tray-sni-item-image
+                                                           (car slothbar-tray-sni--items)))
+                                                   3))))
+      (dbus-register-property
+       :session slothbar-sni-test--item "/StatusNotifierItem"
+       "org.kde.StatusNotifierItem" "AttentionIconPixmap" :readwrite
+       slothbar-sni-test--attention-icon)
+      (dbus-set-property :session slothbar-sni-test--item
+                         "/StatusNotifierItem"
+                         "org.kde.StatusNotifierItem" "Status" "NeedsAttention")
+      (dbus-send-signal :session nil "/StatusNotifierItem"
+                        "org.kde.StatusNotifierItem" "NewAttentionIcon")
+      (read-event nil nil 0.2)
+      (slothbar-sni-test--check "NeedsAttention selects the attention icon"
+                                (equal 255 (aref (nth 2 (slothbar-tray-sni--base-image
+                                                         (car slothbar-tray-sni--items)))
+                                                 0)))
+      (dbus-register-property
+       :session slothbar-sni-test--item "/StatusNotifierItem"
+       "org.kde.StatusNotifierItem" "OverlayIconPixmap" :readwrite
+       slothbar-sni-test--overlay-icon)
+      (dbus-send-signal :session nil "/StatusNotifierItem"
+                        "org.kde.StatusNotifierItem" "NewOverlayIcon")
+      (read-event nil nil 0.2)
+      (slothbar-tray-sni--layout module)
+      (slothbar-sni-test--check "overlay adds a second image placement"
+                                (= 2 (length (slothbar-module-images module))))
       (slothbar-tray-sni-click module
                               (+ (slothbar-module-lpad module) 1) 0 :left)
       (slothbar-sni-test--check "Activate reached the item"
