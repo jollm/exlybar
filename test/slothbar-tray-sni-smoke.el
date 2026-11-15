@@ -45,10 +45,20 @@
   (dolist (property '(("Id" . "test-item")
                       ("Title" . "Test Item")
                       ("Status" . "Active")
+                      ("Category" . "ApplicationStatus")
                       ("IconName" . "test-icon")))
     (dbus-register-property
      :session slothbar-sni-test--item "/StatusNotifierItem"
      "org.kde.StatusNotifierItem" (car property) :readwrite (cdr property)))
+  (dbus-register-property
+   :session slothbar-sni-test--item "/StatusNotifierItem"
+   "org.kde.StatusNotifierItem" "WindowId" :readwrite :int32 42)
+  (dbus-register-property
+   :session slothbar-sni-test--item "/StatusNotifierItem"
+   "org.kde.StatusNotifierItem" "ItemIsMenu" :readwrite nil)
+  (dbus-register-property
+   :session slothbar-sni-test--item "/StatusNotifierItem"
+   "org.kde.StatusNotifierItem" "XAyatanaOrderingIndex" :readwrite :int32 7)
   (dbus-register-property
    :session slothbar-sni-test--item "/StatusNotifierItem"
    "org.kde.StatusNotifierItem" "IconPixmap" :readwrite
@@ -86,6 +96,12 @@
                                              (car items)))
                                      (equal "Test Item"
                                             (slothbar-tray-sni-item-title
+                                             (car items)))
+                                     (equal 42
+                                            (slothbar-tray-sni-item-window-id
+                                             (car items)))
+                                     (equal 7
+                                            (slothbar-tray-sni-item-ordering-index
                                              (car items)))))
       (slothbar-sni-test--check "IconPixmap produced an image"
                                 (slothbar-tray-sni-item-image (car items)))
@@ -146,6 +162,15 @@
                               (+ (slothbar-module-lpad module) 1) 0 :middle)
       (slothbar-sni-test--check "SecondaryActivate reached the item"
                                 (equal secondary '(5 0)))
+      (dbus-set-property :session slothbar-sni-test--item
+                         "/StatusNotifierItem"
+                         "org.kde.StatusNotifierItem" "ItemIsMenu" t)
+      (slothbar-tray-sni--refresh-item slothbar-sni-test--item
+                                       "/StatusNotifierItem")
+      (slothbar-tray-sni-click module
+                              (+ (slothbar-module-lpad module) 1) 0 :left)
+      (slothbar-sni-test--check "ItemIsMenu opens ContextMenu"
+                                (equal context '(5 0)))
       (dbus-set-property :session slothbar-sni-test--item
                          "/StatusNotifierItem"
                          "org.kde.StatusNotifierItem"

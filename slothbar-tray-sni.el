@@ -60,6 +60,10 @@
   id
   title
   status
+  category
+  window-id
+  item-is-menu
+  ordering-index
   icon-name
   icon-pixmap
   attention-icon-name
@@ -370,6 +374,18 @@ THEME-PATHS may be a string or a list of strings."
               (error-message-string err))
      nil)))
 
+(defun slothbar-tray-sni--sort-items (items)
+  "Sort ITEMS by XAyatanaOrderingIndex, preserving registration order."
+  (cl-stable-sort
+   items
+   (lambda (a b)
+     (let ((ai (slothbar-tray-sni-item-ordering-index a))
+           (bi (slothbar-tray-sni-item-ordering-index b)))
+       (cond ((and ai bi) (< ai bi))
+             (ai t)
+             (bi nil)
+             (t nil))))))
+
 (defun slothbar-tray-sni--add-item (service path)
   "Add or replace the item at SERVICE/PATH."
   (let* ((icon-pixmap
@@ -391,6 +407,12 @@ THEME-PATHS may be a string or a list of strings."
                 :id (slothbar-tray-sni--property service path "Id")
                 :title (slothbar-tray-sni--property service path "Title")
                 :status (slothbar-tray-sni--property service path "Status")
+                :category (slothbar-tray-sni--property service path "Category")
+                :window-id (slothbar-tray-sni--property service path "WindowId")
+                :item-is-menu
+                (slothbar-tray-sni--property service path "ItemIsMenu")
+                :ordering-index
+                (slothbar-tray-sni--property service path "XAyatanaOrderingIndex")
                 :icon-name icon-name
                 :icon-pixmap icon-pixmap
                 :attention-icon-name attention-name
@@ -410,12 +432,13 @@ THEME-PATHS may be a string or a list of strings."
                 :image (slothbar-tray-sni--resolve-icon
                         icon-pixmap icon-name icon-theme-path slothbar-height))))
     (setq slothbar-tray-sni--items
-          (cons item
-                (cl-remove-if
-                 (lambda (old)
-                   (and (equal (slothbar-tray-sni-item-service old) service)
-                        (equal (slothbar-tray-sni-item-path old) path)))
-                 slothbar-tray-sni--items)))
+          (slothbar-tray-sni--sort-items
+           (cons item
+                 (cl-remove-if
+                  (lambda (old)
+                    (and (equal (slothbar-tray-sni-item-service old) service)
+                         (equal (slothbar-tray-sni-item-path old) path)))
+                  slothbar-tray-sni--items))))
     (slothbar-tray-sni--register-signals service path)
     (slothbar-tray-sni--update-watcher-property)
     (slothbar-tray-sni--refresh-module)))
@@ -568,7 +591,9 @@ THEME-PATHS may be a string or a list of strings."
   "Activate the SNI item at X,Y on M for BUTTON."
   (when-let* ((item (slothbar-tray-sni--item-at-x m x))
               (method (pcase button
-                        (:left "Activate")
+                        (:left (if (slothbar-tray-sni-item-item-is-menu item)
+                                   "ContextMenu"
+                                 "Activate"))
                         (:middle "SecondaryActivate")
                         (:right "ContextMenu")))
               (service (slothbar-tray-sni-item-service item))
