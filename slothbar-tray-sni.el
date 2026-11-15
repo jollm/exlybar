@@ -148,13 +148,15 @@ Return (WIDTH HEIGHT RGBA) or nil."
 
 (defun slothbar-tray-sni--register-signals (service path)
   "Register SNI change signals for SERVICE at PATH once."
-  (let ((key (cons service path)))
+  (let* ((key (cons service path))
+         (owner (or (ignore-errors (dbus-get-name-owner :session service))
+                    service)))
     (unless (gethash key slothbar-tray-sni--signal-items)
       (puthash key t slothbar-tray-sni--signal-items)
       (dolist (signal '("NewIcon" "NewStatus" "NewTitle"
                         "NewAttentionIcon" "NewOverlayIcon" "NewToolTip"))
         (dbus-register-signal
-         :session service path slothbar-tray-sni--item-interface signal
+         :session owner path slothbar-tray-sni--item-interface signal
          (lambda (&rest _)
            (slothbar-tray-sni--refresh-item service path)))))))
 

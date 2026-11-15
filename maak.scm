@@ -44,6 +44,11 @@
   "Run the D-Bus StatusNotifier Phase 0 probe."
   ($ '("bash test/slothbar-tray-sni-probe.sh")))
 
+;; Run the production StatusNotifier transport against a fake item.
+(define (test-tray-sni)
+  "Run the live StatusNotifier transport integration test."
+  ($ '("bash test/slothbar-tray-sni-smoke.sh")))
+
 ;; Run the live Wayland backend smoke test under headless sway.
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
