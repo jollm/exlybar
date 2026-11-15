@@ -356,6 +356,26 @@
             (slothbar-wayland-check
              "glyphs are not clipped at the bottom"
              (and max-y (< max-y (1- height)))))
+          ;; Backend-neutral image placements must composite into the frame.
+          (let* ((data (apply #'unibyte-string
+                              (cl-loop repeat 16 append '(255 0 0 255))))
+                 (image-module
+                  (slothbar-module-create :name "image-smoke" :width 10)))
+            (setf (slothbar-module-images image-module)
+                  (list (list 0 0 4 4 data)))
+            (slothbar-backend-present
+             backend bar (list (list (list 0 0) image-module)) nil)
+            (let* ((frame (slothbar-backend-wayland-surface-frame state))
+                   (stride (slothbar-backend-wayland-surface-frame-stride state))
+                   (scale (slothbar-backend-wayland-surface-scale state))
+                   (offset (+ (* (* 2 scale) stride) (* (* 2 scale) 4))))
+              (slothbar-wayland-check
+               "image placements composite with BGRA channel order"
+               (and (= 0 (aref frame offset))
+                    (= 0 (aref frame (1+ offset)))
+                    (= 255 (aref frame (+ offset 2)))
+                    (= 255 (aref frame (+ offset 3))))))
+            (slothbar-module-exit image-module))
           ;; Partial damage must leave pixels outside the damaged span alone.
           (let* ((module-b
                   (slothbar-module-create

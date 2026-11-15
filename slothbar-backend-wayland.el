@@ -611,8 +611,9 @@ DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
                 (when (> alpha 0)
                   (let* ((index (+ (* y stride) (* x 4)))
                          (inverse (- 255 alpha)))
+                    ;; DATA is straight RGBA, while the frame is BGRA.
                     (aset frame index
-                          (/ (+ (* (aref data src) alpha)
+                          (/ (+ (* (aref data (+ src 2)) alpha)
                                 (* (aref frame index) inverse))
                              255))
                     (aset frame (1+ index)
@@ -620,10 +621,28 @@ DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
                                 (* (aref frame (1+ index)) inverse))
                              255))
                     (aset frame (+ index 2)
-                          (/ (+ (* (aref data (+ src 2)) alpha)
+                          (/ (+ (* (aref data src) alpha)
                                 (* (aref frame (+ index 2)) inverse))
                              255))
                     (aset frame (+ index 3) 255)))))))))))
+
+(defun slothbar-backend-wayland--scale-image
+    (data width height new-width new-height)
+  "Scale straight RGBA DATA from WIDTHxHEIGHT to NEW-WIDTHxNEW-HEIGHT."
+  (if (and (= width new-width) (= height new-height))
+      data
+    (let ((out (make-string (* new-width new-height 4) 0)))
+      (dotimes (y new-height)
+        (let ((sy (min (1- height)
+                       (floor (/ (* y height) (float new-height))))))
+          (dotimes (x new-width)
+            (let* ((sx (min (1- width)
+                            (floor (/ (* x width) (float new-width)))))
+                   (source (* (+ sx (* sy width)) 4))
+                   (target (* (+ x (* y new-width)) 4)))
+              (dotimes (n 4)
+                (aset out (+ target n) (aref data (+ source n))))))))
+      out)))
 
 (defun slothbar-backend-wayland--draw-images
     (surface module placement-x placement-y)
@@ -635,11 +654,16 @@ DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
          (frame-height (slothbar-backend-wayland-surface-frame-height surface)))
     (dolist (image (slothbar-module-images module))
       (pcase-let ((`(,x ,y ,width ,height ,data) image))
-        (slothbar-backend-wayland--blend-image
-         frame stride frame-width frame-height
-         (truncate (* scale (+ placement-x x)))
-         (truncate (* scale (+ placement-y y)))
-         (truncate (* scale width)) (truncate (* scale height)) data)))))
+        (let* ((buffer-width (truncate (* scale width)))
+               (buffer-height (truncate (* scale height)))
+               (buffer-data
+                (slothbar-backend-wayland--scale-image
+                 data width height buffer-width buffer-height)))
+          (slothbar-backend-wayland--blend-image
+           frame stride frame-width frame-height
+           (truncate (* scale (+ placement-x x)))
+           (truncate (* scale (+ placement-y y)))
+           buffer-width buffer-height buffer-data))))))
 
 (defun slothbar-backend-wayland--damage-intersects-p (x width damage)
   "Return non-nil when X..X+WIDTH intersects one of DAMAGE's spans."
