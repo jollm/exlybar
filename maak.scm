@@ -49,6 +49,10 @@
   "Run the live StatusNotifier transport integration test."
   ($ '("bash test/slothbar-tray-sni-smoke.sh")))
 
+(define (test-dbusmenu)
+  "Run the dbusmenu client integration test."
+  ($ '("bash test/slothbar-dbusmenu-smoke.sh")))
+
 ;; Run the live Wayland backend smoke test under headless sway.
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
