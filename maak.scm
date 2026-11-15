@@ -39,6 +39,11 @@
   "Run the X backend smoke test under Xvfb and xmonad."
   ($ '("bash test/slothbar-xvfb-smoke.sh")))
 
+;; Phase 0 spike for the Wayland StatusNotifier tray work.
+(define (test-tray-probe)
+  "Run the D-Bus StatusNotifier Phase 0 probe."
+  ($ '("bash test/slothbar-tray-sni-probe.sh")))
+
 ;; Run the live Wayland backend smoke test under headless sway.
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
