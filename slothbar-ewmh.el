@@ -129,10 +129,10 @@ WHERE the context of the operation"
 
 PROP-CLASS the xcb class representing the value to get
 SLOT optional and defaults to \\='value"
-  (slot-value (xcb:+request-unchecked+reply
-                  (slothbar-xcb-connection)
-                  (make-instance prop-class :window win))
-              slot))
+  (when-let* ((reply (xcb:+request-unchecked+reply
+                      (slothbar-xcb-connection)
+                      (make-instance prop-class :window win))))
+    (slot-value reply slot)))
 
 (defsubst slothbar-ewmh--get-root-win-prop (prop-class)
   "Get the root window property represented by PROP-CLASS.
@@ -165,13 +165,13 @@ the stringified desktop numbers."
 (defun slothbar-ewmh--map-client-desktops (client-vec)
   "Given CLIENT-VEC, return an alist mapping clients to desktop numbers."
   (cl-loop for client across client-vec
-           for desktop = (slot-value (xcb:+request-unchecked+reply
-                                         (slothbar-xcb-connection)
-                                         (make-instance
-                                          'xcb:ewmh:get-_NET_WM_DESKTOP
-                                          :window client))
-                                     'value)
-           collect `(,client . ,desktop) into result
+           for reply = (xcb:+request-unchecked+reply
+                        (slothbar-xcb-connection)
+                        (make-instance
+                         'xcb:ewmh:get-_NET_WM_DESKTOP
+                         :window client))
+           for desktop = (and reply (slot-value reply 'value))
+           when desktop collect `(,client . ,desktop) into result
            finally return (map-into result 'hash-table)))
 
 (defun slothbar-ewmh--update-current-desktop ()

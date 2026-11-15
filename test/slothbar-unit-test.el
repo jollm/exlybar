@@ -1622,5 +1622,18 @@
     (should (equal (alist-get ?a (slothbar-module-format-spec m)) "app.org"))
     (should (slothbar-module-needs-refresh? m))))
 
+(ert-deftest slothbar-unit-ewmh-destroyed-window ()
+  "A vanished client window yields nil EWMH properties."
+  (require 'slothbar-ewmh)
+  (cl-letf (((symbol-function 'slothbar-xcb-connection)
+             (lambda () 'fake-connection))
+            ((symbol-function 'xcb:-+request-unchecked)
+             (lambda (&rest _) 'request))
+            ((symbol-function 'xcb:-+reply)
+             (lambda (&rest _) nil)))
+    (should-not (slothbar-ewmh--get-window-property
+                 123 'xcb:ewmh:get-_NET_WM_STATE))
+    (should-not (slothbar-ewmh--window-urgent-p 123))))
+
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
