@@ -96,7 +96,8 @@ used by sources that know whether a workspace is occupied."
                (:constructor slothbar-workspaces-create)
                (:copier nil))
   "A workspaces module."
-  hover-index)
+  hover-index
+  source)
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-workspaces) (backend slothbar-backend))
@@ -462,24 +463,6 @@ first group.  Hidden workspaces are omitted."
                       (elwl-workspace-active-p workspace)
                       (elwl-workspace-urgent-p workspace)))))))
 
-(defvar slothbar-workspaces--ext-subscribers 0
-  "Number of workspaces modules using ext-workspace updates.")
-
-(defun slothbar-workspaces--subscribe-ext-workspace ()
-  "Subscribe the workspaces module to ext-workspace changes."
-  (when (zerop slothbar-workspaces--ext-subscribers)
-    (add-hook 'slothbar-backend-workspace-change-hook
-              #'slothbar-workspaces--ext-workspace-change))
-  (cl-incf slothbar-workspaces--ext-subscribers))
-
-(defun slothbar-workspaces--unsubscribe-ext-workspace ()
-  "Unsubscribe one workspaces module from ext-workspace changes."
-  (setq slothbar-workspaces--ext-subscribers
-        (max 0 (1- slothbar-workspaces--ext-subscribers)))
-  (when (zerop slothbar-workspaces--ext-subscribers)
-    (remove-hook 'slothbar-backend-workspace-change-hook
-                 #'slothbar-workspaces--ext-workspace-change)))
-
 (defun slothbar-workspaces--ext-workspace-change (backend)
   "Refresh workspaces modules when BACKEND's workspace state changes."
   (when (eq backend slothbar--backend)
@@ -493,12 +476,14 @@ Return non-nil when ext-workspace was selected."
     (require 'elwl-workspace nil t)
     (setq slothbar-workspaces-generate-list-fn
           #'slothbar-workspaces-generate-list-fn-ext-workspace)
-    (slothbar-workspaces--subscribe-ext-workspace)
+    (add-hook 'slothbar-backend-workspace-change-hook
+              #'slothbar-workspaces--ext-workspace-change)
     t))
 
 (defun slothbar-workspaces--teardown-ext-workspace ()
   "Stop using ext-workspace for workspace updates."
-  (slothbar-workspaces--unsubscribe-ext-workspace))
+  (remove-hook 'slothbar-backend-workspace-change-hook
+               #'slothbar-workspaces--ext-workspace-change))
 
 ;;; ewmh (extended window manager hints)
 
@@ -726,7 +711,8 @@ Remove chnage functions when ADD? is non-nil."
   "Stop process to listen for herbstluftwm events."
   (when (and slothbar-workspaces--herbstluft-evt-listener-proc
              (process-live-p slothbar-workspaces--herbstluft-evt-listener-proc))
-    (kill-process slothbar-workspaces--herbstluft-evt-listener-proc)))
+    (kill-process slothbar-workspaces--herbstluft-evt-listener-proc))
+  (setq slothbar-workspaces--herbstluft-evt-listener-proc nil))
 
 (defun slothbar-workspaces-setup-defaults-herbstluftwm ()
   "Configure slothbar-workspaces to display herbstluftwm tags."
@@ -802,7 +788,9 @@ This is intended as a dbus monitor to set a value for
 
 (defun slothbar-workspaces--unregister-xmonad-dbus-monitor ()
   "Unregister the dbus object for the xmonad monitor."
-  (dbus-unregister-object slothbar-workspaces--xmonad-dbus-object))
+  (when slothbar-workspaces--xmonad-dbus-object
+    (dbus-unregister-object slothbar-workspaces--xmonad-dbus-object)
+    (setq slothbar-workspaces--xmonad-dbus-object nil)))
 
 (declare-function dbus-register-monitor "dbus")
 
@@ -816,6 +804,7 @@ Note that the xmonad config must send dbus events.  See the
   (when (and (not slothbar-ewmh-mode)
              (locate-library "dbus")
              (equal "xmonad" (getenv "DESKTOP_SESSION")))
+    (require 'dbus nil t)
     (setq
      slothbar-workspaces--xmonad-dbus-object
      (dbus-register-monitor :session
@@ -827,24 +816,102 @@ Note that the xmonad config must send dbus events.  See the
      #'slothbar-workspaces-generate-list-fn-xmonad)
     (add-hook 'slothbar-after-exit-hook #'slothbar-workspaces--unregister-xmonad-dbus-monitor)))
 
+;;; Source subscriptions
+
+(defvar slothbar-workspaces--source-subscribers (make-hash-table :test 'eq)
+  "Reference counts for active workspace data sources.")
+
+(defun slothbar-workspaces--source-for-backend (backend)
+  "Return the workspace data source to use for BACKEND, or nil."
+  (cond
+   ((and backend (slothbar-backend-ext-workspace-manager backend))
+    'ext-workspace)
+   ((or slothbar-ewmh-mode slothbar-workspaces-ensure-ewmh)
+    'ewmh)
+   ((and (locate-library "exwm")
+         (boundp 'exwm--connection)
+         exwm--connection)
+    'exwm)
+   ((and (executable-find "herbstclient")
+         (equal "herbstluftwm" (getenv "DESKTOP_SESSION")))
+    'herbstluftwm)
+   ((and (locate-library "dbus")
+         (equal "xmonad" (getenv "DESKTOP_SESSION")))
+    'xmonad)
+   ((eq 'x (window-system))
+    'x)
+   (t nil)))
+
+(defun slothbar-workspaces--setup-source (source)
+  "Set up workspace SOURCE lazily."
+  (pcase source
+    ('ext-workspace
+     (slothbar-workspaces--setup-defaults-ext-workspace))
+    ((or 'ewmh 'exwm 'herbstluftwm 'xmonad 'x)
+     (slothbar-workspaces--setup-defaults-ewmh)
+     (add-hook 'slothbar-ewmh-mode-hook #'slothbar-workspaces--ewmh-toggle)
+     (slothbar-workspaces-setup-defaults-exwm)
+     (slothbar-workspaces-setup-defaults-herbstluftwm)
+     (slothbar-workspaces-setup-defaults-xmonad))))
+
+(defun slothbar-workspaces--teardown-ewmh ()
+  "Remove workspaces' ewmh subscriptions."
+  (remove-hook 'slothbar-ewmh--on-change-hook
+               #'slothbar-workspaces--ewmh-on-change)
+  (when (eql slothbar-workspaces-generate-list-fn
+             #'slothbar-workspaces-generate-list-fn-ewmh)
+    (setq slothbar-workspaces-generate-list-fn
+          slothbar-workspaces--generate-list-fn-prev)))
+
+(defun slothbar-workspaces--teardown-source (source)
+  "Tear down workspace SOURCE after its last module exits."
+  (pcase source
+    ('ext-workspace
+     (slothbar-workspaces--teardown-ext-workspace))
+    ((or 'ewmh 'x)
+     (remove-hook 'slothbar-ewmh-mode-hook #'slothbar-workspaces--ewmh-toggle)
+     (slothbar-workspaces--teardown-ewmh))
+    ('exwm
+     (slothbar-workspaces-remove-hooks-exwm))
+    ('herbstluftwm
+     (slothbar-workspaces--stop-herbstluft-event-listener)
+     (remove-hook 'slothbar-after-exit-hook
+                  #'slothbar-workspaces--stop-herbstluft-event-listener))
+    ('xmonad
+     (slothbar-workspaces--unregister-xmonad-dbus-monitor)
+     (remove-hook 'slothbar-after-exit-hook
+                  #'slothbar-workspaces--unregister-xmonad-dbus-monitor))))
+
+(defun slothbar-workspaces--subscribe-source (source)
+  "Subscribe one module to workspace SOURCE."
+  (let ((count (gethash source slothbar-workspaces--source-subscribers 0)))
+    (when (zerop count)
+      (slothbar-workspaces--setup-source source))
+    (puthash source (1+ count) slothbar-workspaces--source-subscribers)))
+
+(defun slothbar-workspaces--unsubscribe-source (source)
+  "Unsubscribe one module from workspace SOURCE."
+  (let ((count (gethash source slothbar-workspaces--source-subscribers 0)))
+    (when (> count 0)
+      (puthash source (1- count) slothbar-workspaces--source-subscribers)
+      (when (= count 1)
+        (slothbar-workspaces--teardown-source source)))))
+
 (cl-defmethod slothbar-module-init :before ((m slothbar-workspaces))
   "Configure M and its initial icon and text."
-  (unless (slothbar-workspaces--setup-defaults-ext-workspace)
-    (slothbar-workspaces--setup-defaults-ewmh)
-    (add-hook 'slothbar-ewmh-mode-hook #'slothbar-workspaces--ewmh-toggle)
-    (when (locate-library "exwm")
-      (slothbar-workspaces-setup-defaults-exwm)
-      (add-hook 'slothbar-ewmh-mode-hook
-                (lambda ()
-                  (when slothbar-ewmh-mode
-                    (slothbar-workspaces-remove-hooks-exwm)))))
-    (slothbar-workspaces-setup-defaults-herbstluftwm)
-    (slothbar-workspaces-setup-defaults-xmonad))
-  (slothbar-module-update-status m))
+  (slothbar-workspaces--with-bar m
+    (let ((source (slothbar-workspaces--source-for-backend
+                   (slothbar-module--backend m))))
+      (when source
+        (setf (slothbar-workspaces-source m) source)
+        (slothbar-workspaces--subscribe-source source)))
+    (slothbar-module-update-status m)))
 
-(cl-defmethod slothbar-module-exit :before ((_m slothbar-workspaces))
-  "Stop ext-workspace updates when the module exits."
-  (slothbar-workspaces--teardown-ext-workspace))
+(cl-defmethod slothbar-module-exit :before ((m slothbar-workspaces))
+  "Unsubscribe M from its workspace source."
+  (when-let* ((source (slothbar-workspaces-source m)))
+    (slothbar-workspaces--unsubscribe-source source)
+    (setf (slothbar-workspaces-source m) nil)))
 
 (provide 'slothbar-workspaces)
 ;;; slothbar-workspaces.el ends here

@@ -896,22 +896,24 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
-(ert-deftest slothbar-unit-workspaces-ext-subscription ()
-  "Multiple workspaces modules share one ext-workspace hook."
-  (let ((slothbar-workspaces--ext-subscribers 0)
-        (slothbar-backend-workspace-change-hook nil))
-    (slothbar-workspaces--subscribe-ext-workspace)
-    (slothbar-workspaces--subscribe-ext-workspace)
-    (should (= 1 (seq-count
-                  (lambda (fn)
-                    (eq fn #'slothbar-workspaces--ext-workspace-change))
-                  slothbar-backend-workspace-change-hook)))
-    (slothbar-workspaces--unsubscribe-ext-workspace)
-    (should (memq #'slothbar-workspaces--ext-workspace-change
-                  slothbar-backend-workspace-change-hook))
-    (slothbar-workspaces--unsubscribe-ext-workspace)
-    (should-not (memq #'slothbar-workspaces--ext-workspace-change
-                      slothbar-backend-workspace-change-hook))))
+(ert-deftest slothbar-unit-workspaces-source-subscription ()
+  "Each workspace source is set up and torn down once."
+  (let ((slothbar-workspaces--source-subscribers (make-hash-table :test 'eq))
+        (setups 0)
+        (teardowns 0))
+    (cl-letf (((symbol-function 'slothbar-workspaces--setup-source)
+               (lambda (_source) (cl-incf setups)))
+              ((symbol-function 'slothbar-workspaces--teardown-source)
+               (lambda (_source) (cl-incf teardowns))))
+      (slothbar-workspaces--subscribe-source 'ewmh)
+      (slothbar-workspaces--subscribe-source 'ewmh)
+      (should (= setups 1))
+      (should (= 2 (gethash 'ewmh slothbar-workspaces--source-subscribers)))
+      (slothbar-workspaces--unsubscribe-source 'ewmh)
+      (should (= teardowns 0))
+      (slothbar-workspaces--unsubscribe-source 'ewmh)
+      (should (= teardowns 1))
+      (should (= 0 (gethash 'ewmh slothbar-workspaces--source-subscribers))))))
 
 (ert-deftest slothbar-unit-workspaces-scroll-actions ()
   "Workspace scroll actions move through the visible workspace list."
