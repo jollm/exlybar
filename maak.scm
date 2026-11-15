@@ -34,6 +34,11 @@
   "Run the xcb smoke test with elwl unavailable."
   ($ '("env SLOTHBAR_TEST_NO_ELWL=1 bash test/slothbar-xwayland-smoke.sh")))
 
+;; Run the X backend smoke test under Xvfb and xmonad.
+(define (test-xmonad)
+  "Run the X backend smoke test under Xvfb and xmonad."
+  ($ '("bash test/slothbar-xvfb-smoke.sh")))
+
 ;; Run the live Wayland backend smoke test under headless sway.
 (define (test-wayland)
   "Run the Wayland backend smoke test under headless sway."
