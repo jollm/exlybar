@@ -32,6 +32,7 @@
 
 (require 'cl-lib)
 (require 'dbus)
+(require 'subr-x)
 
 (require 'slothbar-log)
 (require 'slothbar-module-)
@@ -111,6 +112,39 @@
 
 (defvar slothbar-tray-sni--icon-cache (make-hash-table :test 'equal)
   "Cache of resolved icon names to file paths.")
+
+(defun slothbar-tray-sni--image-size (image)
+  "Return IMAGE's dimensions as a short string."
+  (if image
+      (format "%dx%d" (nth 0 image) (nth 1 image))
+    "none"))
+
+(defun slothbar-tray-sni--describe-item (item)
+  "Return a compact, non-payload ITEM description for debug logs."
+  (format (concat "service=%s path=%s id=%S title=%S status=%s "
+                  "category=%S window=%S icon=%S image=%s attention=%s "
+                  "overlay=%s menu=%S is-menu=%S order=%S tooltip=%s label=%s")
+          (slothbar-tray-sni-item-service item)
+          (slothbar-tray-sni-item-path item)
+          (slothbar-tray-sni-item-id item)
+          (let ((title (slothbar-tray-sni-item-title item)))
+            (if (stringp title)
+                (truncate-string-to-width title 48 nil nil t)
+              title))
+          (slothbar-tray-sni-item-status item)
+          (slothbar-tray-sni-item-category item)
+          (slothbar-tray-sni-item-window-id item)
+          (slothbar-tray-sni-item-icon-name item)
+          (slothbar-tray-sni--image-size (slothbar-tray-sni-item-image item))
+          (slothbar-tray-sni--image-size
+           (slothbar-tray-sni-item-attention-image item))
+          (slothbar-tray-sni--image-size
+           (slothbar-tray-sni-item-overlay-image item))
+          (slothbar-tray-sni-item-menu item)
+          (slothbar-tray-sni-item-item-is-menu item)
+          (slothbar-tray-sni-item-ordering-index item)
+          (if (slothbar-tray-sni-item-tooltip item) "present" "none")
+          (if (slothbar-tray-sni-item-label item) "present" "none")))
 
 (defun slothbar-tray-sni--property (service path name)
   "Read property NAME from SERVICE at PATH, or return nil."
@@ -198,7 +232,11 @@ THEME-PATHS may be a string or a list of strings."
   (when (and (stringp name) (not (string-empty-p name)))
     (let* ((dirs (slothbar-tray-sni--icon-dirs theme-paths))
            (key (cons name dirs)))
-      (or (gethash key slothbar-tray-sni--icon-cache)
+      (or (progn
+            (when (gethash key slothbar-tray-sni--icon-cache)
+              (slothbar--log-debug* "SNI icon cache hit %s -> %s"
+                                    name (gethash key slothbar-tray-sni--icon-cache)))
+            (gethash key slothbar-tray-sni--icon-cache))
           (let ((path
                  (cl-loop
                   for dir in dirs
@@ -210,6 +248,10 @@ THEME-PATHS may be a string or a list of strings."
                       (car (directory-files-recursively
                             dir (concat "\\`" (regexp-quote name) "\\.png\\'")
                             nil))))))
+            (if path
+                (slothbar--log-debug* "SNI icon resolved %s -> %s" name path)
+              (slothbar--log-debug* "SNI icon not found %s in %s"
+                                    name (mapconcat #'identity dirs ":")))
             (when path
               (puthash key path slothbar-tray-sni--icon-cache))
             path)))))
@@ -217,12 +259,19 @@ THEME-PATHS may be a string or a list of strings."
 (defun slothbar-tray-sni--load-icon (name theme-paths target-height)
   "Load and scale NAME from THEME-PATHS for TARGET-HEIGHT."
   (when-let* ((path (slothbar-tray-sni--find-icon name theme-paths))
-              (umbra (require 'umbra-png nil t)))
+              (umbra (progn
+                       (unless (require 'umbra-png nil t)
+                         (slothbar--log-debug*
+                          "SNI icon %s found at %s but umbra-png is unavailable"
+                          name path))
+                       (require 'umbra-png nil t))))
     (condition-case err
         (let* ((pixmap (umbra-png-read path))
                (width (umbra-pixmap-width pixmap))
                (height (umbra-pixmap-height pixmap))
                (rgba (umbra-pixmap-demultiplied-data pixmap)))
+          (slothbar--log-debug* "SNI icon %s decoded %dx%d -> target %d"
+                                path width height target-height)
           (slothbar-tray-sni--scale-rgba width height rgba target-height))
       (error
        (slothbar--log-debug* "SNI icon %s failed: %S" path err)
@@ -257,6 +306,7 @@ THEME-PATHS may be a string or a list of strings."
          (owner (or (ignore-errors (dbus-get-name-owner :session service))
                     service)))
     (unless (gethash key slothbar-tray-sni--signal-items)
+      (slothbar--log-debug* "SNI watch signals for %s%s" service path)
       (puthash key t slothbar-tray-sni--signal-items)
       (let (objects)
         (dolist (signal '("NewIcon" "NewStatus" "NewTitle"
@@ -278,6 +328,7 @@ THEME-PATHS may be a string or a list of strings."
 
 (defun slothbar-tray-sni--remove-item (service path)
   "Remove the item at SERVICE/PATH."
+  (slothbar--log-debug* "SNI remove item service=%s path=%s" service path)
   (setq slothbar-tray-sni--items
         (cl-remove-if
          (lambda (item)
@@ -294,6 +345,7 @@ NAME can be a well-known item service or the unique sender name used
 for an object-path registration."
   (when (and (stringp name)
              (string-empty-p (or new "")))
+    (slothbar--log-debug* "SNI bus owner vanished: %s" name)
     (let ((matches (cl-remove-if-not
                     (lambda (item)
                       (equal (slothbar-tray-sni-item-service item) name))
@@ -389,6 +441,7 @@ for an object-path registration."
 
 (defun slothbar-tray-sni--add-item (service path)
   "Add or replace the item at SERVICE/PATH."
+  (slothbar--log-debug* "SNI add/refresh item service=%s path=%s" service path)
   (let* ((icon-pixmap
           (slothbar-tray-sni--property service path "IconPixmap"))
          (icon-name (slothbar-tray-sni--property service path "IconName"))
@@ -440,6 +493,8 @@ for an object-path registration."
                     (and (equal (slothbar-tray-sni-item-service old) service)
                          (equal (slothbar-tray-sni-item-path old) path)))
                   slothbar-tray-sni--items))))
+    (slothbar--log-debug* "SNI item registered: %s"
+                          (slothbar-tray-sni--describe-item item))
     (slothbar-tray-sni--register-signals service path)
     (slothbar-tray-sni--update-watcher-property)
     (slothbar-tray-sni--refresh-module)))
@@ -476,6 +531,8 @@ for an object-path registration."
                       sender
                     item)))
     (when service
+      (slothbar--log-debug* "SNI RegisterStatusNotifierItem item=%S sender=%S"
+                            item sender)
       (run-at-time 0 nil
                    (lambda () (slothbar-tray-sni--add-item service path))))
     :ignore))
@@ -505,7 +562,11 @@ for an object-path registration."
           (setq x (+ x width gap)))))
     (setf (slothbar-module-images m) (nreverse images)
           (slothbar-module-width m)
-          (+ x (slothbar-module-rpad m)))))
+          (+ x (slothbar-module-rpad m)))
+    (slothbar--log-debug* "SNI layout items=%d images=%d width=%d"
+                          (length slothbar-tray-sni--items)
+                          (length (slothbar-module-images m))
+                          (slothbar-module-width m))))
 
 (defun slothbar-tray-sni--refresh-module ()
   "Redraw the tray module after an item change."
@@ -519,11 +580,14 @@ for an object-path registration."
   "Start the StatusNotifier watcher for M."
   (setq slothbar-tray-sni--module m
         slothbar-tray-sni--items nil)
+  (slothbar--log-debug* "SNI init: trying to own %s"
+                        slothbar-tray-sni--watcher-service)
   (if (eq :primary-owner
           (dbus-register-service
            :session slothbar-tray-sni--watcher-service
            :do-not-queue))
       (progn
+        (slothbar--log-debug* "SNI init: primary watcher owner")
         (setq slothbar-tray-sni--service-owned t)
         (dbus-register-method
          :session slothbar-tray-sni--watcher-service
@@ -552,6 +616,7 @@ for an object-path registration."
          slothbar-tray-sni--watcher-path
          slothbar-tray-sni--watcher-interface
          "RegisteredStatusNotifierItems" :readwrite '(:array)))
+    (slothbar--log-debug* "SNI init: watcher occupied, trying secondary host")
     (unless (slothbar-tray-sni--try-secondary-host)
       (error "Another StatusNotifier host owns %s"
              slothbar-tray-sni--watcher-service)))
@@ -601,6 +666,8 @@ for an object-path registration."
               (path (slothbar-tray-sni-item-path item)))
     (condition-case err
         (progn
+          (slothbar--log-debug* "SNI %s %s%s at %d,%d"
+                                method service path (round x) (round y))
           (dbus-call-method :session service path
                             slothbar-tray-sni--item-interface
                             method (round x) (round y))
@@ -612,6 +679,10 @@ for an object-path registration."
 
 (defun slothbar-tray-sni-exit (_m)
   "Stop the StatusNotifier watcher."
+  (slothbar--log-debug* "SNI exit: service-owned=%S secondary=%S items=%d"
+                        slothbar-tray-sni--service-owned
+                        slothbar-tray-sni--secondary-host
+                        (length slothbar-tray-sni--items))
   (when slothbar-tray-sni--service-owned
     (ignore-errors
       (when (fboundp 'dbus-unregister-service)
