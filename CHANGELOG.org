@@ -83,6 +83,11 @@ internal and configuration APIs may still change between releases.
   as the battery expanding for a charging icon.  Changed placements now
   contribute damage for both their old and new positions.  This was noticed
   on X11, but the shared damage path affects Wayland too.
+- Fix workspaces modules losing backend workspace-change events when one of
+  several modules exited.  Workspace sources (ext-workspace, EWMH, EXWM,
+  herbstluftwm, and xmonad) are now reference-counted and torn down only
+  after the last workspaces module exits.  Source libraries, processes, and
+  DBus monitors remain lazily initialized.
 
 * 0.31.0 - 2026-11-10
 
