@@ -109,5 +109,31 @@
     (slothbar-sni-test--check "watcher service was released"
                               (not slothbar-tray-sni--service-owned))))
 
+(let ((host-registered nil))
+  (dbus-register-service :session slothbar-tray-sni--watcher-service
+                         :do-not-queue)
+  (dbus-register-method
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "RegisterStatusNotifierHost"
+   (lambda (host) (setq host-registered host) :ignore))
+  (dbus-register-property
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "RegisteredStatusNotifierItems" :readwrite '(:array))
+  (let ((module (slothbar-tray-create)))
+    (slothbar-tray-sni-init module)
+    (slothbar-sni-test--check "secondary host mode was selected"
+                              slothbar-tray-sni--secondary-host)
+    (slothbar-sni-test--check "secondary host service was announced"
+                              (and (stringp host-registered)
+                                   (string-prefix-p
+                                    "org.kde.StatusNotifierHost-slothbar-"
+                                    host-registered)))
+    (slothbar-tray-sni-exit module))
+  (dbus-unregister-service :session slothbar-tray-sni--watcher-service))
+
 (princ "all tray SNI integration checks passed\n")
 (kill-emacs 0)

@@ -22,4 +22,5 @@ if ! "$EMACS" -Q --batch --eval "(progn (require 'dbus) (kill-emacs 0))" >/dev/n
 fi
 
 exec dbus-run-session -- "$EMACS" -Q --batch \
+  --eval "(setq load-prefer-newer t)" \
   -L "$ROOT" -l "$TEST_ELISP"

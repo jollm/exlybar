@@ -93,8 +93,11 @@
   "Non-nil when using another StatusNotifier watcher as a host.")
 
 (defvar slothbar-tray-sni--host-service
-  "org.kde.StatusNotifierHost-slothbar"
+  (format "org.kde.StatusNotifierHost-slothbar-%d" (emacs-pid))
   "Service name advertised when registering as a secondary host.")
+
+(defvar slothbar-tray-sni--host-service-owned nil
+  "Non-nil when this process owns the secondary-host service name.")
 
 (defvar slothbar-tray-sni--name-owner-signal nil
   "Signal registration for item owner changes.")
@@ -330,6 +333,13 @@ THEME-PATHS may be a string or a list of strings."
   "Try to register as a host with an existing StatusNotifier watcher."
   (condition-case err
       (progn
+        (unless (eq :primary-owner
+                    (dbus-register-service
+                     :session slothbar-tray-sni--host-service
+                     :do-not-queue))
+          (error "Could not own host service %s"
+                 slothbar-tray-sni--host-service))
+        (setq slothbar-tray-sni--host-service-owned t)
         (dbus-call-method :session
                           slothbar-tray-sni--watcher-service
                           slothbar-tray-sni--watcher-path
@@ -349,6 +359,12 @@ THEME-PATHS may be a string or a list of strings."
           (slothbar-tray-sni--watcher-entry entry))
         t)
     (error
+     (when slothbar-tray-sni--host-service-owned
+       (ignore-errors
+         (when (fboundp 'dbus-unregister-service)
+           (dbus-unregister-service :session
+                                    slothbar-tray-sni--host-service)))
+       (setq slothbar-tray-sni--host-service-owned nil))
      (message "Slothbar tray: another StatusNotifier host owns %s; %s"
               slothbar-tray-sni--watcher-service
               (error-message-string err))
@@ -575,6 +591,12 @@ THEME-PATHS may be a string or a list of strings."
       (when (fboundp 'dbus-unregister-service)
         (dbus-unregister-service :session
                                  slothbar-tray-sni--watcher-service))))
+  (when slothbar-tray-sni--host-service-owned
+    (ignore-errors
+      (when (fboundp 'dbus-unregister-service)
+        (dbus-unregister-service :session
+                                 slothbar-tray-sni--host-service)))
+    (setq slothbar-tray-sni--host-service-owned nil))
   (when slothbar-tray-sni--name-owner-signal
     (ignore-errors
       (dbus-unregister-object slothbar-tray-sni--name-owner-signal)))
