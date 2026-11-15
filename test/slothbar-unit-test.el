@@ -896,6 +896,20 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-tray-sni-icon-name-lookup ()
+  "IconName resolves a PNG under a supplied theme path."
+  (require 'slothbar-tray-sni)
+  (let ((dir (make-temp-file "slothbar-icons-" t)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "hicolor/48x48/apps" dir) t)
+          (let ((path (expand-file-name "hicolor/48x48/apps/test-icon.png" dir)))
+            (write-region "" nil path)
+            (should (equal path
+                           (slothbar-tray-sni--find-icon
+                            "test-icon" (list dir))))))
+      (delete-directory dir t))))
+
 (ert-deftest slothbar-unit-tray-sni-image-decode ()
   "ARGB32 icon data converts and scales to RGBA."
   (require 'slothbar-tray-sni)

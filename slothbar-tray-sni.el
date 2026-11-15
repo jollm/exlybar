@@ -37,6 +37,11 @@
 (require 'slothbar-module-)
 (require 'slothbar-tray)
 
+(declare-function umbra-png-read "umbra-png" (path))
+(declare-function umbra-pixmap-width "umbra-pixmap" (pixmap))
+(declare-function umbra-pixmap-height "umbra-pixmap" (pixmap))
+(declare-function umbra-pixmap-demultiplied-data "umbra-pixmap" (pixmap))
+
 (defconst slothbar-tray-sni--watcher-service
   "org.kde.StatusNotifierWatcher")
 (defconst slothbar-tray-sni--watcher-path
@@ -57,6 +62,7 @@
   status
   icon-name
   icon-pixmap
+  icon-theme-path
   menu
   image)
 
@@ -71,6 +77,9 @@
 
 (defvar slothbar-tray-sni--signal-items (make-hash-table :test 'equal)
   "Items whose change signals have already been registered.")
+
+(defvar slothbar-tray-sni--icon-cache (make-hash-table :test 'equal)
+  "Cache of resolved icon names to file paths.")
 
 (defun slothbar-tray-sni--property (service path name)
   "Read property NAME from SERVICE at PATH, or return nil."
@@ -105,17 +114,16 @@
                 (aset out (+ i 3) alpha))
     out))
 
-(defun slothbar-tray-sni--scale-image (width height bytes target-height)
-  "Scale ARGB bytes WIDTH by HEIGHT to TARGET-HEIGHT.
+(defun slothbar-tray-sni--scale-rgba (width height rgba target-height)
+  "Scale straight RGBA bytes WIDTH by HEIGHT to TARGET-HEIGHT.
 Return (WIDTH HEIGHT RGBA) or nil."
   (when (and (integerp width) (integerp height)
              (> width 0) (> height 0)
-             bytes
-             (>= (length bytes) (* width height 4)))
+             rgba
+             (>= (length rgba) (* width height 4)))
     (let* ((scale (/ (float target-height) height))
            (new-width (max 1 (round (* width scale))))
            (new-height (max 1 target-height))
-           (rgba (slothbar-tray-sni--argb->rgba bytes))
            (out (make-string (* new-width new-height 4) 0)))
       (dotimes (y new-height)
         (let ((sy (min (1- height) (floor (/ y scale)))))
@@ -127,6 +135,62 @@ Return (WIDTH HEIGHT RGBA) or nil."
                 (aset out (+ target n)
                       (aref rgba (+ source n))))))))
       (list new-width new-height out))))
+
+(defun slothbar-tray-sni--scale-image (width height bytes target-height)
+  "Scale ARGB bytes WIDTH by HEIGHT to TARGET-HEIGHT.
+Return (WIDTH HEIGHT RGBA) or nil."
+  (when bytes
+    (slothbar-tray-sni--scale-rgba
+     width height (slothbar-tray-sni--argb->rgba bytes) target-height)))
+
+(defun slothbar-tray-sni--icon-dirs (theme-paths)
+  "Return icon directories for THEME-PATHS and the XDG data dirs."
+  (delete-dups
+   (append
+    (mapcar #'expand-file-name (or theme-paths nil))
+    (list (expand-file-name "~/.local/share/icons")
+          (expand-file-name "~/.icons"))
+    (cl-loop for dir in (split-string
+                         (or (getenv "XDG_DATA_DIRS")
+                             "/usr/local/share:/usr/share")
+                         ":" t)
+             collect (expand-file-name "icons" dir))
+    (list "/usr/share/icons" "/usr/local/share/icons"))))
+
+(defun slothbar-tray-sni--find-icon (name theme-paths)
+  "Find NAME's PNG in THEME-PATHS or the standard icon directories."
+  (when (and (stringp name) (not (string-empty-p name)))
+    (let* ((dirs (slothbar-tray-sni--icon-dirs theme-paths))
+           (key (cons name dirs)))
+      (or (gethash key slothbar-tray-sni--icon-cache)
+          (let ((path
+                 (cl-loop
+                  for dir in dirs
+                  when (file-directory-p dir)
+                  thereis
+                  (or (let ((direct (expand-file-name
+                                     (concat name ".png") dir)))
+                        (and (file-readable-p direct) direct))
+                      (car (directory-files-recursively
+                            dir (concat "\\`" (regexp-quote name) "\\.png\\'")
+                            nil))))))
+            (when path
+              (puthash key path slothbar-tray-sni--icon-cache))
+            path)))))
+
+(defun slothbar-tray-sni--load-icon (name theme-paths target-height)
+  "Load and scale NAME from THEME-PATHS for TARGET-HEIGHT."
+  (when-let* ((path (slothbar-tray-sni--find-icon name theme-paths))
+              (umbra (require 'umbra-png nil t)))
+    (condition-case err
+        (let* ((pixmap (umbra-png-read path))
+               (width (umbra-pixmap-width pixmap))
+               (height (umbra-pixmap-height pixmap))
+               (rgba (umbra-pixmap-demultiplied-data pixmap)))
+          (slothbar-tray-sni--scale-rgba width height rgba target-height))
+      (error
+       (slothbar--log-debug* "SNI icon %s failed: %S" path err)
+       nil))))
 
 (defun slothbar-tray-sni--decode-pixmap (pixmaps target-height)
   "Decode the first IconPixmap in PIXMAPS for TARGET-HEIGHT."
@@ -164,17 +228,23 @@ Return (WIDTH HEIGHT RGBA) or nil."
   "Add or replace the item at SERVICE/PATH."
   (let* ((icon-pixmap
           (slothbar-tray-sni--property service path "IconPixmap"))
+         (icon-name (slothbar-tray-sni--property service path "IconName"))
+         (icon-theme-path
+          (slothbar-tray-sni--property service path "IconThemePath"))
          (item (slothbar-tray-sni--item-create
                 :service service
                 :path path
                 :id (slothbar-tray-sni--property service path "Id")
                 :title (slothbar-tray-sni--property service path "Title")
                 :status (slothbar-tray-sni--property service path "Status")
-                :icon-name (slothbar-tray-sni--property service path "IconName")
+                :icon-name icon-name
                 :icon-pixmap icon-pixmap
+                :icon-theme-path icon-theme-path
                 :menu (slothbar-tray-sni--property service path "Menu")
-                :image (slothbar-tray-sni--decode-pixmap
-                        icon-pixmap slothbar-height))))
+                :image (or (slothbar-tray-sni--decode-pixmap
+                            icon-pixmap slothbar-height)
+                           (slothbar-tray-sni--load-icon
+                            icon-name icon-theme-path slothbar-height)))))
     (setq slothbar-tray-sni--items
           (cons item
                 (cl-remove-if
@@ -339,7 +409,8 @@ Return (WIDTH HEIGHT RGBA) or nil."
   (setq slothbar-tray-sni--items nil
         slothbar-tray-sni--module nil
         slothbar-tray-sni--service-owned nil)
-  (clrhash slothbar-tray-sni--signal-items))
+  (clrhash slothbar-tray-sni--signal-items)
+  (clrhash slothbar-tray-sni--icon-cache))
 
 (provide 'slothbar-tray-sni)
 ;;; slothbar-tray-sni.el ends here
