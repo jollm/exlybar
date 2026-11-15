@@ -69,6 +69,9 @@
 (defvar slothbar-tray-sni--service-owned nil
   "Non-nil when this process owns the watcher service.")
 
+(defvar slothbar-tray-sni--signal-items (make-hash-table :test 'equal)
+  "Items whose change signals have already been registered.")
+
 (defun slothbar-tray-sni--property (service path name)
   "Read property NAME from SERVICE at PATH, or return nil."
   (condition-case err
@@ -134,6 +137,27 @@ Return (WIDTH HEIGHT RGBA) or nil."
               (bytes (slothbar-tray-sni--bytes data)))
     (slothbar-tray-sni--scale-image width height bytes target-height)))
 
+(defun slothbar-tray-sni--refresh-item (service path)
+  "Re-read and refresh the item at SERVICE/PATH."
+  (when (cl-find-if
+         (lambda (item)
+           (and (equal (slothbar-tray-sni-item-service item) service)
+                (equal (slothbar-tray-sni-item-path item) path)))
+         slothbar-tray-sni--items)
+    (slothbar-tray-sni--add-item service path)))
+
+(defun slothbar-tray-sni--register-signals (service path)
+  "Register SNI change signals for SERVICE at PATH once."
+  (let ((key (cons service path)))
+    (unless (gethash key slothbar-tray-sni--signal-items)
+      (puthash key t slothbar-tray-sni--signal-items)
+      (dolist (signal '("NewIcon" "NewStatus" "NewTitle"
+                        "NewAttentionIcon" "NewOverlayIcon" "NewToolTip"))
+        (dbus-register-signal
+         :session service path slothbar-tray-sni--item-interface signal
+         (lambda (&rest _)
+           (slothbar-tray-sni--refresh-item service path)))))))
+
 (defun slothbar-tray-sni--add-item (service path)
   "Add or replace the item at SERVICE/PATH."
   (let* ((icon-pixmap
@@ -156,6 +180,7 @@ Return (WIDTH HEIGHT RGBA) or nil."
                    (and (equal (slothbar-tray-sni-item-service old) service)
                         (equal (slothbar-tray-sni-item-path old) path)))
                  slothbar-tray-sni--items)))
+    (slothbar-tray-sni--register-signals service path)
     (slothbar-tray-sni--update-watcher-property)
     (slothbar-tray-sni--refresh-module)))
 
@@ -311,7 +336,8 @@ Return (WIDTH HEIGHT RGBA) or nil."
                                  slothbar-tray-sni--watcher-service))))
   (setq slothbar-tray-sni--items nil
         slothbar-tray-sni--module nil
-        slothbar-tray-sni--service-owned nil))
+        slothbar-tray-sni--service-owned nil)
+  (clrhash slothbar-tray-sni--signal-items))
 
 (provide 'slothbar-tray-sni)
 ;;; slothbar-tray-sni.el ends here

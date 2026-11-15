@@ -896,6 +896,19 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-tray-sni-image-decode ()
+  "ARGB32 icon data converts and scales to RGBA."
+  (require 'slothbar-tray-sni)
+  (let ((image (slothbar-tray-sni--scale-image
+                1 1 (unibyte-string #x80 #xff #x00 #x00) 2)))
+    (should (= 2 (nth 0 image)))
+    (should (= 2 (nth 1 image)))
+    (should (equal (list (aref (nth 2 image) 0)
+                         (aref (nth 2 image) 1)
+                         (aref (nth 2 image) 2)
+                         (aref (nth 2 image) 3))
+                   '(255 0 0 128)))))
+
 (ert-deftest slothbar-unit-workspaces-source-subscription ()
   "Each workspace source is set up and torn down once."
   (let ((slothbar-workspaces--source-subscribers (make-hash-table :test 'eq))
