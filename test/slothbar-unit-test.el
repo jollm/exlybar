@@ -896,6 +896,25 @@
                            (slothbar-draw-op-glyph-positions (car ops)))
                    '(?a)))))
 
+(ert-deftest slothbar-unit-tray-sni-attention-overlay-layout ()
+  "NeedsAttention uses the attention icon and renders overlays."
+  (require 'slothbar-tray-sni)
+  (require 'slothbar-tray)
+  (let* ((normal (list 8 8 (make-string (* 8 8 4) 1)))
+         (attention (list 8 8 (make-string (* 8 8 4) 2)))
+         (overlay (list 4 4 (make-string (* 4 4 4) 3)))
+         (item (slothbar-tray-sni--item-create
+                :status "NeedsAttention"
+                :image normal :attention-image attention
+                :overlay-image overlay))
+         (module (slothbar-tray-create))
+         (slothbar-tray-sni--items (list item)))
+    (slothbar-tray-sni--layout module)
+    (let ((images (slothbar-module-images module)))
+      (should (= 2 (length images)))
+      (should (= 2 (aref (nth 4 (car images)) 0)))
+      (should (= 3 (aref (nth 4 (cadr images)) 0))))))
+
 (ert-deftest slothbar-unit-tray-sni-icon-name-lookup ()
   "IconName resolves a PNG under a supplied theme path."
   (require 'slothbar-tray-sni)

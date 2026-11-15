@@ -62,8 +62,16 @@
   status
   icon-name
   icon-pixmap
+  attention-icon-name
+  attention-icon-pixmap
+  attention-image
+  overlay-icon-name
+  overlay-icon-pixmap
+  overlay-image
   icon-theme-path
   menu
+  tooltip
+  label
   image)
 
 (defvar slothbar-tray-sni--items nil
@@ -208,6 +216,11 @@ Return (WIDTH HEIGHT RGBA) or nil."
        (slothbar--log-debug* "SNI icon %s failed: %S" path err)
        nil))))
 
+(defun slothbar-tray-sni--resolve-icon (pixmap name theme-paths target-height)
+  "Resolve ICON PIXMAP or NAME using THEME-PATHS for TARGET-HEIGHT."
+  (or (slothbar-tray-sni--decode-pixmap pixmap target-height)
+      (slothbar-tray-sni--load-icon name theme-paths target-height)))
+
 (defun slothbar-tray-sni--decode-pixmap (pixmaps target-height)
   "Decode the first IconPixmap in PIXMAPS for TARGET-HEIGHT."
   (when-let* ((pixmap (car pixmaps))
@@ -341,6 +354,14 @@ Return (WIDTH HEIGHT RGBA) or nil."
   (let* ((icon-pixmap
           (slothbar-tray-sni--property service path "IconPixmap"))
          (icon-name (slothbar-tray-sni--property service path "IconName"))
+         (attention-name
+          (slothbar-tray-sni--property service path "AttentionIconName"))
+         (attention-pixmap
+          (slothbar-tray-sni--property service path "AttentionIconPixmap"))
+         (overlay-name
+          (slothbar-tray-sni--property service path "OverlayIconName"))
+         (overlay-pixmap
+          (slothbar-tray-sni--property service path "OverlayIconPixmap"))
          (icon-theme-path
           (slothbar-tray-sni--property service path "IconThemePath"))
          (item (slothbar-tray-sni--item-create
@@ -351,12 +372,22 @@ Return (WIDTH HEIGHT RGBA) or nil."
                 :status (slothbar-tray-sni--property service path "Status")
                 :icon-name icon-name
                 :icon-pixmap icon-pixmap
+                :attention-icon-name attention-name
+                :attention-icon-pixmap attention-pixmap
+                :attention-image
+                (slothbar-tray-sni--resolve-icon
+                 attention-pixmap attention-name icon-theme-path slothbar-height)
+                :overlay-icon-name overlay-name
+                :overlay-icon-pixmap overlay-pixmap
+                :overlay-image
+                (slothbar-tray-sni--resolve-icon
+                 overlay-pixmap overlay-name icon-theme-path slothbar-height)
                 :icon-theme-path icon-theme-path
                 :menu (slothbar-tray-sni--property service path "Menu")
-                :image (or (slothbar-tray-sni--decode-pixmap
-                            icon-pixmap slothbar-height)
-                           (slothbar-tray-sni--load-icon
-                            icon-name icon-theme-path slothbar-height)))))
+                :tooltip (slothbar-tray-sni--property service path "ToolTip")
+                :label (slothbar-tray-sni--property service path "XAyatanaLabel")
+                :image (slothbar-tray-sni--resolve-icon
+                        icon-pixmap icon-name icon-theme-path slothbar-height))))
     (setq slothbar-tray-sni--items
           (cons item
                 (cl-remove-if
@@ -404,15 +435,28 @@ Return (WIDTH HEIGHT RGBA) or nil."
                    (lambda () (slothbar-tray-sni--add-item service path))))
     :ignore))
 
+(defun slothbar-tray-sni--base-image (item)
+  "Return ITEM's active base icon image."
+  (if (and (equal (slothbar-tray-sni-item-status item) "NeedsAttention")
+           (slothbar-tray-sni-item-attention-image item))
+      (slothbar-tray-sni-item-attention-image item)
+    (slothbar-tray-sni-item-image item)))
+
 (defun slothbar-tray-sni--layout (m)
-  "Lay out M's SNI icons."
+  "Lay out M's SNI icons, including attention and overlay states."
   (let ((x (slothbar-module-lpad m))
         (gap slothbar-tray-icon-gap)
         (images nil))
     (dolist (item slothbar-tray-sni--items)
-      (when-let* ((image (slothbar-tray-sni-item-image item)))
-        (pcase-let ((`(,width ,height ,data) image))
+      (when-let* ((base (slothbar-tray-sni--base-image item)))
+        (pcase-let ((`(,width ,height ,data) base))
           (push (list x 0 width height data) images)
+          (when-let* ((overlay (slothbar-tray-sni-item-overlay-image item)))
+            (pcase-let ((`(,owidth ,oheight ,odata) overlay))
+              (push (list (max x (- (+ x width) owidth))
+                          (max 0 (- slothbar-height oheight))
+                          owidth oheight odata)
+                    images)))
           (setq x (+ x width gap)))))
     (setf (slothbar-module-images m) (nreverse images)
           (slothbar-module-width m)
@@ -490,10 +534,10 @@ Return (WIDTH HEIGHT RGBA) or nil."
   "Return the SNI item at logical X in M, or nil."
   (let ((left (slothbar-module-lpad m))
         (gap slothbar-tray-icon-gap)
-        (items (cl-remove-if-not #'slothbar-tray-sni-item-image
+        (items (cl-remove-if-not #'slothbar-tray-sni--base-image
                                  slothbar-tray-sni--items)))
     (cl-loop for item in items
-             for image = (slothbar-tray-sni-item-image item)
+             for image = (slothbar-tray-sni--base-image item)
              for width = (nth 0 image)
              if (and (>= x left) (< x (+ left width)))
              return item
