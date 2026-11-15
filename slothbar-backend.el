@@ -121,6 +121,35 @@ LAYOUT is a list of ((X Y) . MODULE) placements as produced by
 `slothbar-layout-coordinate'.  DAMAGE is a list of (LEFT RIGHT) segments
 that must be repainted, or nil if nothing is known to be stale.")
 
+(cl-defgeneric slothbar-backend-create-popup (backend bar x y width height)
+  "Create a popup anchored to BAR at X,Y with WIDTH and HEIGHT.
+Return a backend-specific popup state, or nil when unsupported.")
+
+(cl-defmethod slothbar-backend-create-popup ((_backend t) (_bar t) _x _y _width _height)
+  "Default: this backend has no popup surfaces."
+  nil)
+
+(cl-defgeneric slothbar-backend-popup-configured-p (backend popup)
+  "Return non-nil when POPUP has been configured by BACKEND.")
+
+(cl-defmethod slothbar-backend-popup-configured-p ((_backend t) (_popup t))
+  "Default: unknown popups are not configured."
+  nil)
+
+(cl-defgeneric slothbar-backend-popup-done-p (backend popup)
+  "Return non-nil when BACKEND's POPUP has been dismissed.")
+
+(cl-defmethod slothbar-backend-popup-done-p ((_backend t) (_popup t))
+  "Default: unknown popups are not dismissed."
+  nil)
+
+(cl-defgeneric slothbar-backend-destroy-popup (backend popup)
+  "Destroy BACKEND's POPUP.")
+
+(cl-defmethod slothbar-backend-destroy-popup ((_backend t) (_popup t))
+  "Default: nothing to destroy."
+  nil)
+
 (cl-defgeneric slothbar-backend-add-module (backend module)
   "Give BACKEND the pixel resources MODULE needs to draw.")
 
