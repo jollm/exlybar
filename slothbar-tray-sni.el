@@ -78,6 +78,22 @@
 (defvar slothbar-tray-sni--signal-items (make-hash-table :test 'equal)
   "Items whose change signals have already been registered.")
 
+(defvar slothbar-tray-sni--signal-objects (make-hash-table :test 'equal)
+  "Registered D-Bus signal objects keyed by item address.")
+
+(defvar slothbar-tray-sni--secondary-host nil
+  "Non-nil when using another StatusNotifier watcher as a host.")
+
+(defvar slothbar-tray-sni--host-service
+  "org.kde.StatusNotifierHost-slothbar"
+  "Service name advertised when registering as a secondary host.")
+
+(defvar slothbar-tray-sni--name-owner-signal nil
+  "Signal registration for item owner changes.")
+
+(defvar slothbar-tray-sni--watcher-signal-objects nil
+  "Signal registrations on a secondary watcher.")
+
 (defvar slothbar-tray-sni--icon-cache (make-hash-table :test 'equal)
   "Cache of resolved icon names to file paths.")
 
@@ -217,12 +233,108 @@ Return (WIDTH HEIGHT RGBA) or nil."
                     service)))
     (unless (gethash key slothbar-tray-sni--signal-items)
       (puthash key t slothbar-tray-sni--signal-items)
-      (dolist (signal '("NewIcon" "NewStatus" "NewTitle"
-                        "NewAttentionIcon" "NewOverlayIcon" "NewToolTip"))
-        (dbus-register-signal
-         :session owner path slothbar-tray-sni--item-interface signal
-         (lambda (&rest _)
-           (slothbar-tray-sni--refresh-item service path)))))))
+      (let (objects)
+        (dolist (signal '("NewIcon" "NewStatus" "NewTitle"
+                          "NewAttentionIcon" "NewOverlayIcon" "NewToolTip"))
+          (push (dbus-register-signal
+                 :session owner path slothbar-tray-sni--item-interface signal
+                 (lambda (&rest _)
+                   (slothbar-tray-sni--refresh-item service path)))
+                objects))
+        (puthash key objects slothbar-tray-sni--signal-objects)))))
+
+(defun slothbar-tray-sni--unregister-signals (service path)
+  "Unregister SNI change signals for SERVICE at PATH."
+  (let ((key (cons service path)))
+    (dolist (object (gethash key slothbar-tray-sni--signal-objects))
+      (ignore-errors (dbus-unregister-object object)))
+    (remhash key slothbar-tray-sni--signal-objects)
+    (remhash key slothbar-tray-sni--signal-items)))
+
+(defun slothbar-tray-sni--remove-item (service path)
+  "Remove the item at SERVICE/PATH."
+  (setq slothbar-tray-sni--items
+        (cl-remove-if
+         (lambda (item)
+           (and (equal (slothbar-tray-sni-item-service item) service)
+                (equal (slothbar-tray-sni-item-path item) path)))
+         slothbar-tray-sni--items))
+  (slothbar-tray-sni--unregister-signals service path)
+  (slothbar-tray-sni--update-watcher-property)
+  (slothbar-tray-sni--refresh-module))
+
+(defun slothbar-tray-sni--on-name-owner-changed (name _old new)
+  "Remove items whose bus NAME lost its owner."
+  (when (and (stringp name)
+             (string-empty-p (or new ""))
+             (string-prefix-p "org.kde.StatusNotifierItem" name))
+    (let ((matches (cl-remove-if-not
+                    (lambda (item)
+                      (equal (slothbar-tray-sni-item-service item) name))
+                    slothbar-tray-sni--items)))
+      (dolist (item matches)
+        (slothbar-tray-sni--remove-item
+         (slothbar-tray-sni-item-service item)
+         (slothbar-tray-sni-item-path item))))))
+
+(defun slothbar-tray-sni--watcher-entry (entry)
+  "Add ENTRY from a secondary watcher's item list."
+  (when (stringp entry)
+    (let* ((slash (string-match "/" entry))
+           (service (if slash (substring entry 0 slash) entry))
+           (path (if slash (substring entry slash) "/StatusNotifierItem")))
+      (unless (string-empty-p service)
+        (slothbar-tray-sni--add-item service path)))))
+
+(defun slothbar-tray-sni--register-watcher-signals ()
+  "Watch a secondary watcher's item registration signals."
+  (setq slothbar-tray-sni--watcher-signal-objects
+        (list
+         (dbus-register-signal
+          :session slothbar-tray-sni--watcher-service
+          slothbar-tray-sni--watcher-path
+          slothbar-tray-sni--watcher-interface
+          "StatusNotifierItemRegistered"
+          (lambda (entry) (slothbar-tray-sni--watcher-entry entry)))
+         (dbus-register-signal
+          :session slothbar-tray-sni--watcher-service
+          slothbar-tray-sni--watcher-path
+          slothbar-tray-sni--watcher-interface
+          "StatusNotifierItemUnregistered"
+          (lambda (entry)
+            (let* ((slash (string-match "/" (or entry "")))
+                   (service (if slash (substring entry 0 slash) entry))
+                   (path (if slash (substring entry slash)
+                           "/StatusNotifierItem")))
+              (slothbar-tray-sni--remove-item service path)))))))
+
+(defun slothbar-tray-sni--try-secondary-host ()
+  "Try to register as a host with an existing StatusNotifier watcher."
+  (condition-case err
+      (progn
+        (dbus-call-method :session
+                          slothbar-tray-sni--watcher-service
+                          slothbar-tray-sni--watcher-path
+                          slothbar-tray-sni--watcher-interface
+                          "RegisterStatusNotifierHost"
+                          slothbar-tray-sni--host-service)
+        (setq slothbar-tray-sni--secondary-host t)
+        (slothbar-tray-sni--register-watcher-signals)
+        (dolist (entry
+                 (condition-case nil
+                     (dbus-get-property
+                      :session slothbar-tray-sni--watcher-service
+                      slothbar-tray-sni--watcher-path
+                      slothbar-tray-sni--watcher-interface
+                      "RegisteredStatusNotifierItems")
+                   (error nil)))
+          (slothbar-tray-sni--watcher-entry entry))
+        t)
+    (error
+     (message "Slothbar tray: another StatusNotifier host owns %s; %s"
+              slothbar-tray-sni--watcher-service
+              (error-message-string err))
+     nil)))
 
 (defun slothbar-tray-sni--add-item (service path)
   "Add or replace the item at SERVICE/PATH."
@@ -318,40 +430,48 @@ Return (WIDTH HEIGHT RGBA) or nil."
   "Start the StatusNotifier watcher for M."
   (setq slothbar-tray-sni--module m
         slothbar-tray-sni--items nil)
-  (unless (eq :primary-owner
-              (dbus-register-service
-               :session slothbar-tray-sni--watcher-service
-               :do-not-queue))
-    (error "Another StatusNotifier host owns %s"
-           slothbar-tray-sni--watcher-service))
-  (setq slothbar-tray-sni--service-owned t)
-  (dbus-register-method
-   :session slothbar-tray-sni--watcher-service
-   slothbar-tray-sni--watcher-path
-   slothbar-tray-sni--watcher-interface
-   "RegisterStatusNotifierItem"
-   #'slothbar-tray-sni--register-item)
-  (dbus-register-method
-   :session slothbar-tray-sni--watcher-service
-   slothbar-tray-sni--watcher-path
-   slothbar-tray-sni--watcher-interface
-   "RegisterStatusNotifierHost"
-   (lambda (_host) :ignore))
-  (dbus-register-property
-   :session slothbar-tray-sni--watcher-service
-   slothbar-tray-sni--watcher-path
-   slothbar-tray-sni--watcher-interface
-   "IsStatusNotifierHostRegistered" :readwrite t)
-  (dbus-register-property
-   :session slothbar-tray-sni--watcher-service
-   slothbar-tray-sni--watcher-path
-   slothbar-tray-sni--watcher-interface
-   "ProtocolVersion" :read :int32 0)
-  (dbus-register-property
-   :session slothbar-tray-sni--watcher-service
-   slothbar-tray-sni--watcher-path
-   slothbar-tray-sni--watcher-interface
-   "RegisteredStatusNotifierItems" :readwrite '(:array))
+  (if (eq :primary-owner
+          (dbus-register-service
+           :session slothbar-tray-sni--watcher-service
+           :do-not-queue))
+      (progn
+        (setq slothbar-tray-sni--service-owned t)
+        (dbus-register-method
+         :session slothbar-tray-sni--watcher-service
+         slothbar-tray-sni--watcher-path
+         slothbar-tray-sni--watcher-interface
+         "RegisterStatusNotifierItem"
+         #'slothbar-tray-sni--register-item)
+        (dbus-register-method
+         :session slothbar-tray-sni--watcher-service
+         slothbar-tray-sni--watcher-path
+         slothbar-tray-sni--watcher-interface
+         "RegisterStatusNotifierHost"
+         (lambda (_host) :ignore))
+        (dbus-register-property
+         :session slothbar-tray-sni--watcher-service
+         slothbar-tray-sni--watcher-path
+         slothbar-tray-sni--watcher-interface
+         "IsStatusNotifierHostRegistered" :readwrite t)
+        (dbus-register-property
+         :session slothbar-tray-sni--watcher-service
+         slothbar-tray-sni--watcher-path
+         slothbar-tray-sni--watcher-interface
+         "ProtocolVersion" :read :int32 0)
+        (dbus-register-property
+         :session slothbar-tray-sni--watcher-service
+         slothbar-tray-sni--watcher-path
+         slothbar-tray-sni--watcher-interface
+         "RegisteredStatusNotifierItems" :readwrite '(:array)))
+    (unless (slothbar-tray-sni--try-secondary-host)
+      (error "Another StatusNotifier host owns %s"
+             slothbar-tray-sni--watcher-service)))
+  (unless slothbar-tray-sni--name-owner-signal
+    (setq slothbar-tray-sni--name-owner-signal
+          (dbus-register-signal
+           :session "org.freedesktop.DBus" "/org/freedesktop/DBus"
+           "org.freedesktop.DBus" "NameOwnerChanged"
+           #'slothbar-tray-sni--on-name-owner-changed)))
   (slothbar-tray-sni--layout m)
   m)
 
@@ -406,10 +526,23 @@ Return (WIDTH HEIGHT RGBA) or nil."
       (when (fboundp 'dbus-unregister-service)
         (dbus-unregister-service :session
                                  slothbar-tray-sni--watcher-service))))
+  (when slothbar-tray-sni--name-owner-signal
+    (ignore-errors
+      (dbus-unregister-object slothbar-tray-sni--name-owner-signal)))
+  (dolist (object slothbar-tray-sni--watcher-signal-objects)
+    (ignore-errors (dbus-unregister-object object)))
+  (maphash (lambda (_key objects)
+             (dolist (object objects)
+               (ignore-errors (dbus-unregister-object object))))
+           slothbar-tray-sni--signal-objects)
   (setq slothbar-tray-sni--items nil
         slothbar-tray-sni--module nil
-        slothbar-tray-sni--service-owned nil)
+        slothbar-tray-sni--service-owned nil
+        slothbar-tray-sni--secondary-host nil
+        slothbar-tray-sni--name-owner-signal nil
+        slothbar-tray-sni--watcher-signal-objects nil)
   (clrhash slothbar-tray-sni--signal-items)
+  (clrhash slothbar-tray-sni--signal-objects)
   (clrhash slothbar-tray-sni--icon-cache))
 
 (provide 'slothbar-tray-sni)

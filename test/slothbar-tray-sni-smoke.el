@@ -100,7 +100,11 @@
       (slothbar-sni-test--check "NewTitle refreshes item properties"
                                 (equal "Changed Title"
                                        (slothbar-tray-sni-item-title
-                                        (car slothbar-tray-sni--items)))))
+                                        (car slothbar-tray-sni--items))))
+      (dbus-unregister-service :session slothbar-sni-test--item)
+      (read-event nil nil 0.2)
+      (slothbar-sni-test--check "item removal clears the item list"
+                                (null slothbar-tray-sni--items)))
     (slothbar-tray-sni-exit module)
     (slothbar-sni-test--check "watcher service was released"
                               (not slothbar-tray-sni--service-owned))))
