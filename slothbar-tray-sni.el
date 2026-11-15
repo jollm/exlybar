@@ -168,18 +168,23 @@ Return (WIDTH HEIGHT RGBA) or nil."
      width height (slothbar-tray-sni--argb->rgba bytes) target-height)))
 
 (defun slothbar-tray-sni--icon-dirs (theme-paths)
-  "Return icon directories for THEME-PATHS and the XDG data dirs."
-  (delete-dups
-   (append
-    (mapcar #'expand-file-name (or theme-paths nil))
-    (list (expand-file-name "~/.local/share/icons")
-          (expand-file-name "~/.icons"))
-    (cl-loop for dir in (split-string
-                         (or (getenv "XDG_DATA_DIRS")
-                             "/usr/local/share:/usr/share")
-                         ":" t)
-             collect (expand-file-name "icons" dir))
-    (list "/usr/share/icons" "/usr/local/share/icons"))))
+  "Return icon directories for THEME-PATHS and the XDG data dirs.
+THEME-PATHS may be a string or a list of strings."
+  (let ((theme-paths
+         (cond ((stringp theme-paths) (list theme-paths))
+               ((listp theme-paths) theme-paths)
+               (t nil))))
+    (delete-dups
+     (append
+      (mapcar #'expand-file-name theme-paths)
+      (list (expand-file-name "~/.local/share/icons")
+            (expand-file-name "~/.icons"))
+      (cl-loop for dir in (split-string
+                           (or (getenv "XDG_DATA_DIRS")
+                               "/usr/local/share:/usr/share")
+                           ":" t)
+               collect (expand-file-name "icons" dir))
+      (list "/usr/share/icons" "/usr/local/share/icons")))))
 
 (defun slothbar-tray-sni--find-icon (name theme-paths)
   "Find NAME's PNG in THEME-PATHS or the standard icon directories."

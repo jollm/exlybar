@@ -1668,6 +1668,17 @@
     (should (equal (alist-get ?a (slothbar-module-format-spec m)) "app.org"))
     (should (slothbar-module-needs-refresh? m))))
 
+(ert-deftest slothbar-unit-tray-sni-icon-theme-string ()
+  "IconThemePath may arrive as a single string."
+  (require 'slothbar-tray-sni)
+  (let ((dir (make-temp-file "slothbar-icon-theme-" t)))
+    (unwind-protect
+        (let ((path (expand-file-name "steam.png" dir)))
+          (write-region "" nil path)
+          (should (equal path
+                         (slothbar-tray-sni--find-icon "steam" dir))))
+      (delete-directory dir t))))
+
 (ert-deftest slothbar-unit-ewmh-destroyed-window ()
   "A vanished client window yields nil EWMH properties."
   (require 'slothbar-ewmh)
