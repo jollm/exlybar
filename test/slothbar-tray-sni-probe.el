@@ -63,10 +63,79 @@
       :session probe--service probe--path probe--interface
       "RegisteredStatusNotifierItems" :readwrite '(:array :string "probe"))
      t))
-  (probe--check
-   "register a fake SNI item name"
-   (eq :primary-owner
-       (dbus-register-service :session probe--item :do-not-queue)))
+  (let ((activated nil))
+    (probe--check
+     "register a fake SNI item name"
+     (eq :primary-owner
+         (dbus-register-service :session probe--item :do-not-queue)))
+    (probe--check
+     "register fake SNI item properties"
+     (progn
+       (dbus-register-property :session probe--item "/StatusNotifierItem"
+                               "org.kde.StatusNotifierItem"
+                               "Id" :read "probe")
+       (dbus-register-property :session probe--item "/StatusNotifierItem"
+                               "org.kde.StatusNotifierItem"
+                               "Title" :read "Probe Item")
+       (dbus-register-property :session probe--item "/StatusNotifierItem"
+                               "org.kde.StatusNotifierItem"
+                               "Status" :read "Active")
+       (dbus-register-property :session probe--item "/StatusNotifierItem"
+                               "org.kde.StatusNotifierItem"
+                               "IconName" :read "probe")
+       (dbus-register-property :session probe--item "/StatusNotifierItem"
+                               "org.kde.StatusNotifierItem"
+                               "Menu" :read :object-path "/MenuBar")
+       t))
+    (probe--check
+     "read fake SNI item properties"
+     (equal (list (dbus-get-property
+                   :session probe--item "/StatusNotifierItem"
+                   "org.kde.StatusNotifierItem" "Id")
+                  (dbus-get-property
+                   :session probe--item "/StatusNotifierItem"
+                   "org.kde.StatusNotifierItem" "Title")
+                  (dbus-get-property
+                   :session probe--item "/StatusNotifierItem"
+                   "org.kde.StatusNotifierItem" "Status")
+                  (dbus-get-property
+                   :session probe--item "/StatusNotifierItem"
+                   "org.kde.StatusNotifierItem" "IconName"))
+            '("probe" "Probe Item" "Active" "probe")))
+    (probe--check
+     "register fake SNI item Activate"
+     (dbus-register-method
+      :session probe--item "/StatusNotifierItem"
+      "org.kde.StatusNotifierItem" "Activate"
+      (lambda (x y)
+        (setq activated (list x y))
+        :ignore)))
+    (dbus-call-method :session probe--item "/StatusNotifierItem"
+                      "org.kde.StatusNotifierItem" "Activate" 7 9)
+    (probe--check "fake SNI item activation is delivered"
+                  (equal activated '(7 9)))
+    (probe--check
+     "register fake dbusmenu GetLayout"
+     (dbus-register-method
+      :session probe--item "/MenuBar" "com.canonical.dbusmenu" "GetLayout"
+      (lambda (_parent _depth _properties)
+        (list :struct
+              (list :uint32 1)
+              (list :struct
+                    (list :int32 0)
+                    (list :array
+                          (list :dict-entry
+                                :string "label"
+                                (list :variant :string "Probe")))
+                    (list :array))))))
+    (let ((layout (dbus-call-method
+                   :session probe--item "/MenuBar"
+                   "com.canonical.dbusmenu" "GetLayout"
+                   0 -1 '(:array :string "label"))))
+      (probe--check "dbusmenu layout is returned"
+                    (and layout
+                         (string-match-p "Probe" (format "%S" layout))))
+      (princ (format "dbusmenu layout: %S\n" layout))))
   (dbus-call-method :session probe--service probe--path probe--interface
                     "RegisterStatusNotifierItem" probe--item)
   (let ((registered (dbus-get-property
