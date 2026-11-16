@@ -854,10 +854,14 @@ Return non-nil if a buffer was presented."
                  :positioner positioner :width width :height height
                  :scale scale))
          (xdg-popup nil))
-    (elwl-xdg-positioner-set-size positioner width height)
-    (elwl-xdg-positioner-set-anchor-rect positioner x y 1 1)
-    (elwl-xdg-positioner-set-anchor positioner '(bottom right))
-    (elwl-xdg-positioner-set-gravity positioner '(bottom right))
+    (let ((bottom (or (plist-get (slothbar-config bar) :bottom)
+                      slothbar-is-bottom)))
+      (elwl-xdg-positioner-set-size positioner width height)
+      (elwl-xdg-positioner-set-anchor-rect positioner x y 1 1)
+      (elwl-xdg-positioner-set-anchor
+       positioner (if bottom 'top-right 'bottom-right))
+      (elwl-xdg-positioner-set-gravity
+       positioner (if bottom 'top-right 'bottom-right)))
     (elwl-xdg-positioner-set-constraint-adjustment positioner '(slide-x slide-y))
     (elwl-xdg-positioner-set-reactive positioner)
     (setq xdg-popup
