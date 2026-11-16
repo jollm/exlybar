@@ -1754,6 +1754,18 @@
           (slothbar-menu-click shown-sub 5 5 :left)
           (should (eq (car shown) menu)))))))
 
+(ert-deftest slothbar-unit-tray-module-offset ()
+  "The SNI anchor uses the tray module's bar placement."
+  (require 'slothbar-tray-sni)
+  (let* ((bar (slothbar-create :id 'anchor-test))
+         (module (slothbar-tray-create))
+         (other (slothbar-module-create :name "other")))
+    (setf (slothbar-module-bar module) bar
+          (slothbar-placements bar)
+          (list (list (list 100 0) other)
+                (list (list 240 0) module)))
+    (should (= 240 (slothbar-tray-sni--module-offset module)))))
+
 (ert-deftest slothbar-unit-tray-icon-theme-inheritance ()
   "Icon lookup follows index.theme Inherits chains."
   (let* ((root (make-temp-file "slothbar-theme-" t))

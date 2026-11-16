@@ -841,18 +841,29 @@ for an object-path registration."
              return item
              do (setq left (+ left width gap)))))
 
+(defun slothbar-tray-sni--module-offset (m)
+  "Return M's X offset in its bar, or 0."
+  (let ((bar (slothbar-module--bar m)))
+    (or (when bar
+          (cl-loop for placement in (or (slothbar-placements bar)
+                                         slothbar--last-layout)
+                   when (eq (cadr placement) m)
+                   return (caar placement)))
+        0)))
+
 (defun slothbar-tray-sni--show-menu (m item x)
   "Open ITEM's dbusmenu popup on M at X."
   (when-let* ((path (slothbar-tray-sni-item-menu item))
               (service (slothbar-tray-sni-item-service item))
               (bar (slothbar-module--bar m)))
     (let ((dbusmenu (slothbar-dbusmenu--make
-                     :service service :path path)))
+                     :service service :path path))
+          (offset (slothbar-tray-sni--module-offset m)))
       (ignore-errors (slothbar-dbusmenu-about-to-show dbusmenu 0))
       (let ((menu (and (slothbar-dbusmenu-refresh dbusmenu)
                        (slothbar-menu-create dbusmenu))))
         (when (and menu (slothbar-menu-rows menu))
-          (slothbar-menu-show menu bar (round x) 0))))))
+          (slothbar-menu-show menu bar (round (+ offset x)) 0))))))
 
 (defun slothbar-tray-sni--context-menu (item x y)
   "Ask ITEM's application to open its native context menu at X,Y."
