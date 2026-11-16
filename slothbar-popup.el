@@ -110,6 +110,21 @@ Return a `slothbar-popup', or nil when the backend has no popup support."
      (slothbar-popup-state popup)
      frame)))
 
+(defun slothbar-popup-close-for-bar (bar)
+  "Close active popups anchored to BAR."
+  (dolist (popup (copy-sequence slothbar-popup--active))
+    (when (eq bar (slothbar-popup-bar popup))
+      (if-let* ((function (slothbar-popup-done-function popup)))
+          (funcall function)
+        (slothbar-popup-destroy popup)))))
+
+(defun slothbar-popup-close-all ()
+  "Close every active popup."
+  (dolist (popup (copy-sequence slothbar-popup--active))
+    (if-let* ((function (slothbar-popup-done-function popup)))
+        (funcall function)
+      (slothbar-popup-destroy popup))))
+
 (defun slothbar-popup-destroy (popup)
   "Destroy POPUP."
   (when popup

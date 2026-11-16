@@ -1235,6 +1235,8 @@ VISIBLE non-nil reserves the bar's exclusive zone."
 (cl-defmethod slothbar-backend-destroy-bar
     ((backend slothbar-backend-wayland) (bar slothbar))
   "Destroy BAR's layer surface and buffers on BACKEND."
+  (when (fboundp 'slothbar-popup-close-for-bar)
+    (slothbar-popup-close-for-bar bar))
   (let ((surface (slothbar-surface bar)))
     (when surface
       (when (slothbar-backend-wayland-surface-layer-surface surface)

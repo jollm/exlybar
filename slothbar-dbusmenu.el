@@ -50,7 +50,9 @@
   service
   path
   revision
-  root)
+  root
+  signal-objects
+  update-function)
 
 (defun slothbar-dbusmenu--unwrap (value)
   "Unwrap one-element D-Bus variant/list wrappers from VALUE."
@@ -108,6 +110,36 @@
      :accessible-desc
      (slothbar-dbusmenu--property properties "accessible-desc")
      :children children)))
+
+(defun slothbar-dbusmenu-watch (menu callback)
+  "Call CALLBACK when MENU's layout or item properties change."
+  (unless (slothbar-dbusmenu-signal-objects menu)
+    (setf (slothbar-dbusmenu-update-function menu) callback
+          (slothbar-dbusmenu-signal-objects menu)
+          (list
+           (dbus-register-signal
+            :session (slothbar-dbusmenu-service menu)
+            (slothbar-dbusmenu-path menu)
+            slothbar-dbusmenu--interface "LayoutUpdated"
+            (lambda (&rest _)
+              (when (slothbar-dbusmenu-update-function menu)
+                (funcall (slothbar-dbusmenu-update-function menu)))))
+           (dbus-register-signal
+            :session (slothbar-dbusmenu-service menu)
+            (slothbar-dbusmenu-path menu)
+            slothbar-dbusmenu--interface "ItemsPropertiesUpdated"
+            (lambda (&rest _)
+              (when (slothbar-dbusmenu-update-function menu)
+                (funcall (slothbar-dbusmenu-update-function menu))))))))
+  menu)
+
+(defun slothbar-dbusmenu-unwatch (menu)
+  "Stop watching MENU's D-Bus signals."
+  (dolist (object (slothbar-dbusmenu-signal-objects menu))
+    (ignore-errors (dbus-unregister-object object)))
+  (setf (slothbar-dbusmenu-signal-objects menu) nil
+        (slothbar-dbusmenu-update-function menu) nil)
+  menu)
 
 (defun slothbar-dbusmenu-refresh (menu)
   "Fetch and normalize MENU's complete layout.

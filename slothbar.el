@@ -1207,6 +1207,8 @@ Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
   (setq slothbar--enabled nil)
   (remove-variable-watcher 'slothbar-modules #'slothbar--watch-slothbar-modules)
   (remove-variable-watcher 'slothbar-bars #'slothbar--watch-slothbar-bars)
+  (when (fboundp 'slothbar-popup-close-all)
+    (slothbar-popup-close-all))
   (dolist (bar slothbar--bars)
     (when slothbar--backend
       (ignore-errors

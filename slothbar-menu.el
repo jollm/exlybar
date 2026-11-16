@@ -260,6 +260,8 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
 
 (defun slothbar-menu--hide (menu)
   "Hide MENU's popup without ending its dbusmenu session."
+  (when-let* ((dbusmenu (slothbar-menu-dbusmenu menu)))
+    (slothbar-dbusmenu-unwatch dbusmenu))
   (when-let* ((popup (slothbar-menu-popup menu)))
     (slothbar-popup-destroy popup))
   (when (eq menu slothbar-menu--active)
@@ -290,6 +292,40 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
   "Close the currently active menu, if any."
   (when (slothbar-menu-active-p)
     (slothbar-menu-close slothbar-menu--active)))
+
+(defun slothbar-menu--watch (menu)
+  "Refresh MENU when its dbusmenu service reports changes."
+  (when-let* ((dbusmenu (slothbar-menu-dbusmenu menu)))
+    (slothbar-dbusmenu-watch
+     dbusmenu
+     (lambda ()
+       (run-at-time 0 nil (lambda () (slothbar-menu--refresh menu)))))))
+
+(defun slothbar-menu--refresh (menu)
+  "Rebuild active MENU from its current dbusmenu tree."
+  (when (and (slothbar-menu-popup menu)
+             (slothbar-menu-dbusmenu menu)
+             (slothbar-dbusmenu-refresh (slothbar-menu-dbusmenu menu)))
+    (let* ((dbusmenu (slothbar-menu-dbusmenu menu))
+           (parent (slothbar-menu-parent menu))
+           (root (slothbar-menu-root menu))
+           (item (and parent
+                      (slothbar-dbusmenu-find-item
+                       dbusmenu (slothbar-dbusmenu-item-id root))))
+           (replacement
+            (if parent
+                (and item
+                     (slothbar-menu-create
+                      item parent
+                      (slothbar-dbusmenu-item-label item)
+                      dbusmenu))
+              (slothbar-menu-create dbusmenu))))
+      (when replacement
+        (let ((bar (slothbar-menu-anchor-bar menu))
+              (x (slothbar-menu-anchor-x menu))
+              (y (slothbar-menu-anchor-y menu)))
+          (slothbar-menu--hide menu)
+          (slothbar-menu--show-deferred replacement bar x y))))))
 
 (defun slothbar-menu--show-deferred (menu bar x y)
   "Show MENU after the current pointer dispatch has finished."
@@ -375,6 +411,7 @@ Return the `slothbar-popup' or nil."
               (slothbar-menu-click menu px py button))
             (slothbar-popup-done-function popup)
             (lambda () (slothbar-menu-close menu)))
+      (slothbar-menu--watch menu)
       (slothbar-popup-present popup frame)
       popup)))
 

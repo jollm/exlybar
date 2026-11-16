@@ -103,6 +103,23 @@
                                         (equal "clicked"
                                                (nth 1 slothbar-dbusmenu-test--seen-event))
                                         (= 42 (nth 3 slothbar-dbusmenu-test--seen-event))))
+    (let ((updates 0))
+      (slothbar-dbusmenu-watch menu (lambda () (cl-incf updates)))
+      (dbus-send-signal :session slothbar-dbusmenu-test--service
+                        slothbar-dbusmenu-test--path
+                        "com.canonical.dbusmenu" "LayoutUpdated"
+                        :uint32 1 :int32 0)
+      (read-event nil nil 0.2)
+      (slothbar-dbusmenu-test--check "LayoutUpdated invokes watcher"
+                                     (= 1 updates))
+      (slothbar-dbusmenu-unwatch menu)
+      (dbus-send-signal :session slothbar-dbusmenu-test--service
+                        slothbar-dbusmenu-test--path
+                        "com.canonical.dbusmenu" "LayoutUpdated"
+                        :uint32 2 :int32 0)
+      (read-event nil nil 0.2)
+      (slothbar-dbusmenu-test--check "unwatch stops updates"
+                                     (= 1 updates)))
     (slothbar-dbusmenu-close menu 0 43)
     (slothbar-dbusmenu-test--check "Event closed dispatched"
                                    (and (equal 0 (nth 0 slothbar-dbusmenu-test--seen-event))
