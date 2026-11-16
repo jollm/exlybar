@@ -807,9 +807,7 @@ for an object-path registration."
   "Activate the SNI item at X,Y on M for BUTTON."
   (when-let* ((item (slothbar-tray-sni--item-at-x m x)))
     (if (and (slothbar-tray-sni-item-menu item)
-             (or (eq button :right)
-                 (and (eq button :left)
-                      (slothbar-tray-sni-item-item-is-menu item))))
+             (memq button '(:left :right)))
         (run-at-time
          0 nil
          (lambda ()
