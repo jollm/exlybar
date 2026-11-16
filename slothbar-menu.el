@@ -55,7 +55,11 @@
   default-row-height
   dbusmenu
   popup
-  selected)
+  selected
+  parent
+  anchor-bar
+  anchor-x
+  anchor-y)
 
 (defun slothbar-menu--font ()
   "Return the primary menu font, or nil."
@@ -75,9 +79,10 @@
                    slothbar-menu-padding)))
       (if layout (round (fontsloth-layout-current-pos layout)) 0))))
 
-(defun slothbar-menu-create (menu-or-root)
+(defun slothbar-menu-create (menu-or-root &optional parent back-label dbusmenu)
   "Create a single-level `slothbar-menu' from MENU-OR-ROOT.
-MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
+MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item.
+For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
   (let* ((root (if (slothbar-dbusmenu-p menu-or-root)
                    (slothbar-dbusmenu-root menu-or-root)
                  menu-or-root))
@@ -86,6 +91,15 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
          (rows nil)
          (width 0)
          (y 0))
+    (when parent
+      (let ((label (format "← %s" (or back-label "Back"))))
+        (push (slothbar-menu-row--make
+               :item nil :label label :type "back"
+               :y y :height row-height)
+              rows)
+        (setq width (max width (+ (round (or (slothbar-menu--text-width label) 0))
+                                  (* 2 slothbar-menu-padding)))
+              y (+ y row-height))))
     (dolist (item children)
       (when (slothbar-dbusmenu-item-visible item)
         (let* ((separator (equal "separator"
@@ -104,7 +118,9 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
      :root root :rows (nreverse rows)
      :width (max 1 (round width)) :height (max 1 (round y))
      :default-row-height row-height
-     :dbusmenu (and (slothbar-dbusmenu-p menu-or-root) menu-or-root))))
+     :parent parent
+     :dbusmenu (or dbusmenu
+                   (and (slothbar-dbusmenu-p menu-or-root) menu-or-root)))))
 
 (defun slothbar-menu--rgba (color)
   "Return COLOR as an RGBA byte list."
@@ -207,8 +223,9 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
             (slothbar-menu--render-label
              frame width height slothbar-menu-padding row-y
              (slothbar-menu-row-label row)
-             (if (eq t (slothbar-dbusmenu-item-enabled
-                        (slothbar-menu-row-item row)))
+             (if (or (equal "back" (slothbar-menu-row-type row))
+                     (eq t (slothbar-dbusmenu-item-enabled
+                            (slothbar-menu-row-item row))))
                  foreground
                (slothbar-color-brighten background 0.5)))))
         (setq index (1+ index))))
@@ -224,10 +241,11 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
            return index))
 
 (defun slothbar-menu-select (menu index)
-  "Select row INDEX in MENU and redraw it."
-  (setf (slothbar-menu-selected menu) index)
-  (when-let* ((popup (slothbar-menu-popup menu)))
-    (slothbar-popup-present popup (slothbar-menu-render-frame menu)))
+  "Select row INDEX in MENU and redraw it when it changes."
+  (unless (equal index (slothbar-menu-selected menu))
+    (setf (slothbar-menu-selected menu) index)
+    (when-let* ((popup (slothbar-menu-popup menu)))
+      (slothbar-popup-present popup (slothbar-menu-render-frame menu))))
   index)
 
 (defun slothbar-menu-motion (menu x y)
@@ -236,6 +254,15 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
   (if (numberp y)
       (slothbar-menu-select menu (slothbar-menu--row-index-at-y menu y))
     (slothbar-menu-select menu nil)))
+
+(defun slothbar-menu--hide (menu)
+  "Hide MENU's popup without ending its dbusmenu session."
+  (when-let* ((popup (slothbar-menu-popup menu)))
+    (slothbar-popup-destroy popup))
+  (when (eq menu slothbar-menu--active)
+    (setq slothbar-menu--active nil))
+  (setf (slothbar-menu-popup menu) nil
+        (slothbar-menu-selected menu) nil))
 
 (defun slothbar-menu-close (menu)
   "Close MENU's popup and tell its dbusmenu service it closed."
@@ -248,12 +275,8 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
                             (slothbar-dbusmenu-item-id root))
       (ignore-errors
         (slothbar-dbusmenu-close
-         dbusmenu (slothbar-dbusmenu-item-id root))))
-    (slothbar-popup-destroy popup))
-  (when (eq menu slothbar-menu--active)
-    (setq slothbar-menu--active nil))
-  (setf (slothbar-menu-popup menu) nil
-        (slothbar-menu-selected menu) nil))
+         dbusmenu (slothbar-dbusmenu-item-id root)))))
+  (slothbar-menu--hide menu))
 
 (defun slothbar-menu-active-p ()
   "Return non-nil when a menu popup is active."
@@ -265,14 +288,49 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
   (when (slothbar-menu-active-p)
     (slothbar-menu-close slothbar-menu--active)))
 
+(defun slothbar-menu--show-deferred (menu bar x y)
+  "Show MENU after the current pointer dispatch has finished."
+  (run-at-time
+   0 nil
+   (lambda ()
+     (unless (and slothbar-menu--active
+                  (not (eq slothbar-menu--active menu)))
+       (slothbar-menu-show menu bar x y)))))
+
+(defun slothbar-menu--open-submenu (menu row)
+  "Replace MENU's popup with ROW's submenu."
+  (let ((child (slothbar-menu-create
+                (slothbar-menu-row-item row)
+                menu (slothbar-menu-row-label row)
+                (slothbar-menu-dbusmenu menu))))
+    (slothbar-menu--hide menu)
+    (slothbar-menu--show-deferred child
+                                  (slothbar-menu-anchor-bar menu)
+                                  (slothbar-menu-anchor-x menu)
+                                  (slothbar-menu-anchor-y menu))))
+
 (defun slothbar-menu-click (menu x y button)
   "Handle a BUTTON press at X,Y on MENU."
+  (ignore x)
   (let* ((index (slothbar-menu--row-index-at-y menu y))
          (row (and index (nth index (slothbar-menu-rows menu))))
          (item (and row (slothbar-menu-row-item row)))
          (dbusmenu (slothbar-menu-dbusmenu menu)))
     (cond
-     ((and (eq button :left) row item dbusmenu
+     ((and (memq button '(:left :right))
+           (equal "back" (slothbar-menu-row-type row)))
+      (when-let* ((parent (slothbar-menu-parent menu)))
+        (slothbar-menu--hide menu)
+        (slothbar-menu--show-deferred parent
+                                      (slothbar-menu-anchor-bar menu)
+                                      (slothbar-menu-anchor-x menu)
+                                      (slothbar-menu-anchor-y menu))
+        t))
+     ((and (memq button '(:left :right)) row item dbusmenu
+           (slothbar-dbusmenu-item-children item))
+      (slothbar-menu--open-submenu menu row)
+      t)
+     ((and (memq button '(:left :right)) row item dbusmenu
            (slothbar-dbusmenu-item-enabled item)
            (not (equal "separator" (slothbar-dbusmenu-item-type item))))
       (slothbar-dbusmenu-click dbusmenu
@@ -282,9 +340,7 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
      ((eq button :right)
       (slothbar-menu-close menu)
       t)
-     (t
-      (ignore x y)
-      nil))))
+     (t nil))))
 
 (defun slothbar-menu-show (menu bar x y)
   "Show MENU as a popup on BAR at X,Y.
@@ -298,6 +354,9 @@ Return the `slothbar-popup' or nil."
                  (not (eq slothbar-menu--active menu)))
         (slothbar-menu-close slothbar-menu--active))
       (setq slothbar-menu--active menu)
+      (setf (slothbar-menu-anchor-bar menu) bar
+            (slothbar-menu-anchor-x menu) x
+            (slothbar-menu-anchor-y menu) y)
       (slothbar--log-debug* "menu popup rows=%d size=%dx%d at %d,%d configured=%S"
                             (length (slothbar-menu-rows menu))
                             (slothbar-menu-width menu)

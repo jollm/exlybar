@@ -46,6 +46,8 @@
 (require 'slothbar-draw-op)
 (require 'slothbar-focus)
 (require 'slothbar-volume)
+(require 'slothbar-menu)
+(require 'slothbar-dbusmenu)
 
 ;; `slothbar-layout' only declares this variable; `slothbar.el' gives it a
 ;; defcustom value.  Define it here so tests can bind it dynamically.
@@ -1705,6 +1707,45 @@
     (should-not (slothbar-ewmh--get-window-property
                  123 'xcb:ewmh:get-_NET_WM_STATE))
     (should-not (slothbar-ewmh--window-urgent-p 123))))
+
+(ert-deftest slothbar-unit-menu-submenu-back ()
+  "Submenus prepend a Back row and can return to the parent menu."
+  (let* ((child (slothbar-dbusmenu-item--make
+                 :id 2 :label "Child" :visible t :enabled t))
+         (sub (slothbar-dbusmenu-item--make
+               :id 1 :label "Settings" :visible t :enabled t
+               :children (list child)))
+         (root (slothbar-dbusmenu-item--make
+                :id 0 :label "Root" :children (list sub)))
+         (dbusmenu (slothbar-dbusmenu--make :root root))
+         (menu (slothbar-menu-create dbusmenu))
+         (shown nil)
+         (hidden nil))
+    (should (= 1 (length (slothbar-menu-rows menu))))
+    (let ((submenu (slothbar-menu-create sub menu "Settings" dbusmenu)))
+      (should (equal "back"
+                     (slothbar-menu-row-type
+                      (car (slothbar-menu-rows submenu)))))
+      (should (equal "← Settings"
+                     (slothbar-menu-row-label
+                      (car (slothbar-menu-rows submenu)))))
+      (should (member "Child"
+                      (mapcar #'slothbar-menu-row-label
+                              (slothbar-menu-rows submenu))))
+      (cl-letf (((symbol-function 'slothbar-menu--hide)
+                 (lambda (m) (push m hidden)))
+                ((symbol-function 'run-at-time)
+                 (lambda (_delay _repeat function) (funcall function)))
+                ((symbol-function 'slothbar-menu-show)
+                 (lambda (m _bar _x _y) (push m shown) t)))
+        (slothbar-menu-click menu 5 5 :left)
+        (let ((shown-sub (car shown)))
+          (should (eq (slothbar-menu-parent shown-sub) menu))
+          (should (equal "back"
+                         (slothbar-menu-row-type
+                          (car (slothbar-menu-rows shown-sub)))))
+          (slothbar-menu-click shown-sub 5 5 :left)
+          (should (eq (car shown) menu)))))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
