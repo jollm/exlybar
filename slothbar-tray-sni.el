@@ -242,6 +242,41 @@ Return (WIDTH HEIGHT RGBA) or nil."
     (slothbar-tray-sni--scale-rgba
      width height (slothbar-tray-sni--argb->rgba bytes) target-height)))
 
+(defcustom slothbar-tray-svg-rasterizer "rsvg-convert"
+  "Optional executable used to rasterize SVG tray icons."
+  :type 'string
+  :group 'slothbar-tray)
+
+(defun slothbar-tray-sni--theme-inherits (dir)
+  "Return DIR's inherited icon theme names from index.theme."
+  (let ((file (expand-file-name "index.theme" dir)))
+    (when (file-readable-p file)
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (when (re-search-forward
+               "^Inherits[ \t]*=[ \t]*\\(.*\\)$" nil t)
+          (split-string (match-string 1) "," t "[ \t]+"))))))
+
+(defun slothbar-tray-sni--theme-inherited-dirs (dir roots &optional seen)
+  "Return inherited theme directories for DIR under ROOTS."
+  (let ((seen (or seen (list (expand-file-name dir)))))
+    (cl-loop for name in (slothbar-tray-sni--theme-inherits dir)
+             for candidates =
+             (delete-dups
+              (append
+               (list (expand-file-name
+                      name (file-name-directory (directory-file-name dir))))
+               (mapcar (lambda (root) (expand-file-name name root)) roots)))
+             append
+             (cl-loop for candidate in candidates
+                      for expanded = (expand-file-name candidate)
+                      when (and (file-directory-p expanded)
+                                (not (member expanded seen)))
+                      append (cons expanded
+                                   (slothbar-tray-sni--theme-inherited-dirs
+                                    expanded roots (cons expanded seen)))))))
+
 (defun slothbar-tray-sni--icon-dirs (theme-paths)
   "Return icon directories for THEME-PATHS and the XDG data dirs.
 THEME-PATHS may be a string or a list of strings."
@@ -249,20 +284,25 @@ THEME-PATHS may be a string or a list of strings."
          (cond ((stringp theme-paths) (list theme-paths))
                ((listp theme-paths) theme-paths)
                (t nil))))
-    (delete-dups
-     (append
-      (mapcar #'expand-file-name theme-paths)
-      (list (expand-file-name "~/.local/share/icons")
-            (expand-file-name "~/.icons"))
-      (cl-loop for dir in (split-string
-                           (or (getenv "XDG_DATA_DIRS")
-                               "/usr/local/share:/usr/share")
-                           ":" t)
-               collect (expand-file-name "icons" dir))
-      (list "/usr/share/icons" "/usr/local/share/icons")))))
+    (let* ((roots
+            (append
+             (list (expand-file-name "~/.local/share/icons")
+                   (expand-file-name "~/.icons"))
+             (cl-loop for dir in (split-string
+                                  (or (getenv "XDG_DATA_DIRS")
+                                      "/usr/local/share:/usr/share")
+                                  ":" t)
+                      collect (expand-file-name "icons" dir))
+             (list "/usr/share/icons" "/usr/local/share/icons")))
+           (dirs (delete-dups (append (mapcar #'expand-file-name theme-paths)
+                                      roots))))
+      (dolist (dir dirs)
+        (setq dirs (append dirs
+                           (slothbar-tray-sni--theme-inherited-dirs dir roots))))
+      (delete-dups dirs))))
 
 (defun slothbar-tray-sni--find-icon (name theme-paths)
-  "Find NAME's PNG in THEME-PATHS or the standard icon directories."
+  "Find NAME's PNG or SVG in THEME-PATHS or the standard icon directories."
   (when (and (stringp name) (not (string-empty-p name)))
     (let* ((dirs (slothbar-tray-sni--icon-dirs theme-paths))
            (key (cons name dirs)))
@@ -273,15 +313,19 @@ THEME-PATHS may be a string or a list of strings."
             (gethash key slothbar-tray-sni--icon-cache))
           (let ((path
                  (cl-loop
-                  for dir in dirs
-                  when (file-directory-p dir)
+                  for extension in '("png" "svg")
                   thereis
-                  (or (let ((direct (expand-file-name
-                                     (concat name ".png") dir)))
-                        (and (file-readable-p direct) direct))
-                      (car (directory-files-recursively
-                            dir (concat "\\`" (regexp-quote name) "\\.png\\'")
-                            nil))))))
+                  (cl-loop
+                   for dir in dirs
+                   when (file-directory-p dir)
+                   thereis
+                   (or (let ((direct (expand-file-name
+                                      (concat name "." extension) dir)))
+                         (and (file-readable-p direct) direct))
+                       (car (directory-files-recursively
+                             dir (concat "\\`" (regexp-quote name)
+                                         "\\." extension "\\'")
+                             nil)))))))
             (if path
                 (slothbar--log-debug* "SNI icon resolved %s -> %s" name path)
               (slothbar--log-debug* "SNI icon not found %s in %s"
@@ -290,26 +334,50 @@ THEME-PATHS may be a string or a list of strings."
               (puthash key path slothbar-tray-sni--icon-cache))
             path)))))
 
+(defun slothbar-tray-sni--rasterize-svg (path target-height)
+  "Rasterize SVG at PATH to TARGET-HEIGHT and return scaled RGBA."
+  (let ((executable (executable-find slothbar-tray-svg-rasterizer)))
+    (unless executable
+      (slothbar--log-debug* "SNI SVG %s skipped. %s not found"
+                            path slothbar-tray-svg-rasterizer))
+    (when executable
+      (let ((png (make-temp-file "slothbar-icon-" nil ".png")))
+      (unwind-protect
+          (when (zerop (call-process executable nil nil nil
+                                     "-h" (number-to-string target-height)
+                                     "-o" png path))
+            (unless (require 'umbra-png nil t)
+              (slothbar--log-debug* "SNI SVG %s decoded but umbra-png is unavailable"
+                                    path))
+            (when (require 'umbra-png nil t)
+              (let* ((pixmap (umbra-png-read png))
+                     (width (umbra-pixmap-width pixmap))
+                     (height (umbra-pixmap-height pixmap))
+                     (rgba (umbra-pixmap-demultiplied-data pixmap)))
+                (slothbar-tray-sni--scale-rgba width height rgba target-height))))
+          (delete-file png))))))
+
 (defun slothbar-tray-sni--load-icon (name theme-paths target-height)
   "Load and scale NAME from THEME-PATHS for TARGET-HEIGHT."
-  (when-let* ((path (slothbar-tray-sni--find-icon name theme-paths))
-              (umbra (progn
-                       (unless (require 'umbra-png nil t)
-                         (slothbar--log-debug*
-                          "SNI icon %s found at %s but umbra-png is unavailable"
-                          name path))
-                       (require 'umbra-png nil t))))
-    (condition-case err
-        (let* ((pixmap (umbra-png-read path))
-               (width (umbra-pixmap-width pixmap))
-               (height (umbra-pixmap-height pixmap))
-               (rgba (umbra-pixmap-demultiplied-data pixmap)))
-          (slothbar--log-debug* "SNI icon %s decoded %dx%d -> target %d"
-                                path width height target-height)
-          (slothbar-tray-sni--scale-rgba width height rgba target-height))
-      (error
-       (slothbar--log-debug* "SNI icon %s failed: %S" path err)
-       nil))))
+  (when-let* ((path (slothbar-tray-sni--find-icon name theme-paths)))
+    (if (string= "svg" (file-name-extension path))
+        (slothbar-tray-sni--rasterize-svg path target-height)
+      (unless (require 'umbra-png nil t)
+        (slothbar--log-debug*
+         "SNI icon %s found at %s but umbra-png is unavailable"
+         name path))
+      (when (require 'umbra-png nil t)
+        (condition-case err
+            (let* ((pixmap (umbra-png-read path))
+                   (width (umbra-pixmap-width pixmap))
+                   (height (umbra-pixmap-height pixmap))
+                   (rgba (umbra-pixmap-demultiplied-data pixmap)))
+              (slothbar--log-debug* "SNI icon %s decoded %dx%d -> target %d"
+                                    path width height target-height)
+              (slothbar-tray-sni--scale-rgba width height rgba target-height))
+          (error
+           (slothbar--log-debug* "SNI icon %s failed: %S" path err)
+           nil))))))
 
 (defun slothbar-tray-sni--resolve-icon (pixmap name theme-paths target-height)
   "Resolve ICON PIXMAP or NAME using THEME-PATHS for TARGET-HEIGHT."

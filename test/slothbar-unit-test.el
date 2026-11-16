@@ -48,6 +48,7 @@
 (require 'slothbar-volume)
 (require 'slothbar-menu)
 (require 'slothbar-dbusmenu)
+(require 'slothbar-tray-sni)
 
 ;; `slothbar-layout' only declares this variable; `slothbar.el' gives it a
 ;; defcustom value.  Define it here so tests can bind it dynamically.
@@ -1752,6 +1753,43 @@
                           (car (slothbar-menu-rows shown-sub)))))
           (slothbar-menu-click shown-sub 5 5 :left)
           (should (eq (car shown) menu)))))))
+
+(ert-deftest slothbar-unit-tray-icon-theme-inheritance ()
+  "Icon lookup follows index.theme Inherits chains."
+  (let* ((root (make-temp-file "slothbar-theme-" t))
+         (child (expand-file-name "child" root))
+         (parent (expand-file-name "parent" root))
+         (icon (expand-file-name "inherited.png" parent)))
+    (unwind-protect
+        (progn
+          (make-directory child)
+          (make-directory parent)
+          (with-temp-file (expand-file-name "index.theme" child)
+            (insert "[Icon Theme]\nInherits=parent\n"))
+          (with-temp-file icon (insert "not a png"))
+          (should (member parent
+                          (slothbar-tray-sni--icon-dirs (list child))))
+          (should (equal icon
+                         (slothbar-tray-sni--find-icon
+                          "inherited" (list child)))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-tray-icon-svg ()
+  "SVG icons are found and rasterized when rsvg-convert is available."
+  (let* ((root (make-temp-file "slothbar-svg-" t))
+         (icon (expand-file-name "svg-icon.svg" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file icon
+            (insert "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\">"
+                    "<rect width=\"8\" height=\"8\" fill=\"#ff0000\"/></svg>"))
+          (should (equal icon
+                         (slothbar-tray-sni--find-icon "svg-icon" (list root))))
+          (skip-unless (executable-find slothbar-tray-svg-rasterizer))
+          (let ((image (slothbar-tray-sni--load-icon "svg-icon" (list root) 4)))
+            (should image)
+            (should (= 4 (nth 1 image)))))
+      (delete-directory root t))))
 
 (provide 'slothbar-unit-test)
 ;;; slothbar-unit-test.el ends here
