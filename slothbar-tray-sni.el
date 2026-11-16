@@ -745,13 +745,7 @@ for an object-path registration."
                :session "org.freedesktop.DBus" "/org/freedesktop/DBus"
                "org.freedesktop.DBus" "NameOwnerChanged"
                #'slothbar-tray-sni--on-name-owner-changed)))
-      (slothbar-tray-sni--restore-known-items)
-      (when slothbar-tray-sni--discovery-timer
-        (cancel-timer slothbar-tray-sni--discovery-timer))
-      (setq slothbar-tray-sni--discovery-attempts 0
-            slothbar-tray-sni--discovery-timer
-            (run-with-timer 0.2 0.5 #'slothbar-tray-sni--discovery-poll))
-      (slothbar--log-debug* "SNI discovery scheduled")))
+      (slothbar-tray-sni--restore-known-items)))
   (slothbar-tray-sni--layout m)
   m)
 
