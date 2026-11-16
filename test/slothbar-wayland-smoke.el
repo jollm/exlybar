@@ -378,7 +378,10 @@
                                     (slothbar-popup-configured-p popup))
             (slothbar-wayland-check "menu popup is not dismissed"
                                     (not (slothbar-popup-done-p popup)))
-            (slothbar-popup-present popup frame)
+            (slothbar-wayland-check "menu popup presents its frame"
+                                    (slothbar-popup-present popup frame))
+            (slothbar-wayland-check "menu popup accepts a hover redraw"
+                                    (slothbar-popup-present popup frame))
             (slothbar-popup-destroy popup)
             (slothbar-wayland-check "menu popup was destroyed"
                                     (null (slothbar-popup-state popup))))

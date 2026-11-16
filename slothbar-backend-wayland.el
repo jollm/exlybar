@@ -891,9 +891,14 @@ Return non-nil if a buffer was presented."
            (pixel-height (* height scale))
            (bytes (* pixel-width pixel-height 4))
            (shm (slothbar-backend-wayland-shm backend))
-           (pool (elwl-shm-create-pool shm bytes))
+           (pool (elwl-shm-create-pool shm (* bytes 3)))
            (buffers (list (elwl-shm-pool-create-buffer
-                           pool pixel-width pixel-height 'argb8888 0))))
+                           pool pixel-width pixel-height 'argb8888 0)
+                          (elwl-shm-pool-create-buffer
+                           pool pixel-width pixel-height 'argb8888 bytes)
+                          (elwl-shm-pool-create-buffer
+                           pool pixel-width pixel-height 'argb8888
+                           (* bytes 2)))))
       (setf (slothbar-backend-wayland-popup-pool popup) pool
             (slothbar-backend-wayland-popup-buffers popup) buffers))
     popup))

@@ -217,7 +217,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                      (= index (slothbar-menu-selected menu)))
             (slothbar-menu--fill-row
              frame width 0 row-y width row-height
-             (slothbar-color-brighten background 1.4)))
+             (slothbar-color-brighten background 1.8)))
           (if (equal "separator" (slothbar-menu-row-type row))
               (slothbar-menu--fill-row
                frame width slothbar-menu-padding
