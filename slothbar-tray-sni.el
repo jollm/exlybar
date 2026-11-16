@@ -87,6 +87,15 @@
 (defvar slothbar-tray-sni--modules nil
   "Tray modules sharing the SNI watcher.")
 
+(defvar slothbar-tray-sni--known-services nil
+  "Item services seen in this Emacs session, retained across watcher restarts.")
+
+(defvar slothbar-tray-sni--discovery-timer nil
+  "Pending discovery timer for a newly started watcher.")
+
+(defvar slothbar-tray-sni--discovery-attempts 0
+  "Number of discovery scans attempted for the current watcher.")
+
 (defvar slothbar-tray-sni--service-owned nil
   "Non-nil when this process owns the watcher service.")
 
@@ -360,6 +369,8 @@ THEME-PATHS may be a string or a list of strings."
            (and (equal (slothbar-tray-sni-item-service item) service)
                 (equal (slothbar-tray-sni-item-path item) path)))
          slothbar-tray-sni--items))
+  (setq slothbar-tray-sni--known-services
+        (delete service slothbar-tray-sni--known-services))
   (slothbar-tray-sni--unregister-signals service path)
   (slothbar-tray-sni--update-watcher-property)
   (slothbar-tray-sni--refresh-module))
@@ -464,9 +475,74 @@ for an object-path registration."
              (bi nil)
              (t nil))))))
 
+(defun slothbar-tray-sni--unvariant (value)
+  "Recursively unwrap a D-Bus variant/list VALUE."
+  (cond
+   ((and (consp value) (eq (car value) :variant))
+    (slothbar-tray-sni--unvariant (cadr value)))
+   ((and (consp value) (null (cdr value)))
+    (slothbar-tray-sni--unvariant (car value)))
+   (t value)))
+
+(defun slothbar-tray-sni--probe-service (service)
+  "Add SERVICE as an SNI item when its Id property can be read."
+  (when (and (stringp service)
+             (not (string-prefix-p "org.freedesktop" service))
+             (not (equal service slothbar-tray-sni--watcher-service))
+             (not (string-prefix-p "org.kde.StatusNotifierHost" service))
+             (not (string-prefix-p "org.a11y" service)))
+    (condition-case err
+        (let* ((value
+                (dbus-call-method
+                 :session service "/StatusNotifierItem"
+                 "org.freedesktop.DBus.Properties" "Get"
+                 :timeout 500
+                 slothbar-tray-sni--item-interface "Id"))
+               (id (slothbar-tray-sni--unvariant value)))
+          (when (and (stringp id) (not (string-empty-p id)))
+            (slothbar--log-debug* "SNI discovery found %s id=%s" service id)
+            (slothbar-tray-sni--add-item service "/StatusNotifierItem")))
+      (error
+       (slothbar--log-debug* "SNI discovery probe %s failed: %S" service err)))))
+
+(defun slothbar-tray-sni--discover-items ()
+  "Find already-running SNI item services after a watcher restart."
+  (when (or slothbar-tray-sni--service-owned
+            slothbar-tray-sni--secondary-host)
+    (let ((names (ignore-errors (dbus-list-names :session))))
+      (slothbar--log-debug* "SNI discovery scanning %d bus names"
+                            (length names))
+      (dolist (service names)
+        (slothbar-tray-sni--probe-service service)))))
+
+(defun slothbar-tray-sni--discovery-poll ()
+  "Run a discovery scan and stop after success or several attempts."
+  (slothbar-tray-sni--discover-items)
+  (cl-incf slothbar-tray-sni--discovery-attempts)
+  (when (or slothbar-tray-sni--items
+            (>= slothbar-tray-sni--discovery-attempts 6))
+    (when slothbar-tray-sni--discovery-timer
+      (cancel-timer slothbar-tray-sni--discovery-timer)
+      (setq slothbar-tray-sni--discovery-timer nil))))
+
+(defun slothbar-tray-sni--remember-service (service)
+  "Remember SERVICE so a restarted watcher can re-add its item."
+  (unless (member service slothbar-tray-sni--known-services)
+    (push service slothbar-tray-sni--known-services)))
+
+(defun slothbar-tray-sni--restore-known-items ()
+  "Re-add remembered SNI item services that still exist."
+  (dolist (service (copy-sequence slothbar-tray-sni--known-services))
+    (if (ignore-errors (dbus-get-name-owner :session service))
+        (ignore-errors
+          (slothbar-tray-sni--add-item service "/StatusNotifierItem"))
+      (setq slothbar-tray-sni--known-services
+            (delete service slothbar-tray-sni--known-services)))))
+
 (defun slothbar-tray-sni--add-item (service path)
   "Add or replace the item at SERVICE/PATH."
   (slothbar--log-debug* "SNI add/refresh item service=%s path=%s" service path)
+  (slothbar-tray-sni--remember-service service)
   (let* ((icon-pixmap
           (slothbar-tray-sni--property service path "IconPixmap"))
          (icon-name (slothbar-tray-sni--property service path "IconName"))
@@ -617,57 +693,65 @@ for an object-path registration."
   "Start or reuse the StatusNotifier watcher for M."
   (unless (memq m slothbar-tray-sni--modules)
     (push m slothbar-tray-sni--modules))
-  (if (or slothbar-tray-sni--service-owned
-          slothbar-tray-sni--secondary-host)
-      (slothbar--log-debug* "SNI init: reusing existing watcher for %s"
-                            (slothbar-id (slothbar-module--bar m)))
-    (slothbar--log-debug* "SNI init: trying to own %s"
-                          slothbar-tray-sni--watcher-service)
-    (setq slothbar-tray-sni--items nil)
-    (if (eq :primary-owner
-            (dbus-register-service
+  (let ((start-watcher (not (or slothbar-tray-sni--service-owned
+                                slothbar-tray-sni--secondary-host))))
+    (if (not start-watcher)
+        (slothbar--log-debug* "SNI init: reusing existing watcher for %s"
+                              (slothbar-id (slothbar-module--bar m)))
+      (slothbar--log-debug* "SNI init: trying to own %s"
+                            slothbar-tray-sni--watcher-service)
+      (setq slothbar-tray-sni--items nil)
+      (if (eq :primary-owner
+              (dbus-register-service
+               :session slothbar-tray-sni--watcher-service
+               :do-not-queue))
+          (progn
+            (slothbar--log-debug* "SNI init: primary watcher owner")
+            (setq slothbar-tray-sni--service-owned t)
+            (dbus-register-method
              :session slothbar-tray-sni--watcher-service
-             :do-not-queue))
-        (progn
-          (slothbar--log-debug* "SNI init: primary watcher owner")
-          (setq slothbar-tray-sni--service-owned t)
-          (dbus-register-method
-           :session slothbar-tray-sni--watcher-service
-           slothbar-tray-sni--watcher-path
-           slothbar-tray-sni--watcher-interface
-           "RegisterStatusNotifierItem"
-           #'slothbar-tray-sni--register-item)
-          (dbus-register-method
-           :session slothbar-tray-sni--watcher-service
-           slothbar-tray-sni--watcher-path
-           slothbar-tray-sni--watcher-interface
-           "RegisterStatusNotifierHost"
-           (lambda (_host) :ignore))
-          (dbus-register-property
-           :session slothbar-tray-sni--watcher-service
-           slothbar-tray-sni--watcher-path
-           slothbar-tray-sni--watcher-interface
-           "IsStatusNotifierHostRegistered" :readwrite t)
-          (dbus-register-property
-           :session slothbar-tray-sni--watcher-service
-           slothbar-tray-sni--watcher-path
-           slothbar-tray-sni--watcher-interface
-           "ProtocolVersion" :read :int32 0)
-          (dbus-register-property
-           :session slothbar-tray-sni--watcher-service
-           slothbar-tray-sni--watcher-path
-           slothbar-tray-sni--watcher-interface
-           "RegisteredStatusNotifierItems" :readwrite '(:array)))
-      (slothbar--log-debug* "SNI init: watcher occupied, trying secondary host")
-      (unless (slothbar-tray-sni--try-secondary-host)
-        (error "Another StatusNotifier host owns %s"
-               slothbar-tray-sni--watcher-service)))
-    (unless slothbar-tray-sni--name-owner-signal
-      (setq slothbar-tray-sni--name-owner-signal
-            (dbus-register-signal
-             :session "org.freedesktop.DBus" "/org/freedesktop/DBus"
-             "org.freedesktop.DBus" "NameOwnerChanged"
-             #'slothbar-tray-sni--on-name-owner-changed))))
+             slothbar-tray-sni--watcher-path
+             slothbar-tray-sni--watcher-interface
+             "RegisterStatusNotifierItem"
+             #'slothbar-tray-sni--register-item)
+            (dbus-register-method
+             :session slothbar-tray-sni--watcher-service
+             slothbar-tray-sni--watcher-path
+             slothbar-tray-sni--watcher-interface
+             "RegisterStatusNotifierHost"
+             (lambda (_host) :ignore))
+            (dbus-register-property
+             :session slothbar-tray-sni--watcher-service
+             slothbar-tray-sni--watcher-path
+             slothbar-tray-sni--watcher-interface
+             "IsStatusNotifierHostRegistered" :readwrite t)
+            (dbus-register-property
+             :session slothbar-tray-sni--watcher-service
+             slothbar-tray-sni--watcher-path
+             slothbar-tray-sni--watcher-interface
+             "ProtocolVersion" :read :int32 0)
+            (dbus-register-property
+             :session slothbar-tray-sni--watcher-service
+             slothbar-tray-sni--watcher-path
+             slothbar-tray-sni--watcher-interface
+             "RegisteredStatusNotifierItems" :readwrite '(:array)))
+        (slothbar--log-debug* "SNI init: watcher occupied, trying secondary host")
+        (unless (slothbar-tray-sni--try-secondary-host)
+          (error "Another StatusNotifier host owns %s"
+                 slothbar-tray-sni--watcher-service)))
+      (unless slothbar-tray-sni--name-owner-signal
+        (setq slothbar-tray-sni--name-owner-signal
+              (dbus-register-signal
+               :session "org.freedesktop.DBus" "/org/freedesktop/DBus"
+               "org.freedesktop.DBus" "NameOwnerChanged"
+               #'slothbar-tray-sni--on-name-owner-changed)))
+      (slothbar-tray-sni--restore-known-items)
+      (when slothbar-tray-sni--discovery-timer
+        (cancel-timer slothbar-tray-sni--discovery-timer))
+      (setq slothbar-tray-sni--discovery-attempts 0
+            slothbar-tray-sni--discovery-timer
+            (run-with-timer 0.2 0.5 #'slothbar-tray-sni--discovery-poll))
+      (slothbar--log-debug* "SNI discovery scheduled")))
   (slothbar-tray-sni--layout m)
   m)
 

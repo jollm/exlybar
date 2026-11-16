@@ -117,6 +117,10 @@
 
   (let ((module (slothbar-tray-create)))
     (slothbar-tray-sni-init module)
+    ;; Keep the registration test deterministic; the probe below covers discovery.
+    (when slothbar-tray-sni--discovery-timer
+      (cancel-timer slothbar-tray-sni--discovery-timer)
+      (setq slothbar-tray-sni--discovery-timer nil))
     (slothbar-sni-test--check "watcher service is owned"
                               slothbar-tray-sni--service-owned)
     (dbus-call-method :session
@@ -142,6 +146,9 @@
                                      (equal 7
                                             (slothbar-tray-sni-item-ordering-index
                                              (car items)))))
+      (slothbar-tray-sni--probe-service slothbar-sni-test--item)
+      (slothbar-sni-test--check "discovery probe finds the item"
+                                (= 1 (length slothbar-tray-sni--items)))
       (slothbar-sni-test--check "IconPixmap produced an image"
                                 (slothbar-tray-sni-item-image (car items)))
       (slothbar-tray-sni--layout module)
