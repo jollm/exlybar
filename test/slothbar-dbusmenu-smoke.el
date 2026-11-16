@@ -102,7 +102,13 @@
                                    (and (equal 1 (nth 0 slothbar-dbusmenu-test--seen-event))
                                         (equal "clicked"
                                                (nth 1 slothbar-dbusmenu-test--seen-event))
-                                        (= 42 (nth 3 slothbar-dbusmenu-test--seen-event))))))
+                                        (= 42 (nth 3 slothbar-dbusmenu-test--seen-event))))
+    (slothbar-dbusmenu-close menu 0 43)
+    (slothbar-dbusmenu-test--check "Event closed dispatched"
+                                   (and (equal 0 (nth 0 slothbar-dbusmenu-test--seen-event))
+                                        (equal "closed"
+                                               (nth 1 slothbar-dbusmenu-test--seen-event))
+                                        (= 43 (nth 3 slothbar-dbusmenu-test--seen-event))))))
 
 (princ "all dbusmenu client checks passed\n")
 (kill-emacs 0)

@@ -231,7 +231,8 @@
                      (setq captured (list menu bar x y))
                      t)))
           (slothbar-tray-sni-click module
-                                  (+ (slothbar-module-lpad module) 1) 0 :right))
+                                  (+ (slothbar-module-lpad module) 1) 0 :right)
+          (sit-for 0.3))
         (slothbar-sni-test--check "SNI right click opens dbusmenu"
                                   captured)
         (let* ((menu (nth 0 captured))

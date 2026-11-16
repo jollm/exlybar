@@ -156,6 +156,7 @@
 (declare-function elwl-workspace-manager-stop "elwl" (&rest args))
 (declare-function slothbar-popup-dispatch-motion "slothbar-popup" (backend surface x y))
 (declare-function slothbar-popup-dispatch-button "slothbar-popup" (backend surface x y button))
+(declare-function slothbar-popup-dispatch-done "slothbar-popup" (backend state))
 
 (require 'fontsloth)
 (require 'fontsloth-layout)
@@ -872,7 +873,9 @@ Return non-nil if a buffer was presented."
              (setf (slothbar-backend-wayland-popup-configured popup) t))
            :on-done
            (lambda (_popup)
-             (setf (slothbar-backend-wayland-popup-done popup) t))))
+             (setf (slothbar-backend-wayland-popup-done popup) t)
+             (when (fboundp 'slothbar-popup-dispatch-done)
+               (slothbar-popup-dispatch-done backend popup)))))
     (setf (slothbar-backend-wayland-popup-xdg-popup popup) xdg-popup)
     (elwl-layer-surface-get-popup
      (slothbar-backend-wayland-surface-layer-surface bar-state)

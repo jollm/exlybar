@@ -153,6 +153,10 @@ DATA defaults to an integer variant and TIMESTAMP defaults to zero."
   (slothbar-dbusmenu-about-to-show menu id)
   (slothbar-dbusmenu-event menu id "clicked" nil timestamp))
 
+(defun slothbar-dbusmenu-close (menu id &optional timestamp)
+  "Notify MENU's service that item ID's menu has closed."
+  (slothbar-dbusmenu-event menu id "closed" nil timestamp))
+
 (defun slothbar-dbusmenu-find-item (menu id)
   "Return MENU's normalized item with ID, or nil."
   (cl-labels ((find-in (item)

@@ -31,7 +31,8 @@
   height
   state
   motion-function
-  button-function)
+  button-function
+  done-function)
 
 (defvar slothbar-popup--active nil
   "Popups currently eligible for pointer input.")
@@ -52,6 +53,17 @@
   (when-let* ((popup (slothbar-popup--at-surface backend surface))
               (function (slothbar-popup-motion-function popup)))
     (funcall function x y)
+    t))
+
+(defun slothbar-popup-dispatch-done (backend state)
+  "Forward a popup-done event for BACKEND's popup STATE."
+  (when-let* ((popup (cl-find-if
+                      (lambda (candidate)
+                        (and (eq backend (slothbar-popup-backend candidate))
+                             (eq state (slothbar-popup-state candidate))))
+                      slothbar-popup--active))
+              (function (slothbar-popup-done-function popup)))
+    (funcall function)
     t))
 
 (defun slothbar-popup-dispatch-button (backend surface x y button)

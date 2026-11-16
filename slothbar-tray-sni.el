@@ -700,13 +700,30 @@ for an object-path registration."
   (when-let* ((path (slothbar-tray-sni-item-menu item))
               (service (slothbar-tray-sni-item-service item))
               (bar (slothbar-module--bar m)))
-    (let* ((dbusmenu (slothbar-dbusmenu--make
-                      :service service :path path))
-           (menu (and (slothbar-dbusmenu-refresh dbusmenu)
-                      (slothbar-menu-create dbusmenu))))
-      (when menu
-        (ignore-errors (slothbar-dbusmenu-about-to-show dbusmenu 0))
-        (slothbar-menu-show menu bar (round x) 0)))))
+    (let ((dbusmenu (slothbar-dbusmenu--make
+                     :service service :path path)))
+      (ignore-errors (slothbar-dbusmenu-about-to-show dbusmenu 0))
+      (let ((menu (and (slothbar-dbusmenu-refresh dbusmenu)
+                       (slothbar-menu-create dbusmenu))))
+        (when (and menu (slothbar-menu-rows menu))
+          (slothbar-menu-show menu bar (round x) 0))))))
+
+(defun slothbar-tray-sni--context-menu (item x y)
+  "Ask ITEM's application to open its native context menu at X,Y."
+  (when-let* ((service (slothbar-tray-sni-item-service item))
+              (path (slothbar-tray-sni-item-path item)))
+    (condition-case err
+        (progn
+          (slothbar--log-debug* "SNI ContextMenu %s%s at %d,%d"
+                                service path (round x) (round y))
+          (dbus-call-method :session service path
+                            slothbar-tray-sni--item-interface
+                            "ContextMenu" :int32 (round x) :int32 (round y))
+          t)
+      (error
+       (slothbar--log-debug* "SNI ContextMenu failed for %s: %S"
+                             service err)
+       nil))))
 
 (defun slothbar-tray-sni-click (m x y button)
   "Activate the SNI item at X,Y on M for BUTTON."
@@ -715,9 +732,27 @@ for an object-path registration."
              (or (eq button :right)
                  (and (eq button :left)
                       (slothbar-tray-sni-item-item-is-menu item))))
-        (or (slothbar-tray-sni--show-menu m item x)
-            (slothbar--log-debug* "SNI menu unavailable for %s"
-                                  (slothbar-tray-sni-item-id item)))
+        (run-at-time
+         0 nil
+         (lambda ()
+           (if (slothbar-menu-active-p)
+               (progn
+                 (slothbar--log-debug* "SNI closing active menu")
+                 (slothbar-menu-close-active))
+             (slothbar--log-debug* "SNI opening menu for %s at %d"
+                                 (slothbar-tray-sni-item-id item)
+                                 (round x))
+           (condition-case err
+               (or (slothbar-tray-sni--show-menu m item x)
+                   (progn
+                     (slothbar--log-debug*
+                      "SNI menu unavailable for %s.  Using ContextMenu"
+                      (slothbar-tray-sni-item-id item))
+                     (slothbar-tray-sni--context-menu item x y)))
+             (error
+              (slothbar--log-debug* "SNI menu open failed for %s: %S"
+                                    (slothbar-tray-sni-item-id item) err)
+              (ignore-errors (slothbar-tray-sni--context-menu item x y)))))))
       (when-let* ((method (pcase button
                             (:left
                              (if (slothbar-tray-sni-item-item-is-menu item)

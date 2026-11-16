@@ -31,6 +31,9 @@
   :type 'natnum
   :group 'slothbar)
 
+(defvar slothbar-menu--active nil
+  "The menu popup currently open, if any.")
+
 (cl-defstruct (slothbar-menu-row
                (:constructor slothbar-menu-row--make)
                (:copier nil))
@@ -235,11 +238,32 @@ MENU-OR-ROOT may be a `slothbar-dbusmenu' or a normalized root item."
     (slothbar-menu-select menu nil)))
 
 (defun slothbar-menu-close (menu)
-  "Close MENU's popup."
+  "Close MENU's popup and tell its dbusmenu service it closed."
   (when-let* ((popup (slothbar-menu-popup menu)))
+    (when-let* ((dbusmenu (slothbar-menu-dbusmenu menu))
+                (root (slothbar-menu-root menu)))
+      (slothbar--log-debug* "menu close dbusmenu=%s%s id=%s"
+                            (slothbar-dbusmenu-service dbusmenu)
+                            (slothbar-dbusmenu-path dbusmenu)
+                            (slothbar-dbusmenu-item-id root))
+      (ignore-errors
+        (slothbar-dbusmenu-close
+         dbusmenu (slothbar-dbusmenu-item-id root))))
     (slothbar-popup-destroy popup))
+  (when (eq menu slothbar-menu--active)
+    (setq slothbar-menu--active nil))
   (setf (slothbar-menu-popup menu) nil
         (slothbar-menu-selected menu) nil))
+
+(defun slothbar-menu-active-p ()
+  "Return non-nil when a menu popup is active."
+  (and slothbar-menu--active
+       (slothbar-menu-popup slothbar-menu--active)))
+
+(defun slothbar-menu-close-active ()
+  "Close the currently active menu, if any."
+  (when (slothbar-menu-active-p)
+    (slothbar-menu-close slothbar-menu--active)))
 
 (defun slothbar-menu-click (menu x y button)
   "Handle a BUTTON press at X,Y on MENU."
@@ -270,12 +294,24 @@ Return the `slothbar-popup' or nil."
                  bar x y (slothbar-menu-width menu)
                  (slothbar-menu-height menu))))
     (when popup
+      (when (and slothbar-menu--active
+                 (not (eq slothbar-menu--active menu)))
+        (slothbar-menu-close slothbar-menu--active))
+      (setq slothbar-menu--active menu)
+      (slothbar--log-debug* "menu popup rows=%d size=%dx%d at %d,%d configured=%S"
+                            (length (slothbar-menu-rows menu))
+                            (slothbar-menu-width menu)
+                            (slothbar-menu-height menu)
+                            (round x) (round y)
+                            (slothbar-popup-configured-p popup))
       (setf (slothbar-menu-popup menu) popup
             (slothbar-popup-motion-function popup)
             (lambda (px py) (slothbar-menu-motion menu px py))
             (slothbar-popup-button-function popup)
             (lambda (px py button)
-              (slothbar-menu-click menu px py button)))
+              (slothbar-menu-click menu px py button))
+            (slothbar-popup-done-function popup)
+            (lambda () (slothbar-menu-close menu)))
       (slothbar-popup-present popup frame)
       popup)))
 
