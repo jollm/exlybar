@@ -146,6 +146,11 @@ an empty bar.  `:height`, `:width`, `:offset-x`, `:offset-y`, and
 
 The XEmbed tray is single-instance.  If it is included in more than one
 bar, the first configured bar keeps it and later instances are skipped.
+On Wayland the tray uses StatusNotifierItem, and multiple bars share one
+watcher.  Applications that require a watcher at startup (Discord and
+some other Electron apps) must be started after Slothbar, or restarted
+once Slothbar is running.  Re-entering `slothbar-mode` restores remembered
+items in the same Emacs session.
 
 ** Workspaces
 
