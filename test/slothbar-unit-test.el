@@ -1722,6 +1722,9 @@
          (shown nil)
          (hidden nil))
     (should (= 1 (length (slothbar-menu-rows menu))))
+    (should (equal "Settings ▸"
+                   (slothbar-menu-row-label
+                    (car (slothbar-menu-rows menu)))))
     (let ((submenu (slothbar-menu-create sub menu "Settings" dbusmenu)))
       (should (equal "back"
                      (slothbar-menu-row-type
@@ -1743,6 +1746,9 @@
           (should (eq (slothbar-menu-parent shown-sub) menu))
           (should (equal "back"
                          (slothbar-menu-row-type
+                          (car (slothbar-menu-rows shown-sub)))))
+          (should (equal "← Settings"
+                         (slothbar-menu-row-label
                           (car (slothbar-menu-rows shown-sub)))))
           (slothbar-menu-click shown-sub 5 5 :left)
           (should (eq (car shown) menu)))))))

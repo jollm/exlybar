@@ -104,7 +104,10 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
       (when (slothbar-dbusmenu-item-visible item)
         (let* ((separator (equal "separator"
                                  (slothbar-dbusmenu-item-type item)))
-               (label (or (slothbar-dbusmenu-item-label item) ""))
+               (label (if (slothbar-dbusmenu-item-children item)
+                          (concat (or (slothbar-dbusmenu-item-label item) "")
+                                  " ▸")
+                        (or (slothbar-dbusmenu-item-label item) "")))
                (label-width (if separator 0
                                (round (or (slothbar-menu--text-width label) 0)))))
           (push (slothbar-menu-row--make
@@ -299,10 +302,11 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
 
 (defun slothbar-menu--open-submenu (menu row)
   "Replace MENU's popup with ROW's submenu."
-  (let ((child (slothbar-menu-create
-                (slothbar-menu-row-item row)
-                menu (slothbar-menu-row-label row)
-                (slothbar-menu-dbusmenu menu))))
+  (let* ((item (slothbar-menu-row-item row))
+         (child (slothbar-menu-create
+                 item menu
+                 (or (slothbar-dbusmenu-item-label item) "Back")
+                 (slothbar-menu-dbusmenu menu))))
     (slothbar-menu--hide menu)
     (slothbar-menu--show-deferred child
                                   (slothbar-menu-anchor-bar menu)
