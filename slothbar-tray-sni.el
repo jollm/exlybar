@@ -733,7 +733,7 @@ for an object-path registration."
                                     method service path (round x) (round y))
               (dbus-call-method :session service path
                                 slothbar-tray-sni--item-interface
-                                method (round x) (round y))
+                                method :int32 (round x) :int32 (round y))
               t)
           (error
            (slothbar--log-debug* "SNI %s failed for %s: %S"

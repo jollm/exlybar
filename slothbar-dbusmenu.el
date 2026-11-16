@@ -18,6 +18,8 @@
 (require 'dbus)
 (require 'subr-x)
 
+(require 'slothbar-log)
+
 (defconst slothbar-dbusmenu--interface "com.canonical.dbusmenu")
 (defconst slothbar-dbusmenu--properties-interface
   "org.freedesktop.DBus.Properties")
@@ -116,7 +118,7 @@ Return MENU.  On failure, leave the previous layout intact."
                :session (slothbar-dbusmenu-service menu)
                (slothbar-dbusmenu-path menu)
                slothbar-dbusmenu--interface "GetLayout"
-               0 -1 '(:array)))
+               :int32 0 :int32 -1 '(:array)))
              (layout (slothbar-dbusmenu--unwrap layout))
              (revision (slothbar-dbusmenu--unwrap (nth 0 layout)))
              (root (slothbar-dbusmenu--node (nth 1 layout))))
@@ -124,17 +126,18 @@ Return MENU.  On failure, leave the previous layout intact."
               (slothbar-dbusmenu-root menu) root)
         menu)
     (error
-     (message "Slothbar dbusmenu refresh failed for %s%s: %s"
-              (slothbar-dbusmenu-service menu)
-              (slothbar-dbusmenu-path menu)
-              (error-message-string err))
+     (slothbar--log-debug* "dbusmenu refresh failed for %s%s: %s"
+                           (slothbar-dbusmenu-service menu)
+                           (slothbar-dbusmenu-path menu)
+                           (error-message-string err))
      nil)))
 
 (defun slothbar-dbusmenu-about-to-show (menu id)
   "Ask MENU's service to prepare item ID for display."
   (dbus-call-method :session (slothbar-dbusmenu-service menu)
                     (slothbar-dbusmenu-path menu)
-                    slothbar-dbusmenu--interface "AboutToShow" id))
+                    slothbar-dbusmenu--interface "AboutToShow"
+                    :int32 id))
 
 (defun slothbar-dbusmenu-event (menu id event &optional data timestamp)
   "Send EVENT for item ID on MENU.
@@ -142,8 +145,8 @@ DATA defaults to an integer variant and TIMESTAMP defaults to zero."
   (dbus-call-method :session (slothbar-dbusmenu-service menu)
                     (slothbar-dbusmenu-path menu)
                     slothbar-dbusmenu--interface "Event"
-                    id event (or data '(:variant :int32 0))
-                    (or timestamp 0)))
+                    :int32 id event (or data '(:variant :int32 0))
+                    :uint32 (or timestamp 0)))
 
 (defun slothbar-dbusmenu-click (menu id &optional timestamp)
   "Prepare and send a click event for ID on MENU."
