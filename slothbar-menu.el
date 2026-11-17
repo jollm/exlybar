@@ -42,7 +42,12 @@
   label
   type
   y
-  height)
+  height
+  indicator
+  indicator-x
+  label-x
+  shortcut
+  shortcut-x)
 
 (cl-defstruct (slothbar-menu
                (:constructor slothbar-menu--make)
@@ -59,7 +64,10 @@
   parent
   anchor-bar
   anchor-x
-  anchor-y)
+  anchor-y
+  indicator-width
+  shortcut-width
+  label-x)
 
 (defun slothbar-menu--font ()
   "Return the primary menu font, or nil."
@@ -75,9 +83,45 @@
   "Return TEXT's rendered width in the primary menu font."
   (when-let* ((font (slothbar-menu--font)))
     (let ((layout (slothbar-module--create-layout
-                   (or text "") font 0 (slothbar-menu--px)
-                   slothbar-menu-padding)))
+                   (or text "") font 0 (slothbar-menu--px) 0)))
       (if layout (round (fontsloth-layout-current-pos layout)) 0))))
+
+(defun slothbar-menu--indicator (item)
+  "Return the indicator text for ITEM."
+  (when item
+    (let ((state (slothbar-dbusmenu-item-toggle-state item))
+          (type (slothbar-dbusmenu-item-toggle-type item)))
+      (cond
+       ((equal type "checkmark") (if (eql state 1) "✓" " "))
+       ((equal type "radio") (if (eql state 1) "●" "○"))
+       ((or (and (stringp (slothbar-dbusmenu-item-icon-name item))
+                 (not (string-empty-p (slothbar-dbusmenu-item-icon-name item))))
+            (slothbar-dbusmenu-item-icon-data item))
+        " ")
+       (t nil)))))
+
+(defun slothbar-menu--shortcut (value)
+  "Return a display string for a dbusmenu shortcut VALUE."
+  (let ((sequence
+         (cond
+          ((stringp value) (list value))
+          ((and (listp value) (cl-every #'stringp value)) value)
+          ((listp value) (cl-find-if #'consp value))
+          (t nil))))
+    (when sequence
+      (mapconcat
+       (lambda (key)
+         (or (cdr (assoc key
+                         '(("Control" . "Ctrl")
+                           ("Ctrl" . "Ctrl")
+                           ("Shift" . "Shift")
+                           ("Alt" . "Alt")
+                           ("Mod1" . "Alt")
+                           ("Super" . "Super")
+                           ("Mod4" . "Super")
+                           ("Meta" . "Super"))))
+             key))
+       sequence "+"))))
 
 (defun slothbar-menu-create (menu-or-root &optional parent back-label dbusmenu)
   "Create a single-level `slothbar-menu' from MENU-OR-ROOT.
@@ -88,18 +132,12 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                  menu-or-root))
          (children (and root (slothbar-dbusmenu-item-children root)))
          (row-height (max 1 slothbar-height))
-         (rows nil)
-         (width 0)
-         (y 0))
+         (rows nil))
     (when parent
-      (let ((label (format "← %s" (or back-label "Back"))))
-        (push (slothbar-menu-row--make
-               :item nil :label label :type "back"
-               :y y :height row-height)
-              rows)
-        (setq width (max width (+ (round (or (slothbar-menu--text-width label) 0))
-                                  (* 2 slothbar-menu-padding)))
-              y (+ y row-height))))
+      (push (slothbar-menu-row--make
+             :item nil :label (format "← %s" (or back-label "Back"))
+             :type "back" :height row-height)
+            rows))
     (dolist (item children)
       (when (slothbar-dbusmenu-item-visible item)
         (let* ((separator (equal "separator"
@@ -107,23 +145,66 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                (label (if (slothbar-dbusmenu-item-children item)
                           (concat (or (slothbar-dbusmenu-item-label item) "")
                                   " ▸")
-                        (or (slothbar-dbusmenu-item-label item) "")))
-               (label-width (if separator 0
-                               (round (or (slothbar-menu--text-width label) 0)))))
+                        (or (slothbar-dbusmenu-item-label item) ""))))
           (push (slothbar-menu-row--make
                  :item item :label label
                  :type (if separator "separator" "item")
-                 :y y :height row-height)
-                rows)
-          (setq width (max width (+ label-width (* 2 slothbar-menu-padding)))
-                y (+ y row-height)))))
-    (slothbar-menu--make
-     :root root :rows (nreverse rows)
-     :width (max 1 (round width)) :height (max 1 (round y))
-     :default-row-height row-height
-     :parent parent
-     :dbusmenu (or dbusmenu
-                   (and (slothbar-dbusmenu-p menu-or-root) menu-or-root)))))
+                 :height row-height
+                 :indicator (unless separator
+                              (slothbar-menu--indicator item))
+                 :shortcut (unless separator
+                             (slothbar-menu--shortcut
+                              (slothbar-dbusmenu-item-shortcut item))))
+                rows))))
+    (setq rows (nreverse rows))
+    (let* ((indicator-p (cl-some
+                         (lambda (row)
+                           (let ((indicator (slothbar-menu-row-indicator row)))
+                             (and (stringp indicator)
+                                  (not (string-empty-p indicator)))))
+                         rows))
+           (indicator-width
+            (if indicator-p
+                (max 1 (round (or (slothbar-menu--text-width "✓") 0)))
+              0))
+           (indicator-gap (if indicator-p slothbar-menu-padding 0))
+           (label-x (+ slothbar-menu-padding indicator-width indicator-gap))
+           (label-width
+            (cl-loop for row in rows
+                     maximize (round
+                               (or (slothbar-menu--text-width
+                                    (slothbar-menu-row-label row))
+                                   0))))
+           (shortcut-width
+            (cl-loop for row in rows
+                     maximize (round
+                               (or (slothbar-menu--text-width
+                                    (or (slothbar-menu-row-shortcut row) ""))
+                                   0))))
+           (shortcut-gap (if (> shortcut-width 0)
+                             slothbar-menu-padding
+                           0))
+           (width (max 1 (+ slothbar-menu-padding indicator-width indicator-gap
+                            label-width shortcut-gap shortcut-width
+                            slothbar-menu-padding)))
+           (y 0))
+      (dolist (row rows)
+        (setf (slothbar-menu-row-y row) y
+              (slothbar-menu-row-indicator-x row) slothbar-menu-padding
+              (slothbar-menu-row-label-x row) label-x
+              (slothbar-menu-row-shortcut-x row)
+              (- width slothbar-menu-padding shortcut-width))
+        (setq y (+ y row-height)))
+      (slothbar-menu--make
+       :root root :rows rows
+       :width width :height (max 1 y)
+       :default-row-height row-height
+       :parent parent
+       :indicator-width indicator-width
+       :shortcut-width shortcut-width
+       :label-x label-x
+       :dbusmenu (or dbusmenu
+                     (and (slothbar-dbusmenu-p menu-or-root) menu-or-root))))))
 
 (defun slothbar-menu--rgba (color)
   "Return COLOR as an RGBA byte list."
@@ -223,14 +304,29 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                frame width slothbar-menu-padding
                (+ row-y (max 0 (1- (/ row-height 2))))
                (max 1 (- width (* 2 slothbar-menu-padding))) 1 foreground)
-            (slothbar-menu--render-label
-             frame width height slothbar-menu-padding row-y
-             (slothbar-menu-row-label row)
-             (if (or (equal "back" (slothbar-menu-row-type row))
-                     (eq t (slothbar-dbusmenu-item-enabled
-                            (slothbar-menu-row-item row))))
-                 foreground
-               (slothbar-color-brighten background 0.5)))))
+            (let ((color
+                   (if (or (equal "back" (slothbar-menu-row-type row))
+                           (eq t (slothbar-dbusmenu-item-enabled
+                                  (slothbar-menu-row-item row))))
+                       foreground
+                     (slothbar-color-brighten background 0.5)))
+                  (indicator (slothbar-menu-row-indicator row))
+                  (shortcut (slothbar-menu-row-shortcut row)))
+              (when (and (stringp indicator)
+                         (not (string-empty-p indicator)))
+                (slothbar-menu--render-label
+                 frame width height
+                 (slothbar-menu-row-indicator-x row) row-y
+                 indicator color))
+              (when shortcut
+                (slothbar-menu--render-label
+                 frame width height
+                 (slothbar-menu-row-shortcut-x row) row-y
+                 shortcut color))
+              (slothbar-menu--render-label
+               frame width height
+               (slothbar-menu-row-label-x row) row-y
+               (slothbar-menu-row-label row) color))))
         (setq index (1+ index))))
     frame))
 

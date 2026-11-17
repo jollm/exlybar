@@ -1766,6 +1766,30 @@
                 (list (list 240 0) module)))
     (should (= 240 (slothbar-tray-sni--module-offset module)))))
 
+(ert-deftest slothbar-unit-menu-columns ()
+  "Menu rows reserve indicator and shortcut columns."
+  (let* ((check (slothbar-dbusmenu-item--make
+                 :id 1 :label "Checked" :visible t :enabled t
+                 :toggle-type "checkmark" :toggle-state 1))
+         (radio (slothbar-dbusmenu-item--make
+                 :id 2 :label "Radio" :visible t :enabled t
+                 :toggle-type "radio" :toggle-state 0))
+         (save (slothbar-dbusmenu-item--make
+                :id 3 :label "Save" :visible t :enabled t
+                :shortcut '(("Control" "S"))))
+         (root (slothbar-dbusmenu-item--make
+                :id 0 :children (list check radio save)))
+         (menu (slothbar-menu-create
+                (slothbar-dbusmenu--make :root root))))
+    (should (> (slothbar-menu-indicator-width menu) 0))
+    (should (> (slothbar-menu-label-x menu) slothbar-menu-padding))
+    (let ((rows (slothbar-menu-rows menu)))
+      (should (equal "✓" (slothbar-menu-row-indicator (nth 0 rows))))
+      (should (equal "○" (slothbar-menu-row-indicator (nth 1 rows))))
+      (should (equal "Ctrl+S" (slothbar-menu-row-shortcut (nth 2 rows))))
+      (should (>= (slothbar-menu-row-shortcut-x (nth 2 rows))
+                  (slothbar-menu-row-label-x (nth 2 rows)))))))
+
 (ert-deftest slothbar-unit-tray-icon-theme-inheritance ()
   "Icon lookup follows index.theme Inherits chains."
   (let* ((root (make-temp-file "slothbar-theme-" t))
