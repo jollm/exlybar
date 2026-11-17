@@ -1790,6 +1790,32 @@
       (should (>= (slothbar-menu-row-shortcut-x (nth 2 rows))
                   (slothbar-menu-row-label-x (nth 2 rows)))))))
 
+(ert-deftest slothbar-unit-menu-icon-name ()
+  "Menu rows resolve icon-name through the shared icon resolver."
+  (skip-unless (executable-find slothbar-icon-svg-rasterizer))
+  (let* ((root (make-temp-file "slothbar-menu-icon-" t))
+         (icon (expand-file-name "menu-svg-icon.svg" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file icon
+            (insert "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\">"
+                    "<rect width=\"8\" height=\"8\" fill=\"#00ff00\"/></svg>"))
+          (cl-letf (((symbol-function 'slothbar-icon-dirs)
+                     (lambda (&optional _theme-paths) (list root))))
+            (let* ((item (slothbar-dbusmenu-item--make
+                          :id 1 :label "Icon Item" :visible t :enabled t
+                          :icon-name "menu-svg-icon"))
+                   (menu (slothbar-menu-create
+                          (slothbar-dbusmenu--make
+                           :root (slothbar-dbusmenu-item--make
+                                  :id 0 :children (list item)))))
+                   (row (car (slothbar-menu-rows menu)))
+                   (image (slothbar-menu-row-icon row)))
+              (should image)
+              (should (>= (slothbar-menu-indicator-width menu)
+                          (nth 0 image))))))
+      (delete-directory root t))))
+
 (ert-deftest slothbar-unit-tray-icon-theme-inheritance ()
   "Icon lookup follows index.theme Inherits chains."
   (let* ((root (make-temp-file "slothbar-theme-" t))

@@ -23,6 +23,7 @@
 (require 'slothbar-color)
 (require 'slothbar-dbusmenu)
 (require 'slothbar-font)
+(require 'slothbar-icon)
 (require 'slothbar-module-)
 (require 'slothbar-popup)
 
@@ -44,6 +45,7 @@
   y
   height
   indicator
+  icon
   indicator-x
   label-x
   shortcut
@@ -152,6 +154,13 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                  :height row-height
                  :indicator (unless separator
                               (slothbar-menu--indicator item))
+                 :icon (unless separator
+                         (let ((icon-name
+                                (slothbar-dbusmenu-item-icon-name item)))
+                           (when (and (stringp icon-name)
+                                      (not (string-empty-p icon-name)))
+                             (slothbar-icon-load
+                              icon-name nil (max 1 (- row-height 4))))))
                  :shortcut (unless separator
                              (slothbar-menu--shortcut
                               (slothbar-dbusmenu-item-shortcut item))))
@@ -165,7 +174,10 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                          rows))
            (indicator-width
             (if indicator-p
-                (max 1 (round (or (slothbar-menu--text-width "✓") 0)))
+                (max 1
+                     (round (or (slothbar-menu--text-width "✓") 0))
+                     (cl-loop for row in rows
+                              maximize (or (nth 0 (slothbar-menu-row-icon row)) 0)))
               0))
            (indicator-gap (if indicator-p slothbar-menu-padding 0))
            (label-x (+ slothbar-menu-padding indicator-width indicator-gap))
@@ -296,6 +308,26 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                frame width height left top glyph-width glyph-height
                pixmap color))))))))
 
+(defun slothbar-menu--blend-image (frame width height left top image)
+  "Blend IMAGE into FRAME at LEFT, TOP."
+  (pcase-let ((`(,image-width ,image-height ,data) image))
+    (dotimes (row image-height)
+      (let ((y (+ top row)))
+        (when (and (>= y 0) (< y height))
+          (dotimes (col image-width)
+            (let ((x (+ left col)))
+              (when (and (>= x 0) (< x width))
+                (let* ((src (* (+ col (* row image-width)) 4))
+                       (alpha (aref data (+ src 3)))
+                       (offset (* (+ x (* y width)) 4)))
+                  (when (> alpha 0)
+                    (dotimes (n 3)
+                      (aset frame (+ offset n)
+                            (/ (+ (* (aref data (+ src n)) alpha)
+                                  (* (aref frame (+ offset n)) (- 255 alpha)))
+                               255)))
+                    (aset frame (+ offset 3) 255)))))))))))
+
 (defun slothbar-menu-render-frame (menu)
   "Render MENU to a logical RGBA frame string."
   (let* ((width (max 1 (round (slothbar-menu-width menu))))
@@ -328,12 +360,18 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                      (slothbar-menu--mix-color foreground background 0.55)))
                   (indicator (slothbar-menu-row-indicator row))
                   (shortcut (slothbar-menu-row-shortcut row)))
-              (when (and (stringp indicator)
-                         (not (string-empty-p indicator)))
-                (slothbar-menu--render-label
-                 frame width height
-                 (slothbar-menu-row-indicator-x row) row-y
-                 indicator color))
+              (if-let* ((icon (slothbar-menu-row-icon row)))
+                  (slothbar-menu--blend-image
+                   frame width height
+                   (slothbar-menu-row-indicator-x row)
+                   (+ row-y (/ (- row-height (nth 1 icon)) 2))
+                   icon)
+                (when (and (stringp indicator)
+                           (not (string-empty-p indicator)))
+                  (slothbar-menu--render-label
+                   frame width height
+                   (slothbar-menu-row-indicator-x row) row-y
+                   indicator color)))
               (when shortcut
                 (slothbar-menu--render-label
                  frame width height
