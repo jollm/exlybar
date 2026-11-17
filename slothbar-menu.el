@@ -206,6 +206,22 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
        :dbusmenu (or dbusmenu
                      (and (slothbar-dbusmenu-p menu-or-root) menu-or-root))))))
 
+(defun slothbar-menu--mix-color (foreground background amount)
+  "Mix FOREGROUND over BACKGROUND by AMOUNT, preserving opacity."
+  (slothbar-color-rgb-create
+   :red (round (+ (* (slothbar-color-rgb-red foreground) amount)
+                  (* (slothbar-color-rgb-red background) (- 1 amount))))
+   :green (round (+ (* (slothbar-color-rgb-green foreground) amount)
+                    (* (slothbar-color-rgb-green background) (- 1 amount))))
+   :blue (round (+ (* (slothbar-color-rgb-blue foreground) amount)
+                   (* (slothbar-color-rgb-blue background) (- 1 amount))))
+   :alpha #xffff))
+
+(defun slothbar-menu--item-enabled-p (item)
+  "Return non-nil when ITEM is enabled."
+  (let ((enabled (and item (slothbar-dbusmenu-item-enabled item))))
+    (not (or (null enabled) (eq enabled 0)))))
+
 (defun slothbar-menu--rgba (color)
   "Return COLOR as an RGBA byte list."
   (list (ash (slothbar-color-rgb-red color) -8)
@@ -298,7 +314,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                      (= index (slothbar-menu-selected menu)))
             (slothbar-menu--fill-row
              frame width 0 row-y width row-height
-             (slothbar-color-brighten background 1.8)))
+             (slothbar-menu--mix-color foreground background 0.18)))
           (if (equal "separator" (slothbar-menu-row-type row))
               (slothbar-menu--fill-row
                frame width slothbar-menu-padding
@@ -306,10 +322,10 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                (max 1 (- width (* 2 slothbar-menu-padding))) 1 foreground)
             (let ((color
                    (if (or (equal "back" (slothbar-menu-row-type row))
-                           (eq t (slothbar-dbusmenu-item-enabled
-                                  (slothbar-menu-row-item row))))
+                           (slothbar-menu--item-enabled-p
+                            (slothbar-menu-row-item row)))
                        foreground
-                     (slothbar-color-brighten background 0.5)))
+                     (slothbar-menu--mix-color foreground background 0.55)))
                   (indicator (slothbar-menu-row-indicator row))
                   (shortcut (slothbar-menu-row-shortcut row)))
               (when (and (stringp indicator)
