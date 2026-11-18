@@ -38,6 +38,12 @@
 (defvar slothbar-icon--index-cache (make-hash-table :test 'equal)
   "Cache of icon directories to name and format indexes.")
 
+(defvar slothbar-icon--directories-cache (make-hash-table :test 'equal)
+  "Cache of theme directories to their index.theme Directories lists.")
+
+(defvar slothbar-icon--theme-subdirs-cache (make-hash-table :test 'equal)
+  "Cache of icon roots to their immediate theme subdirectories.")
+
 (defun slothbar-icon-clear-cache ()
   "Clear all shared icon caches."
   (clrhash slothbar-icon--cache)
@@ -95,6 +101,53 @@
                                    (slothbar-icon--theme-inherited-dirs
                                     expanded roots (cons expanded seen)))))))
 
+(defun slothbar-icon--theme-directories (dir)
+  "Return DIR's index.theme Directories list, cached."
+  (or (gethash dir slothbar-icon--directories-cache)
+      (let ((file (expand-file-name "index.theme" dir))
+            (directories nil))
+        (when (file-readable-p file)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (goto-char (point-min))
+            (when (re-search-forward
+                   "^Directories[ \t]*=[ \t]*\(.*\)$" nil t)
+              (setq directories
+                    (split-string (match-string 1) "," t "[ \t]+")))))
+        (puthash dir directories slothbar-icon--directories-cache)
+        directories)))
+
+(defun slothbar-icon--theme-subdirs (dir)
+  "Return immediate theme subdirectories under DIR, cached."
+  (or (gethash dir slothbar-icon--theme-subdirs-cache)
+      (let ((subdirs
+             (when (file-directory-p dir)
+               (cl-loop for child in (directory-files dir t "\\`[^.]")
+                        when (file-readable-p
+                              (expand-file-name "index.theme" child))
+                        collect child))))
+        (puthash dir subdirs slothbar-icon--theme-subdirs-cache)
+        subdirs)))
+
+(defun slothbar-icon--find-in-dir (dir name extension)
+  "Find NAME with EXTENSION in DIR without recursively indexing theme roots."
+  (let ((direct (expand-file-name (concat name "." extension) dir)))
+    (or (and (file-readable-p direct) direct)
+        (cl-loop for subdir in (slothbar-icon--theme-directories dir)
+                 for path = (expand-file-name
+                             (concat subdir "/" name "." extension) dir)
+                 when (file-readable-p path) return path)
+        (let ((index-file (expand-file-name "index.theme" dir)))
+          (unless (or (file-readable-p index-file)
+                      (slothbar-icon--theme-subdirs dir))
+            (let* ((entry (gethash name (slothbar-icon--index dir)))
+                   (candidate (and entry
+                                   (plist-get entry
+                                              (intern (concat ":" extension))))))
+              (and candidate
+                   (file-readable-p candidate)
+                   candidate)))))))
+
 (defun slothbar-icon-dirs (theme-paths)
   "Return icon directories for THEME-PATHS and the XDG data dirs."
   (let* ((theme-paths
@@ -116,10 +169,11 @@
                (dirs (delete-dups
                       (append (mapcar #'expand-file-name theme-paths)
                               roots))))
-          (dolist (dir dirs)
+          (dolist (dir (copy-sequence dirs))
             (setq dirs (append dirs
                                (slothbar-icon--theme-inherited-dirs
-                                dir roots))))
+                                dir roots)
+                               (slothbar-icon--theme-subdirs dir))))
           (setq dirs (delete-dups dirs))
           (puthash key dirs slothbar-icon--dirs-cache)
           dirs))))
@@ -128,7 +182,8 @@
   "Return DIR's cached map of icon names to `:png' and `:svg' paths."
   (or (gethash dir slothbar-icon--index-cache)
       (let ((index (make-hash-table :test 'equal)))
-        (when (file-directory-p dir)
+        (when (and (file-directory-p dir)
+                   (not (slothbar-icon--theme-subdirs dir)))
           (dolist (path
                    (directory-files-recursively
                     dir "\\.\\(png\\|svg\\)\\'" nil))
@@ -156,18 +211,13 @@
           (when (stringp cached)
             (slothbar--log-debug* "icon cache hit %s -> %s" name cached)
             cached)
-        (let ((path
-               (cl-loop
-                for extension in '("png" "svg")
-                thereis
-                (cl-loop
-                 for dir in dirs
-                 for entry = (gethash name (slothbar-icon--index dir))
-                 for candidate = (plist-get
-                                  entry (intern (concat ":" extension)))
-                 thereis (and candidate
-                              (file-readable-p candidate)
-                              candidate)))))
+        (let (path)
+          (dolist (extension '("png" "svg"))
+            (unless path
+              (dolist (dir dirs)
+                (unless path
+                  (setq path
+                        (slothbar-icon--find-in-dir dir name extension))))))
           (if path
               (slothbar--log-debug* "icon resolved %s -> %s" name path)
             (slothbar--log-debug* "icon not found %s in %s"

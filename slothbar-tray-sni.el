@@ -154,8 +154,9 @@
 (defun slothbar-tray-sni--describe-item (item)
   "Return a compact, non-payload ITEM description for debug logs."
   (format (concat "service=%s path=%s id=%S title=%S status=%s "
-                  "category=%S window=%S icon=%S image=%s attention=%s "
-                  "overlay=%s menu=%S is-menu=%S order=%S tooltip=%s label=%s")
+                  "category=%S window=%S icon=%S theme-path=%s "
+                  "image=%s attention=%s overlay=%s menu=%S is-menu=%S "
+                  "order=%S tooltip=%s label=%s")
           (slothbar-tray-sni-item-service item)
           (slothbar-tray-sni-item-path item)
           (slothbar-tray-sni-item-id item)
@@ -167,6 +168,7 @@
           (slothbar-tray-sni-item-category item)
           (slothbar-tray-sni-item-window-id item)
           (slothbar-tray-sni-item-icon-name item)
+          (slothbar-tray-sni-item-icon-theme-path item)
           (slothbar-tray-sni--image-size (slothbar-tray-sni-item-image item))
           (slothbar-tray-sni--image-size
            (slothbar-tray-sni-item-attention-image item))
