@@ -111,6 +111,27 @@
             (and item (slothbar-dbusmenu-item-toggle-state item))
             (slothbar-menu-row-shortcut row))))
 
+(defun slothbar-menu--display-label (label)
+  "Translate GTK menu mnemonics in LABEL for display.
+A single underscore marks the next character as a mnemonic and is
+removed.  Two underscores produce one literal underscore."
+  (when label
+    (let ((index 0)
+          (length (length label))
+          (chars nil))
+      (while (< index length)
+        (let ((char (aref label index)))
+          (if (= char ?_)
+              (if (and (< (1+ index) length)
+                       (= (aref label (1+ index)) ?_))
+                  (progn
+                    (push "_" chars)
+                    (setq index (+ index 2)))
+                (setq index (1+ index)))
+            (push (char-to-string char) chars)
+            (setq index (1+ index)))))
+      (apply #'concat (nreverse chars)))))
+
 (defun slothbar-menu--indicator (item)
   "Return the indicator text for ITEM."
   (when item
@@ -160,17 +181,22 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
          (rows nil))
     (when parent
       (push (slothbar-menu-row--make
-             :item nil :label (format "← %s" (or back-label "Back"))
+             :item nil :label (format "← %s"
+                                      (or (slothbar-menu--display-label
+                                           back-label)
+                                          "Back"))
              :type "back" :height row-height)
             rows))
     (dolist (item children)
       (when (slothbar-dbusmenu-item-visible item)
         (let* ((separator (equal "separator"
                                  (slothbar-dbusmenu-item-type item)))
+               (raw-label (or (slothbar-menu--display-label
+                               (slothbar-dbusmenu-item-label item))
+                              ""))
                (label (if (slothbar-dbusmenu-item-children item)
-                          (concat (or (slothbar-dbusmenu-item-label item) "")
-                                  " ▸")
-                        (or (slothbar-dbusmenu-item-label item) ""))))
+                          (concat raw-label " ▸")
+                        raw-label)))
           (push (slothbar-menu-row--make
                  :item item :label label
                  :type (if separator "separator" "item")
@@ -495,7 +521,8 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                 (and item
                      (slothbar-menu-create
                       item parent
-                      (slothbar-dbusmenu-item-label item)
+                      (slothbar-menu--display-label
+                       (slothbar-dbusmenu-item-label item))
                       dbusmenu))
               (slothbar-menu-create dbusmenu))))
       (when replacement
@@ -519,7 +546,9 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
   (let* ((item (slothbar-menu-row-item row))
          (child (slothbar-menu-create
                  item menu
-                 (or (slothbar-dbusmenu-item-label item) "Back")
+                 (or (slothbar-menu--display-label
+                      (slothbar-dbusmenu-item-label item))
+                     "Back")
                  (slothbar-menu-dbusmenu menu))))
     (slothbar-menu--hide menu)
     (slothbar-menu--show-deferred child

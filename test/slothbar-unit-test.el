@@ -1935,6 +1935,24 @@
       (should (>= (slothbar-menu-row-shortcut-x (nth 2 rows))
                   (slothbar-menu-row-label-x (nth 2 rows)))))))
 
+(ert-deftest slothbar-unit-menu-mnemonic-labels ()
+  "Single underscores are GTK mnemonics.  Doubled underscores are literal."
+  (should (equal "VPN Connections"
+                 (slothbar-menu--display-label "_VPN Connections")))
+  (should (equal "Connection Information"
+                 (slothbar-menu--display-label "Connection _Information")))
+  (should (equal "a_b"
+                 (slothbar-menu--display-label "a__b")))
+  (let* ((item (slothbar-dbusmenu-item--make
+                :id 1 :label "_VPN Connections"
+                :visible t :enabled t))
+         (menu (slothbar-menu-create
+                (slothbar-dbusmenu--make
+                 :root (slothbar-dbusmenu-item--make
+                        :id 0 :children (list item)))))
+         (row (car (slothbar-menu-rows menu))))
+    (should (equal "VPN Connections" (slothbar-menu-row-label row)))))
+
 (ert-deftest slothbar-unit-menu-icon-name ()
   "Menu rows resolve icon-name through the shared icon resolver."
   (skip-unless (executable-find slothbar-icon-svg-rasterizer))
