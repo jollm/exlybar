@@ -1033,6 +1033,17 @@
                          (slothbar-icon-find "height-icon" (list root) 40))))
       (delete-directory root t))))
 
+(ert-deftest slothbar-unit-icon-direct-theme-file ()
+  "Icons directly in an explicit theme path are found."
+  (let* ((root (make-temp-file "slothbar-direct-icon-" t))
+         (icon (expand-file-name "steam.png" root)))
+    (unwind-protect
+        (progn
+          (write-region "" nil icon)
+          (should (equal icon
+                         (slothbar-icon-find "steam" (list root)))))
+      (delete-directory root t))))
+
 (ert-deftest slothbar-unit-icon-no-cache-fallback ()
   "A theme without icon-theme.cache is scanned directly."
   (let* ((root (make-temp-file "slothbar-no-cache-" t))

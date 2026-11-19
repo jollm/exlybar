@@ -269,17 +269,21 @@ ICON-DIRS."
   "Find NAME with EXTENSIONS in DIR without recursively indexing theme roots.
 
 The full path to the first matching icon is returned which best fits
-TARGET-HEIGHT."
-  (when-let* ((theme-index (slothbar-icon-theme-index dir))
-              (paths (cdr (assoc name theme-index))))
-    (cl-loop for ext in extensions
-             for icon-file = (concat name "." ext)
-             for best-path = (slothbar-icon--best-path-for-height
-                              dir icon-file paths target-height (equal "svg" ext))
-             for expanded = (and best-path (expand-file-name best-path dir))
-             for icon-path = (and expanded (expand-file-name icon-file expanded))
-             until icon-path
-             finally return icon-path)))
+TARGET-HEIGHT.  A file directly in DIR, such as an application-specific
+IconThemePath, takes precedence over the theme index."
+  (or (cl-loop for ext in extensions
+               for direct = (expand-file-name (concat name "." ext) dir)
+               when (file-readable-p direct) return direct)
+      (when-let* ((theme-index (slothbar-icon-theme-index dir))
+                  (paths (cdr (assoc name theme-index))))
+        (cl-loop for ext in extensions
+                 for icon-file = (concat name "." ext)
+                 for best-path = (slothbar-icon--best-path-for-height
+                                  dir icon-file paths target-height (equal "svg" ext))
+                 for expanded = (and best-path (expand-file-name best-path dir))
+                 for icon-path = (and expanded (expand-file-name icon-file expanded))
+                 until icon-path
+                 finally return icon-path))))
 
 (defun slothbar-icon--preferred-subdirs (dirs &optional themes)
   "Return a list of full paths under DIRS matching THEMES.
