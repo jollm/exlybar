@@ -1060,6 +1060,33 @@
                          (slothbar-icon-find "scalable-icon" (list root) 24))))
       (delete-directory root t))))
 
+(ert-deftest slothbar-unit-sni-restore-legacy-service ()
+  "Legacy string service entries restore at the default item path."
+  (let ((slothbar-tray-sni--known-services '(":1.99"))
+        (restored nil))
+    (cl-letf (((symbol-function 'dbus-get-name-owner)
+               (lambda (&rest _) ":1.99"))
+              ((symbol-function 'slothbar-tray-sni--add-item)
+               (lambda (service path) (setq restored (cons service path)))))
+      (slothbar-tray-sni--restore-known-items))
+    (should (equal restored '(":1.99" . "/StatusNotifierItem")))))
+
+(ert-deftest slothbar-unit-sni-watcher-entry ()
+  "Watcher entries accept service/path and service:path forms."
+  (should (equal (slothbar-tray-sni--parse-watcher-entry
+                  ":1.23/org/ayatana/NotificationItem/steam")
+                 '(":1.23" . "/org/ayatana/NotificationItem/steam")))
+  (should (equal (slothbar-tray-sni--parse-watcher-entry
+                  ":1.23:/org/ayatana/NotificationItem/steam")
+                 '(":1.23" . "/org/ayatana/NotificationItem/steam")))
+  (should (equal (slothbar-tray-sni--parse-watcher-entry
+                  "org.kde.StatusNotifierItem-1")
+                 '("org.kde.StatusNotifierItem-1"
+                   . "/StatusNotifierItem")))
+  (should (equal (slothbar-tray-sni--parse-watcher-entry
+                  "org.example.Item/given/path")
+                 '("org.example.Item" . "/given/path"))))
+
 (ert-deftest slothbar-unit-tray-sni-icon-name-lookup ()
   "IconName resolves a PNG under a supplied theme path."
   (require 'slothbar-tray-sni)
