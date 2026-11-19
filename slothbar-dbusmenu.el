@@ -181,8 +181,7 @@ DATA defaults to an integer variant and TIMESTAMP defaults to zero."
                     :uint32 (or timestamp 0)))
 
 (defun slothbar-dbusmenu-click (menu id &optional timestamp)
-  "Prepare and send a click event for ID on MENU."
-  (slothbar-dbusmenu-about-to-show menu id)
+  "Send a clicked event for ID on MENU."
   (slothbar-dbusmenu-event menu id "clicked" nil timestamp))
 
 (defun slothbar-dbusmenu-close (menu id &optional timestamp)

@@ -96,8 +96,8 @@
                                    (= 1 (length
                                          (slothbar-dbusmenu-visible-children root))))
     (slothbar-dbusmenu-click menu 1 42)
-    (slothbar-dbusmenu-test--check "AboutToShow called"
-                                   (= 1 slothbar-dbusmenu-test--seen-show))
+    (slothbar-dbusmenu-test--check "click does not call AboutToShow"
+                                   (null slothbar-dbusmenu-test--seen-show))
     (slothbar-dbusmenu-test--check "Event clicked dispatched"
                                    (and (equal 1 (nth 0 slothbar-dbusmenu-test--seen-event))
                                         (equal "clicked"
