@@ -185,7 +185,8 @@ PX should be the effective pixel size, including any per-font delta."
 
 (defun slothbar-font--watch-px-scale (_ nval oper where)
   "Recompute font pixel sizes when the scale changes.
-NVAL is the new `slothbar-font-px-scale' value."
+NVAL is the new `slothbar-font-px-scale' value.
+Do this only when OPER eq \\='set and WHERE is nil."
   (when (and (not where)
              (eq 'set oper)
              (not (equal nval slothbar-font-px-scale))
