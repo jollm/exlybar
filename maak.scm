@@ -63,7 +63,7 @@
   "Run the pure unit tests."
   ($ (list (string-append
             emacs " -Q --batch --eval \"(setq load-prefer-newer t)\""
-            " -L . -l test/slothbar-unit-test.el"
+            " -L . -L ./test -l test/slothbar-unit-test.el"
             " -f ert-run-tests-batch-and-exit"))))
 
 ;; Run the pure tests and the live X backend smoke test.

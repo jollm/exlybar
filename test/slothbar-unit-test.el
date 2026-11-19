@@ -50,6 +50,8 @@
 (require 'slothbar-dbusmenu)
 (require 'slothbar-tray-sni)
 
+(require 'slothbar-test-utils)
+
 ;; `slothbar-layout' only declares this variable; `slothbar.el' gives it a
 ;; defcustom value.  Define it here so tests can bind it dynamically.
 (defvar slothbar-width 0)
@@ -918,6 +920,146 @@
       (should (= 2 (aref (nth 4 (car images)) 0)))
       (should (= 3 (aref (nth 4 (cadr images)) 0))))))
 
+(ert-deftest slothbar-unit-icon-preferred-subdirs ()
+  "Preferred themes are returned in configured order and missing ones skipped."
+  (let* ((root (make-temp-file "slothbar-preferred-" t))
+         (alpha (expand-file-name "alpha" root))
+         (beta (expand-file-name "beta" root)))
+    (unwind-protect
+        (progn
+          (make-directory alpha)
+          (make-directory beta)
+          (should
+           (equal
+            (mapcar #'file-name-base
+                    (slothbar-icon--preferred-subdirs
+                     (list root) '("beta" "missing" "alpha")))
+            '("beta" "alpha"))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-preferred-background ()
+  "Preferred themes are selected from the frame background mode."
+  (let* ((root (make-temp-file "slothbar-background-" t))
+         (dark (expand-file-name "dark-theme" root))
+         (light (expand-file-name "light-theme" root))
+         (slothbar-icon-preferred-themes
+          '((dark "dark-theme") (light "light-theme"))))
+    (unwind-protect
+        (progn
+          (make-directory dark)
+          (make-directory light)
+          (cl-letf (((symbol-function 'frame-parameter)
+                     (lambda (&rest _) 'light)))
+            (should
+             (equal (mapcar #'file-name-base
+                            (slothbar-icon--preferred-subdirs (list root)))
+                    '("light-theme")))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-background-cache ()
+  "Changing background mode does not reuse the previous directory cache."
+  (let* ((root (make-temp-file "slothbar-bg-cache-" t))
+         (dark (expand-file-name "dark-theme" root))
+         (light (expand-file-name "light-theme" root))
+         (slothbar-icon-preferred-themes
+          '((dark "dark-theme") (light "light-theme"))))
+    (unwind-protect
+        (progn
+          (make-directory dark)
+          (make-directory light)
+          (slothbar-icon-clear-cache)
+          (cl-letf (((symbol-function 'slothbar-icon-roots)
+                     (lambda () (list root)))
+                    ((symbol-function 'frame-parameter)
+                     (lambda (&rest _) 'dark)))
+            (should (member dark (slothbar-icon-dirs nil))))
+          (cl-letf (((symbol-function 'slothbar-icon-roots)
+                     (lambda () (list root)))
+                    ((symbol-function 'frame-parameter)
+                     (lambda (&rest _) 'light)))
+            (should (member light (slothbar-icon-dirs nil)))))
+      (slothbar-icon-clear-cache)
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-preferred-cache-invalidation ()
+  "Changing preferred themes clears the icon caches."
+  (let ((slothbar-icon-preferred-themes '((dark "old-theme")))
+        (cleared nil))
+    (cl-letf (((symbol-function 'slothbar-icon-clear-cache)
+               (lambda () (setq cleared t)))
+              ((symbol-function 'run-at-time)
+               (lambda (_delay _repeat function) (funcall function))))
+      (slothbar-icon--watch-preferred-themes
+       nil '((dark "new-theme")) 'set nil)
+      (should cleared))))
+
+(ert-deftest slothbar-unit-icon-theme-inheritance-chain ()
+  "Transitive Inherits entries resolve and stop on cycles."
+  (let* ((root (make-temp-file "slothbar-inherit-" t))
+         (child (expand-file-name "child" root))
+         (parent (expand-file-name "parent" root))
+         (grand (expand-file-name "grand" root)))
+    (unwind-protect
+        (progn
+          (make-directory child)
+          (make-directory parent)
+          (make-directory grand)
+          (with-temp-file (expand-file-name "index.theme" child)
+            (insert "[Icon Theme]\nInherits=parent\n"))
+          (with-temp-file (expand-file-name "index.theme" parent)
+            (insert "[Icon Theme]\nInherits=grand,child\n"))
+          (should
+           (equal (slothbar-icon--theme-inherited-dirs child (list root))
+                  (list parent grand))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-height-selection ()
+  "The resolver chooses the nearest available fixed-size icon."
+  (let* ((root (make-temp-file "slothbar-height-" t))
+         (small (expand-file-name "24x24/apps" root))
+         (large (expand-file-name "48x48/apps" root))
+         (small-icon (expand-file-name "height-icon.png" small))
+         (large-icon (expand-file-name "height-icon.png" large)))
+    (unwind-protect
+        (progn
+          (make-directory small t)
+          (make-directory large t)
+          (write-region "" nil small-icon)
+          (write-region "" nil large-icon)
+          (slothbar-test-write-icon-theme-cache root)
+          (should (equal small-icon
+                         (slothbar-icon-find "height-icon" (list root) 20)))
+          (should (equal large-icon
+                         (slothbar-icon-find "height-icon" (list root) 40))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-no-cache-fallback ()
+  "A theme without icon-theme.cache is scanned directly."
+  (let* ((root (make-temp-file "slothbar-no-cache-" t))
+         (dir (expand-file-name "48x48/apps" root))
+         (icon (expand-file-name "no-cache-icon.png" dir)))
+    (unwind-protect
+        (progn
+          (make-directory dir t)
+          (write-region "" nil icon)
+          (should (equal icon
+                         (slothbar-icon-find "no-cache-icon" (list root)))))
+      (delete-directory root t))))
+
+(ert-deftest slothbar-unit-icon-scalable-svg ()
+  "Scalable SVG directories are valid fallback matches."
+  (let* ((root (make-temp-file "slothbar-scalable-" t))
+         (dir (expand-file-name "scalable/apps" root))
+         (icon (expand-file-name "scalable-icon.svg" dir)))
+    (unwind-protect
+        (progn
+          (make-directory dir t)
+          (write-region "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"/>" nil icon)
+          (slothbar-test-write-icon-theme-cache root)
+          (should (equal icon
+                         (slothbar-icon-find "scalable-icon" (list root) 24))))
+      (delete-directory root t))))
+
 (ert-deftest slothbar-unit-tray-sni-icon-name-lookup ()
   "IconName resolves a PNG under a supplied theme path."
   (require 'slothbar-tray-sni)
@@ -927,6 +1069,7 @@
           (make-directory (expand-file-name "hicolor/48x48/apps" dir) t)
           (let ((path (expand-file-name "hicolor/48x48/apps/test-icon.png" dir)))
             (write-region "" nil path)
+            (slothbar-test-write-icon-theme-cache dir)
             (should (equal path
                            (slothbar-tray-sni--find-icon
                             "test-icon" (list dir))))))
@@ -1676,8 +1819,10 @@
   (require 'slothbar-tray-sni)
   (let ((dir (make-temp-file "slothbar-icon-theme-" t)))
     (unwind-protect
-        (let ((path (expand-file-name "steam.png" dir)))
+        (make-directory (expand-file-name "48x48/apps" dir) t)
+        (let ((path (expand-file-name "48x48/apps/steam.png" dir)))
           (write-region "" nil path)
+          (slothbar-test-write-icon-theme-cache dir)
           (should (equal path
                          (slothbar-tray-sni--find-icon "steam" dir))))
       (delete-directory dir t))))
@@ -1794,12 +1939,15 @@
   "Menu rows resolve icon-name through the shared icon resolver."
   (skip-unless (executable-find slothbar-icon-svg-rasterizer))
   (let* ((root (make-temp-file "slothbar-menu-icon-" t))
-         (icon (expand-file-name "menu-svg-icon.svg" root)))
+         (icon-dir (expand-file-name "24x24" root))
+         (icon (expand-file-name "menu-svg-icon.svg" icon-dir)))
     (unwind-protect
         (progn
+          (make-directory icon-dir)
           (with-temp-file icon
             (insert "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\">"
                     "<rect width=\"8\" height=\"8\" fill=\"#00ff00\"/></svg>"))
+          (slothbar-test-write-icon-theme-cache root)
           (cl-letf (((symbol-function 'slothbar-icon-dirs)
                      (lambda (&optional _theme-paths) (list root))))
             (let* ((item (slothbar-dbusmenu-item--make
@@ -1821,11 +1969,13 @@
   (let* ((root (make-temp-file "slothbar-theme-" t))
          (child (expand-file-name "child" root))
          (parent (expand-file-name "parent" root))
-         (icon (expand-file-name "inherited.png" parent)))
+         (icon-dir (expand-file-name "24x24" parent))
+         (icon (expand-file-name "inherited.png" icon-dir)))
     (unwind-protect
         (progn
           (make-directory child)
           (make-directory parent)
+          (make-directory icon-dir)
           (with-temp-file (expand-file-name "index.theme" child)
             (insert "[Icon Theme]\nInherits=parent\n"))
           (with-temp-file icon (insert "not a png"))
@@ -1839,12 +1989,15 @@
 (ert-deftest slothbar-unit-tray-icon-svg ()
   "SVG icons are found and rasterized when rsvg-convert is available."
   (let* ((root (make-temp-file "slothbar-svg-" t))
-         (icon (expand-file-name "svg-icon.svg" root)))
+         (icon-dir (expand-file-name "24x24" root))
+         (icon (expand-file-name "svg-icon.svg" icon-dir)))
     (unwind-protect
+        (make-directory icon-dir)
         (progn
           (with-temp-file icon
             (insert "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\">"
                     "<rect width=\"8\" height=\"8\" fill=\"#ff0000\"/></svg>"))
+          (slothbar-test-write-icon-theme-cache root)
           (should (equal icon
                          (slothbar-tray-sni--find-icon "svg-icon" (list root))))
           (skip-unless (executable-find slothbar-tray-svg-rasterizer))
