@@ -1,6 +1,7 @@
 (define-module (maak)
   #:declarative? #t
-  #:use-module (maak maak))
+  #:use-module (maak maak)
+  #:use-module (ice-9 ftw))
 
 (define emacs (or (getenv "EMACS") "emacs"))
 
@@ -15,6 +16,12 @@
 (define (export-wiki)
   "Export wiki/*.org files to Markdown."
   ($ (list (string-append emacs " --batch -l wiki/export.el"))))
+
+(define (package-lint)
+  "Run package-lint with slothbar.el as the package main file."
+  ($ `("guix shell -CN -m manifest.scm --"
+       "emacs --batch -L . -l scripts/package-lint.el"
+       ,@(scandir "." (lambda (f) (string-suffix? ".el" f))))))
 
 (define (test-font-cache)
   "Measure cold-cache font loading with an isolated fontsloth cache."

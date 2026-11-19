@@ -794,8 +794,7 @@ STATE is reused across calls to retain deltas; NOW and FORCE are for tests."
       "^[^f2"(:net-down :width 10 :pad right)"^]"
       "^[^f0 ^2^f4^]"
       " "
-      "^[^2^f0"(:net-interface)"^]"
-      ))
+      "^[^2^f0"(:net-interface)"^]"))
   "Token list used to format the sysinfo module.
 See `slothbar-format-compile' for the token and option syntax."
   :type 'sexp

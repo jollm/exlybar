@@ -696,10 +696,10 @@ DATA the event data"
     (let ((bar (slothbar-backend-xcb--bar-for-window
                 backend (slot-value event 'event))))
       (when bar
-        (with-slots (event-x event-y) event
+        (with-slots ((x event-x) (y event-y)) event
           (condition-case err
               (run-hook-with-args 'slothbar-backend-pointer-motion-hook
-                                  backend bar event-x event-y)
+                                  backend bar x y)
             (error
              (slothbar--log-debug*
               "pointer motion hook error: %S" err))))))))
@@ -721,7 +721,7 @@ DATA the event data"
     (let ((bar (slothbar-backend-xcb--bar-for-window
                 backend (slot-value event 'event))))
       (when bar
-        (with-slots (event-x event-y detail) event
+        (with-slots ((x event-x) (y event-y) detail) event
           (let ((button (pcase detail
                           (1 :left)
                           (2 :middle)
@@ -732,7 +732,7 @@ DATA the event data"
               (condition-case err
                   (run-hook-with-args
                    'slothbar-backend-pointer-button-hook
-                   backend bar event-x event-y button)
+                   backend bar x y button)
                 (error
                  (slothbar--log-debug*
                   "pointer button hook error: %S" err))))))))))
