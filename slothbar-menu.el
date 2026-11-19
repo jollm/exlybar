@@ -69,7 +69,8 @@
   anchor-y
   indicator-width
   shortcut-width
-  label-x)
+  label-x
+  closing)
 
 (defun slothbar-menu--font ()
   "Return the primary menu font, or nil."
@@ -413,6 +414,10 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
   (when-let* ((dbusmenu (slothbar-menu-dbusmenu menu)))
     (slothbar-dbusmenu-unwatch dbusmenu))
   (when-let* ((popup (slothbar-menu-popup menu)))
+    ;; A deferred done event from this popup must not close its replacement.
+    (setf (slothbar-popup-done-function popup) nil
+          (slothbar-popup-motion-function popup) nil
+          (slothbar-popup-button-function popup) nil)
     (slothbar-popup-destroy popup))
   (when (eq menu slothbar-menu--active)
     (setq slothbar-menu--active nil))
@@ -454,6 +459,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
 (defun slothbar-menu--refresh (menu)
   "Rebuild active MENU from its current dbusmenu tree."
   (when (and (slothbar-menu-popup menu)
+             (not (slothbar-menu-closing menu))
              (slothbar-menu-dbusmenu menu)
              (slothbar-dbusmenu-refresh (slothbar-menu-dbusmenu menu)))
     (let* ((dbusmenu (slothbar-menu-dbusmenu menu))
@@ -523,10 +529,14 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
      ((and (memq button '(:left :right)) row item dbusmenu
            (slothbar-dbusmenu-item-enabled item)
            (not (equal "separator" (slothbar-dbusmenu-item-type item))))
-      (slothbar-dbusmenu-click dbusmenu
-                               (slothbar-dbusmenu-item-id item))
-      (slothbar-menu-close menu)
-      t)
+      (setf (slothbar-menu-closing menu) t)
+      (unwind-protect
+          (progn
+            (slothbar-dbusmenu-click dbusmenu
+                                     (slothbar-dbusmenu-item-id item))
+            (slothbar-menu-close menu)
+            t)
+        (setf (slothbar-menu-closing menu) nil)))
      ((eq button :right)
       (slothbar-menu-close menu)
       t)
