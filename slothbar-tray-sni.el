@@ -683,7 +683,13 @@ for an object-path registration."
                :session "org.freedesktop.DBus" "/org/freedesktop/DBus"
                "org.freedesktop.DBus" "NameOwnerChanged"
                #'slothbar-tray-sni--on-name-owner-changed)))
-      (slothbar-tray-sni--restore-known-items)))
+      (slothbar-tray-sni--restore-known-items)
+      ;; ef5df1b removed the polling timer but did not schedule the
+      ;; one-shot scan it described.  Discover once, shortly after startup,
+      ;; so items that registered before this watcher existed are found.
+      (setq slothbar-tray-sni--discovery-timer
+            (run-at-time 0.2 nil #'slothbar-tray-sni--discover-items))
+      (slothbar--log-debug* "SNI discovery scheduled")))
   (slothbar-tray-sni--layout m)
   m)
 
