@@ -89,6 +89,28 @@
                    (or text "") font 0 (slothbar-menu--px) 0)))
       (if layout (round (fontsloth-layout-current-pos layout)) 0))))
 
+(defun slothbar-menu--describe-row (row)
+  "Return a compact debug description of ROW."
+  (let* ((item (slothbar-menu-row-item row))
+         (label (or (slothbar-menu-row-label row) ""))
+         (icon-name (and item (slothbar-dbusmenu-item-icon-name item)))
+         (icon-data (and item (slothbar-dbusmenu-item-icon-data item)))
+         (data-summary
+          (cond ((null icon-data) "none")
+                ((listp icon-data)
+                 (format "present(%d items)" (length icon-data)))
+                ((stringp icon-data)
+                 (format "present(%d bytes)" (length icon-data)))
+                (t "present"))))
+    (format "label=%S icon-name=%S icon-data=%s toggle=%s/%s shortcut=%S"
+            (if (> (length label) 48)
+                (concat (substring label 0 48) "...")
+              label)
+            icon-name data-summary
+            (and item (slothbar-dbusmenu-item-toggle-type item))
+            (and item (slothbar-dbusmenu-item-toggle-state item))
+            (slothbar-menu-row-shortcut row))))
+
 (defun slothbar-menu--indicator (item)
   "Return the indicator text for ITEM."
   (when item
@@ -557,6 +579,9 @@ Return the `slothbar-popup' or nil."
       (setf (slothbar-menu-anchor-bar menu) bar
             (slothbar-menu-anchor-x menu) x
             (slothbar-menu-anchor-y menu) y)
+      (dolist (row (slothbar-menu-rows menu))
+        (slothbar--log-debug* "menu row %s"
+                              (slothbar-menu--describe-row row)))
       (slothbar--log-debug* "menu popup rows=%d size=%dx%d at %d,%d configured=%S"
                             (length (slothbar-menu-rows menu))
                             (slothbar-menu-width menu)
