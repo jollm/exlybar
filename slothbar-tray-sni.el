@@ -230,7 +230,7 @@ Return (WIDTH HEIGHT RGBA) or nil."
       (list new-width new-height out))))
 
 (defun slothbar-tray-sni--scale-image (width height bytes target-height)
-  "Scale ARGB bytes WIDTH by HEIGHT to TARGET-HEIGHT.
+  "Scale argb BYTES WIDTH by HEIGHT to TARGET-HEIGHT.
 Return (WIDTH HEIGHT RGBA) or nil."
   (when bytes
     (slothbar-tray-sni--scale-rgba
@@ -311,20 +311,26 @@ Return (WIDTH HEIGHT RGBA) or nil."
   (slothbar-tray-sni--refresh-module))
 
 (defun slothbar-tray-sni--on-name-owner-changed (name _old new)
-  "Remove items whose bus NAME lost its owner.
-NAME can be a well-known item service or the unique sender name used
-for an object-path registration."
+  "Handle bus NAME losing its owner.
+NEW indicates the new owner.  Promote a secondary host when the primary
+watcher disappears.  For item services, remove the items whose owner
+vanished."
   (when (and (stringp name)
              (string-empty-p (or new "")))
-    (slothbar--log-debug* "SNI bus owner vanished: %s" name)
-    (let ((matches (cl-remove-if-not
-                    (lambda (item)
-                      (equal (slothbar-tray-sni-item-service item) name))
-                    slothbar-tray-sni--items)))
-      (dolist (item matches)
-        (slothbar-tray-sni--remove-item
-         (slothbar-tray-sni-item-service item)
-         (slothbar-tray-sni-item-path item))))))
+    (if (and (equal name slothbar-tray-sni--watcher-service)
+             slothbar-tray-sni--secondary-host
+             (not slothbar-tray-sni--service-owned))
+        (run-at-time 0 nil #'slothbar-tray-sni--take-over-watcher)
+      (progn
+        (slothbar--log-debug* "SNI bus owner vanished: %s" name)
+        (let ((matches (cl-remove-if-not
+                        (lambda (item)
+                          (equal (slothbar-tray-sni-item-service item) name))
+                        slothbar-tray-sni--items)))
+          (dolist (item matches)
+            (slothbar-tray-sni--remove-item
+             (slothbar-tray-sni-item-service item)
+             (slothbar-tray-sni-item-path item))))))))
 
 (defun slothbar-tray-sni--parse-watcher-entry (entry)
   "Return (SERVICE . PATH) for a watcher ENTRY.
@@ -410,6 +416,76 @@ Accept either SERVICE/PATH or SERVICE:PATH.  Missing paths default to
               slothbar-tray-sni--watcher-service
               (error-message-string err))
      nil)))
+
+(defun slothbar-tray-sni--teardown-secondary-host ()
+  "Release secondary-host registrations and watcher signals."
+  (dolist (object slothbar-tray-sni--watcher-signal-objects)
+    (ignore-errors (dbus-unregister-object object)))
+  (setq slothbar-tray-sni--watcher-signal-objects nil)
+  (when slothbar-tray-sni--host-service-owned
+    (ignore-errors
+      (when (fboundp 'dbus-unregister-service)
+        (dbus-unregister-service :session slothbar-tray-sni--host-service)))
+    (setq slothbar-tray-sni--host-service-owned nil))
+  (setq slothbar-tray-sni--secondary-host nil))
+
+(defun slothbar-tray-sni--install-primary-watcher ()
+  "Install watcher methods and properties after acquiring the name."
+  (setq slothbar-tray-sni--service-owned t
+        slothbar-tray-sni--secondary-host nil)
+  (dbus-register-method
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "RegisterStatusNotifierItem"
+   #'slothbar-tray-sni--register-item)
+  (dbus-register-method
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "RegisterStatusNotifierHost"
+   (lambda (_host) :ignore))
+  (dbus-register-property
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "IsStatusNotifierHostRegistered" :readwrite t)
+  (dbus-register-property
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "ProtocolVersion" :read :int32 0)
+  (dbus-register-property
+   :session slothbar-tray-sni--watcher-service
+   slothbar-tray-sni--watcher-path
+   slothbar-tray-sni--watcher-interface
+   "RegisteredStatusNotifierItems" :readwrite '(:array))
+  (slothbar-tray-sni--update-watcher-property)
+  (dolist (item slothbar-tray-sni--items)
+    (slothbar-tray-sni--emit-watcher-signal
+     "StatusNotifierItemRegistered"
+     (concat (slothbar-tray-sni-item-service item)
+             (slothbar-tray-sni-item-path item))))
+  (slothbar-tray-sni--refresh-module))
+
+(defun slothbar-tray-sni--take-over-watcher ()
+  "Promote this secondary host after the primary watcher exits."
+  (when (and slothbar-tray-sni--secondary-host
+             (not slothbar-tray-sni--service-owned))
+    (slothbar--log-debug* "SNI primary watcher vanished.  Attempting takeover")
+    (slothbar-tray-sni--teardown-secondary-host)
+    (if (eq :primary-owner
+            (dbus-register-service
+             :session slothbar-tray-sni--watcher-service
+             :do-not-queue))
+        (progn
+          (slothbar--log-debug* "SNI takeover succeeded.  Retained %d item(s)"
+                                (length slothbar-tray-sni--items))
+          (slothbar-tray-sni--install-primary-watcher))
+      (slothbar--log-debug* "SNI takeover lost to another host.  Reverting to secondary")
+      (unless (slothbar-tray-sni--try-secondary-host)
+        (slothbar--log-warn*
+         "SNI takeover failed and no watcher could be joined")))))
 
 (defun slothbar-tray-sni--sort-items (items)
   "Sort ITEMS by XAyatanaOrderingIndex, preserving registration order."
@@ -629,34 +705,7 @@ Accept either SERVICE/PATH or SERVICE:PATH.  Missing paths default to
                :do-not-queue))
           (progn
             (slothbar--log-debug* "SNI init: primary watcher owner")
-            (setq slothbar-tray-sni--service-owned t)
-            (dbus-register-method
-             :session slothbar-tray-sni--watcher-service
-             slothbar-tray-sni--watcher-path
-             slothbar-tray-sni--watcher-interface
-             "RegisterStatusNotifierItem"
-             #'slothbar-tray-sni--register-item)
-            (dbus-register-method
-             :session slothbar-tray-sni--watcher-service
-             slothbar-tray-sni--watcher-path
-             slothbar-tray-sni--watcher-interface
-             "RegisterStatusNotifierHost"
-             (lambda (_host) :ignore))
-            (dbus-register-property
-             :session slothbar-tray-sni--watcher-service
-             slothbar-tray-sni--watcher-path
-             slothbar-tray-sni--watcher-interface
-             "IsStatusNotifierHostRegistered" :readwrite t)
-            (dbus-register-property
-             :session slothbar-tray-sni--watcher-service
-             slothbar-tray-sni--watcher-path
-             slothbar-tray-sni--watcher-interface
-             "ProtocolVersion" :read :int32 0)
-            (dbus-register-property
-             :session slothbar-tray-sni--watcher-service
-             slothbar-tray-sni--watcher-path
-             slothbar-tray-sni--watcher-interface
-             "RegisteredStatusNotifierItems" :readwrite '(:array)))
+            (slothbar-tray-sni--install-primary-watcher))
         (slothbar--log-debug* "SNI init: watcher occupied, trying secondary host")
         (unless (slothbar-tray-sni--try-secondary-host)
           (error "Another StatusNotifier host owns %s"
