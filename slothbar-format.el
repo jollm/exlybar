@@ -260,8 +260,8 @@ USED is a list of characters already assigned."
                    args)))))
 
 (defun slothbar-format--plan-token (token fields used)
-  "Return (STRING . SLOT) for TOKEN.
-SLOT is nil for literal strings.  USED is the characters already assigned."
+  "Return (STRING . SLOT) for TOKEN with FIELDS.
+USED is the characters already assigned."
   (cond
    ((stringp token)
     (cons (slothbar-format--escape token) nil))

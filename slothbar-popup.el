@@ -49,7 +49,7 @@
      slothbar-popup--active)))
 
 (defun slothbar-popup-dispatch-motion (backend surface x y)
-  "Forward motion at X,Y on SURFACE to an active popup."
+  "Forward motion at X,Y on SURFACE to an active popup for BACKEND."
   (when-let* ((popup (slothbar-popup--at-surface backend surface))
               (function (slothbar-popup-motion-function popup)))
     (funcall function x y)
@@ -67,7 +67,7 @@
     t))
 
 (defun slothbar-popup-dispatch-button (backend surface x y button)
-  "Forward a BUTTON press at X,Y on SURFACE to an active popup."
+  "Forward a BUTTON press at X,Y on SURFACE to an active popup for BACKEND."
   (when-let* ((popup (slothbar-popup--at-surface backend surface))
               (function (slothbar-popup-button-function popup)))
     (funcall function x y button)

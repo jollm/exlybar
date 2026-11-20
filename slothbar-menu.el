@@ -291,7 +291,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
         (ash (slothbar-color-rgb-alpha color) -8)))
 
 (defun slothbar-menu--fill (frame width height color)
-  "Fill a WIDTHxHEIGHT RGBA FRAME with COLOR."
+  "Fill a WIDTH x HEIGHT RGBA FRAME with COLOR."
   (let ((rgba (slothbar-menu--rgba color)))
     (dotimes (y height)
       (dotimes (x width)
@@ -300,7 +300,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
             (aset frame (+ offset n) (nth n rgba))))))))
 
 (defun slothbar-menu--fill-row (frame width x y row-width height color)
-  "Fill a row region in FRAME."
+  "Fill a WIDTH x HEIGHT row region in FRAME with COLOR at X, Y."
   (let ((rgba (slothbar-menu--rgba color)))
     (dotimes (dy height)
       (dotimes (dx row-width)
@@ -312,7 +312,8 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
 
 (defun slothbar-menu--blend-pixmap
     (frame width height left top glyph-width glyph-height pixmap color)
-  "Blend an A8 PIXMAP into FRAME at LEFT, TOP using COLOR."
+  "Blend an A8 WIDTH x HEIGHT PIXMAP into FRAME at LEFT, TOP using COLOR.
+GLYPH-HEIGHT and GLYPH-WIDTH determine the number of rows and columns."
   (let ((rgba (slothbar-menu--rgba color)))
     (dotimes (row glyph-height)
       (let ((y (+ top row)))
@@ -332,7 +333,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
 
 (defun slothbar-menu--render-label
     (frame width height row-x row-y text color)
-  "Render TEXT into FRAME at ROW-X,ROW-Y using COLOR."
+  "Render WIDTH x HEIGHT TEXT into FRAME at ROW-X, ROW-Y using COLOR."
   (when-let* ((font (slothbar-menu--font))
               (layout (slothbar-module--create-layout
                        text font 0 (slothbar-menu--px) row-x)))
@@ -358,7 +359,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
                pixmap color))))))))
 
 (defun slothbar-menu--blend-image (frame width height left top image)
-  "Blend IMAGE into FRAME at LEFT, TOP."
+  "Blend WIDTH x HEIGHT IMAGE into FRAME at LEFT, TOP."
   (pcase-let ((`(,image-width ,image-height ,data) image))
     (dotimes (row image-height)
       (let ((y (+ top row)))
@@ -533,7 +534,7 @@ For a submenu, PARENT, BACK-LABEL, and DBUSMENU are supplied."
           (slothbar-menu--show-deferred replacement bar x y))))))
 
 (defun slothbar-menu--show-deferred (menu bar x y)
-  "Show MENU after the current pointer dispatch has finished."
+  "Show MENU at X, Y above BAR after pointer dispatch has finished."
   (run-at-time
    0 nil
    (lambda ()

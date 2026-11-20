@@ -64,7 +64,7 @@ RED, GREEN, BLUE, and ALPHA are integers in the range 0-65535."
   (alpha #xffff :type 'number))
 
 (cl-defmethod cl-print-object ((color slothbar-color-rgb) stream)
-  "Print COLOR compactly in Help and `cl-prin1'."
+  "Print COLOR compactly to STREAM for use in Help and `cl-prin1'."
   (princ (format "#<slothbar-color #%04x%04x%04x%04x>"
                  (slothbar-color-rgb-red color)
                  (slothbar-color-rgb-green color)
@@ -382,7 +382,7 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
     (list color)))
 
 (defun slothbar-color--next-code (string pos)
-  "Return (START . END) for the next color code at or after POS.
+  "Return (START . END) for the next color code at or after POS in STRING.
 Parenthesized codes are read as complete Lisp forms.  Other codes use
 `slothbar-color--pattern'."
   (let ((paren (string-match "\\^(" string pos))

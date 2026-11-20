@@ -159,7 +159,8 @@
   "The current `slothbar' instance during a scoped operation.")
 
 (cl-defmethod cl-print-object ((bar slothbar) stream)
-  "Print BAR compactly in Help and `cl-prin1'."
+  "Print BAR compactly into STREAM.
+This provides a compact representation for Help and `cl-prin1'."
   (slothbar--print-object-fields
    stream "#<slothbar"
    (list (format "id=%S" (slothbar-id bar))
@@ -451,7 +452,7 @@ Remap colors in every bar and refresh the display."
   "Modules whose failures have already been reported in this run.")
 
 (defun slothbar--report-module-failure (module phase err)
-  "Report MODULE's failure during PHASE without signaling."
+  "Report MODULE's ERR during PHASE without signaling."
   (let ((name (if (slothbar-module-p module)
                   (or (slothbar-module-name module) "anonymous")
                 "anonymous")))
@@ -615,7 +616,7 @@ When BAR is non-nil, only that bar is refreshed."
     (nreverse merged)))
 
 (defun slothbar--content-damage (old-layout old-widths new-layout modules)
-  "Return damage spans for changed MODULES between layouts.
+  "Return damage spans for MODULES between OLD-LAYOUT and NEW-LAYOUT.
 OLD-WIDTHS maps modules to their widths before refresh."
   (slothbar--merge-damage
    (cl-loop for module in modules
@@ -733,7 +734,7 @@ NVAL is check against the existing value for any changes."
 (add-variable-watcher 'slothbar-height #'slothbar--watch-height)
 
 (defun slothbar--construct-modules (&optional bar modules)
-  "Construct modules for BAR, or the current environment when BAR is nil."
+  "Construct MODULES for BAR, or the current environment when BAR is nil."
   (let* ((config (and bar (slothbar-config bar)))
          (constructors
           (cond
@@ -898,7 +899,7 @@ matched by its config index and output."
 (defun slothbar--update-bar (backend bar spec)
   "Update BAR in place from SPEC.
 Keep BAR's identity so a configured :id survives runtime configuration
-changes.  Recreate only the backend surface/modules that actually changed."
+changes.  Recreate only the BACKEND surface/modules that actually changed."
   (let* ((config (plist-get spec :config))
          (index (plist-get spec :index))
          (output (plist-get spec :output))
@@ -1082,6 +1083,7 @@ changes.  Recreate only the backend surface/modules that actually changed."
 (defun slothbar--watch-slothbar-modules (_ nval oper where)
   "(Re)construct inherited modules when `slothbar-modules' is modified.
 
+`slothbar-modules' is considered modified when different from NVAL.
 Bars with an explicit :modules entry keep their own module list.
 Do this only when OPER eq \='set and WHERE is nil."
   (when (and (not where) (eq 'set oper)
@@ -1100,6 +1102,7 @@ Do this only when OPER eq \='set and WHERE is nil."
 (defun slothbar--watch-slothbar-bars (_ nval oper where)
   "Reconcile bars when `slothbar-bars' is modified.
 
+`slothbar-bars' is considered modified when different from NVAL.
 Do this only when OPER eq \='set, WHERE is nil, and slothbar is running."
   (when (and slothbar--enabled
              (not where)
@@ -1334,7 +1337,7 @@ VALUE is the value being shown."
    ((and backend (fboundp 'slothbar-backend-output-name))
     (condition-case nil
         (or (slothbar-backend-output-name backend output) "unknown")
-      (error "unknown")))
+      (error "Unknown")))
    (t "unknown")))
 
 (defun slothbar--debug-surface-info (bar)
@@ -1478,7 +1481,7 @@ VALUE is the value being shown."
 
 ;;;###autoload
 (defun slothbar-debug-info ()
-  "Display a diagnostic report for slothbar in `*slothbar-debug-info*'."
+  "Display a diagnostic report for slothbar in *slothbar-debug-info*."
   (interactive)
   (let ((buffer (get-buffer-create "*slothbar-debug-info*")))
     (with-current-buffer buffer

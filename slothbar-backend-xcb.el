@@ -125,7 +125,7 @@
 
 (cl-defmethod slothbar-backend-supports-p
   ((_backend slothbar-backend-xcb) feature)
-  "The xcb backend supports X-specific features."
+  "Return t if the xcb backend supports X-specific FEATUREs."
   (memq feature '(system-tray ewmh randr pointer-input focused-window)))
 
 (cl-defmethod slothbar-backend-ext-workspace-manager
@@ -144,7 +144,7 @@
                 (display-monitor-attributes-list))))
 
 (cl-defmethod slothbar-backend-focused-window ((backend slothbar-backend-xcb))
-  "Return the active EWMH window's title and class."
+  "Return the active EWMH window's title and class for the XCB BACKEND."
   (let ((connection (slothbar-backend-xcb-connection backend))
         (root (slothbar-backend-xcb--root-window-id backend)))
     (when (and connection root)
@@ -227,8 +227,8 @@
 (defun slothbar-backend-xcb--do-struts
     (backend bar top bottom left top-start-x top-end-x
              bottom-start-x bottom-end-x)
-  "Do requests for struts on BAR's window.
-TOP, BOTTOM, LEFT are the strut sizes. TOP-START-X and TOP-END-X delimit
+  "Do requests for struts on BAR's window for the xcb BACKEND.
+TOP, BOTTOM, LEFT are the strut sizes.  TOP-START-X and TOP-END-X delimit
 the top strut; BOTTOM-START-X and BOTTOM-END-X delimit the bottom strut."
   (let ((connection (slothbar-backend-xcb-connection backend))
         (surface (slothbar-backend-xcb--surface bar)))
@@ -327,7 +327,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
        "slothbar-refresh: configure window errors: %s" ecw))))
 
 (defun slothbar-backend-xcb--change-background (backend bar &optional color)
-  "Change BAR's background pixel attribute with optional COLOR."
+  "Change BAR's background pixel attribute in BACKEND with optional COLOR."
   (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((connection (slothbar-backend-xcb-connection backend))
           (window (slothbar-backend-xcb-surface-window surface))
@@ -373,7 +373,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (cl-defmethod slothbar-backend-show
     ((backend slothbar-backend-xcb) (bar slothbar))
-  "Map BAR and reserve its space."
+  "Map BAR and reserve its space in BACKEND."
   (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (slothbar-backend-xcb--configure-geom backend bar)
     (slothbar-backend-xcb--change-background backend bar)
@@ -389,7 +389,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (cl-defmethod slothbar-backend-hide
     ((backend slothbar-backend-xcb) (bar slothbar))
-  "Unmap BAR and release its reserved space."
+  "Unmap BAR and release its reserved space in BACKEND."
   (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (slothbar-backend-xcb--configure-struts backend bar t)
     (let ((connection (slothbar-backend-xcb-connection backend)))
@@ -411,7 +411,7 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 
 (cl-defmethod slothbar-backend-present
     ((backend slothbar-backend-xcb) (bar slothbar) layout damage)
-  "Draw LAYOUT into BAR and update its X window."
+  "Draw LAYOUT into BAR and update its X window in BACKEND."
   (when-let* ((surface (slothbar-backend-xcb--surface bar)))
     (let ((connection (slothbar-backend-xcb-connection backend))
           (window (slothbar-backend-xcb-surface-window surface))
@@ -559,7 +559,8 @@ If HIDE? is non-nil, configure struts to make the bar invisible."
 (defun slothbar-backend-xcb--prepare-module (backend surface module)
   "Ensure SURFACE's pixmap matches MODULE and clear it before drawing.
 A refreshed module may keep the same width while its text shrinks, so the
-pixmap is always refilled with the module background."
+pixmap is always refilled with the module background.
+This is done in the xcb BACKEND."
   (let* ((width (slothbar-module-width module))
          (connection (slothbar-backend-xcb-connection backend))
          (colors (slothbar-module-colors module))
@@ -690,7 +691,7 @@ DATA the event data"
    (slothbar-backend-bars backend)))
 
 (defun slothbar-backend-xcb--on-MotionNotify (backend data _synthetic)
-  "Dispatch pointer motion on BACKEND."
+  "Dispatch pointer motion event DATA on BACKEND."
   (let ((event (make-instance 'xcb:MotionNotify)))
     (xcb:unmarshal event data)
     (let ((bar (slothbar-backend-xcb--bar-for-window
@@ -715,7 +716,7 @@ DATA the event data"
         "pointer motion hook error: %S" err)))))
 
 (defun slothbar-backend-xcb--on-ButtonPress (backend data _synthetic)
-  "Dispatch a pointer button press on BACKEND."
+  "Dispatch a pointer button press event DATA on BACKEND."
   (let ((event (make-instance 'xcb:ButtonPress)))
     (xcb:unmarshal event data)
     (let ((bar (slothbar-backend-xcb--bar-for-window

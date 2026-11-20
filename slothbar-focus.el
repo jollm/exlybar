@@ -97,7 +97,7 @@
   "A focused-window module.")
 
 (defun slothbar-focus-create (&rest args)
-  "Create a focused-window module using `slothbar-focus-format'."
+  "Create a focused-window module with ARGS using variable `slothbar-focus-format'."
   (let ((args (copy-sequence args)))
     (unless (plist-member args :format)
       (setq args (append (list :format slothbar-focus-format) args)))
@@ -141,7 +141,7 @@
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-focus) (backend slothbar-backend))
-  "The focused-window module needs backend focus support."
+  "The focused-window module needs BACKEND focus support."
   (slothbar-backend-supports-p backend 'focused-window))
 
 (cl-defmethod slothbar-module-update-status ((m slothbar-focus))

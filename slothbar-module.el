@@ -105,7 +105,7 @@ A plist or alist of action keywords to commands.")
       text)))
 
 (cl-defmethod cl-print-object ((rgb slothbar-module-rgb) stream)
-  "Print RGB compactly in Help and `cl-prin1'."
+  "Print RGB compactly to STREAM for use in Help and `cl-prin1'."
   (princ (format "#<slothbar-module-rgb bg=%s fg=%s>"
                  (cl-prin1-to-string
                   (slothbar-module-rgb-background-color rgb))
@@ -114,7 +114,7 @@ A plist or alist of action keywords to commands.")
          stream))
 
 (cl-defmethod cl-print-object ((module slothbar-module) stream)
-  "Print MODULE compactly in Help and `cl-prin1'."
+  "Print MODULE compactly to STREAM for use in Help and `cl-prin1'."
   (slothbar--print-object-fields
    stream "#<slothbar-module"
    (list (format "name=%s" (or (slothbar-module-name module) "anonymous"))

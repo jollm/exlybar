@@ -226,7 +226,8 @@
   (format "%d" value))
 
 (defun slothbar-sysinfo-format-percent (value &optional decimals)
-  "Format VALUE as a percentage number without a percent sign."
+  "Format VALUE as a percentage with optional DECIMALS.
+The result is without a percent sign."
   (let ((decimals (or decimals 0)))
     (format (concat "%." (number-to-string decimals) "f") value)))
 
@@ -246,7 +247,7 @@ DECIMALS defaults to 1."
               amount (aref units index)))))
 
 (defun slothbar-sysinfo-format-rate (value &optional decimals)
-  "Format VALUE bytes per second."
+  "Format VALUE bytes per second with optional DECIMALS."
   (concat (slothbar-sysinfo-format-byte-count value decimals) "/s"))
 
 (defun slothbar-sysinfo-format-duration (value &optional _decimals)
@@ -262,7 +263,7 @@ DECIMALS defaults to 1."
      (t (format "%ds" seconds)))))
 
 (defun slothbar-sysinfo-format-load (value &optional decimals)
-  "Format VALUE as a load average."
+  "Format VALUE as a load average with optional DECIMALS."
   (let ((decimals (or decimals 2)))
     (format (concat "%." (number-to-string decimals) "f") value)))
 
@@ -274,7 +275,7 @@ DECIMALS defaults to 1."
    (t (format "%.0fHz" value))))
 
 (defun slothbar-sysinfo-format-temperature (value &optional decimals)
-  "Format VALUE degrees Celsius."
+  "Format VALUE degrees Celsius with optional DECIMALS."
   (let ((decimals (or decimals 1)))
     (format (concat "%." (number-to-string decimals) "f°C") value)))
 
@@ -524,7 +525,7 @@ A nil interval means read once per state."
                   (getenv "XDG_CURRENT_DESKTOP"))))))
 
 (defun slothbar-sysinfo--read-cpu (state _now)
-  "Read CPU usage, model, frequency, and count."
+  "Read CPU usage, model, frequency, and count from STATE."
   (let* ((current (slothbar-sysinfo-parse-cpu-stat
                    (or (slothbar-sysinfo--read-file "/proc/stat") "")))
          (previous (slothbar-sysinfo-state-cpu-previous state))
@@ -577,7 +578,7 @@ A nil interval means read once per state."
       (caar interfaces)))
 
 (defun slothbar-sysinfo--read-network (state now)
-  "Read network rates and interface identity."
+  "Read network rates and interface identity from STATE at time NOW."
   (let* ((interfaces (slothbar-sysinfo-parse-net-dev
                       (or (slothbar-sysinfo--read-file "/proc/net/dev") "")))
          (interface (or slothbar-sysinfo-network-interface
@@ -735,7 +736,7 @@ A nil interval means read once per state."
       (setq slothbar-sysinfo--provider-timer nil))))
 
 (defun slothbar-sysinfo--due-p (state category now)
-  "Return non-nil when CATEGORY is due at NOW."
+  "Return non-nil when CATEGORY is due at NOW according to STATE."
   (let ((last (gethash category (slothbar-sysinfo-state-timestamps state)))
         (interval (alist-get category slothbar-sysinfo-intervals)))
     (cond
@@ -874,7 +875,7 @@ therefore never reparsed as color codes."
                'ignore))
 
 (defun slothbar-sysinfo-compile-plan ()
-  "Compile `slothbar-sysinfo-format' into a format plan."
+  "Compile variable `slothbar-sysinfo-format' into a format plan."
   (slothbar-format-compile-plan slothbar-sysinfo-format
                                 (slothbar-sysinfo-field-characters)))
 
@@ -917,7 +918,8 @@ therefore never reparsed as color codes."
   (setf (slothbar-sysinfo-state m) nil))
 
 (defun slothbar-sysinfo--watch-format (_ _nval oper where)
-  "Refresh sysinfo modules when `slothbar-sysinfo-format' changes."
+  "Refresh sysinfo modules when variable `slothbar-sysinfo-format' changes.
+Do this only with OPER eq \\='set and nil WHERE."
   (when (and (not where) (eq 'set oper))
     (slothbar-module--refresh-all-by-name "sysinfo")))
 

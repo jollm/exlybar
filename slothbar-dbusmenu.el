@@ -185,7 +185,8 @@ DATA defaults to an integer variant and TIMESTAMP defaults to zero."
   (slothbar-dbusmenu-event menu id "clicked" nil timestamp))
 
 (defun slothbar-dbusmenu-close (menu id &optional timestamp)
-  "Notify MENU's service that item ID's menu has closed."
+  "Notify MENU's service that item ID's menu has closed.
+Optionally include a TIMESTAMP."
   (slothbar-dbusmenu-event menu id "closed" nil timestamp))
 
 (defun slothbar-dbusmenu-find-item (menu id)

@@ -101,7 +101,7 @@ used by sources that know whether a workspace is occupied."
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-workspaces) (backend slothbar-backend))
-  "Workspaces read EWMH root-window properties or ext-workspace."
+  "Return t if BACKEND supports querying workspaces data."
   (or (slothbar-backend-supports-p backend 'ewmh)
       (slothbar-backend-supports-p backend 'ext-workspace)))
 
@@ -295,7 +295,7 @@ Return non-nil when an activation request was sent."
 
 (cl-defmethod slothbar-module-hover
   ((m slothbar-workspaces) x y)
-  "Track the workspace extent under the pointer in M."
+  "Track the workspace extent at X, Y under the pointer in M."
   (let ((index
          (when (and x y)
            (let ((region

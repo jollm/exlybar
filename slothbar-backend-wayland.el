@@ -238,7 +238,7 @@
 
 (cl-defmethod cl-print-object
     ((surface slothbar-backend-wayland-surface) stream)
-  "Print SURFACE compactly in Help and `cl-prin1'."
+  "Print SURFACE compactly to STREAM for use in Help and `cl-prin1'."
   (let ((output (slothbar-backend-wayland-surface-output surface)))
     (slothbar--print-object-fields
      stream "#<slothbar-surface"
@@ -270,7 +270,7 @@
 
 (cl-defmethod slothbar-backend-supports-p
   ((backend slothbar-backend-wayland) feature)
-  "The Wayland backend has no X-only facilities."
+  "Return t if the Wayland BACKEND supports FEATURE."
   (or (memq feature '(surface exclusive-zone layer-shell buffer-scale popup))
       (and (eq feature 'pointer-input)
            (slothbar-backend-wayland-pointer backend))
@@ -403,7 +403,7 @@
 
 (cl-defmethod slothbar-backend-focused-window
   ((backend slothbar-backend-wayland))
-  "Return the focused Wayland toplevel's title and app-id."
+  "Return the focused Wayland BACKEND toplevel's title and app-id."
   (let* ((manager
           (slothbar-backend-wayland-foreign-toplevel-manager backend))
          (toplevel (and manager
@@ -437,7 +437,7 @@ its configuration; resolve names against the backend's output list."
 
 (cl-defmethod slothbar-backend-output-name
     ((backend slothbar-backend-wayland) output)
-  "Return OUTPUT's wl_output name."
+  "Return OUTPUT's wl_output name in BACKEND."
   (cond
    ((elwl-output-p output) (elwl-output-name output))
    ((and (fboundp 'elwl-object-p) (elwl-object-p output))
@@ -528,7 +528,9 @@ COLOR a `slothbar-color-rgb'"
 
 (defun slothbar-backend-wayland--blend-glyph
     (frame stride frame-width frame-height fg bg left top pixmap width height)
-  "Blend an A8 glyph PIXMAP into FRAME.
+  "Blend a WIDTH x HEIGHT A8 glyph PIXMAP into FRAME.
+FRAME-WIDTH and FRAME-HEIGHT are the bounds of FRAME.
+STRIDE is the Y factor for the PIXMAP index.
 FG and BG are 8-bit (B G R A) vectors.  LEFT and TOP are buffer pixels."
   (dotimes (row height)
     (let ((y (+ top row)))
@@ -557,7 +559,7 @@ FG and BG are 8-bit (B G R A) vectors.  LEFT and TOP are buffer pixels."
 ;;; Glyph rasterization
 
 (defun slothbar-backend-wayland--glyph (backend font-index glyph-id px scale)
-  "Return a cached `fontsloth-metrics+pixmap' for a glyph.
+  "Return a cached `fontsloth-metrics+pixmap' for GLYPH-ID in BACKEND.
 FONT-INDEX indexes `slothbar-font--color-code-map'; PX is the logical pixel
 size and SCALE the output buffer scale."
   (let ((key (list font-index glyph-id px scale)))
@@ -643,7 +645,9 @@ placement."
 
 (defun slothbar-backend-wayland--blend-image
     (frame stride frame-width frame-height left top width height data)
-  "Blend an RGBA image into FRAME.
+  "Blend a WIDTH x HEIGHT RGBA image into FRAME.
+FRAME-WIDTH and FRAME-HEIGHT are the bounds of FRAME.
+STRIDE is the Y factor for the PIXMAP index.
 DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
   (dotimes (row height)
     (let ((y (+ top row)))
@@ -673,7 +677,7 @@ DATA contains straight-alpha RGBA bytes.  LEFT and TOP are buffer pixels."
 
 (defun slothbar-backend-wayland--scale-image
     (data width height new-width new-height)
-  "Scale straight RGBA DATA from WIDTHxHEIGHT to NEW-WIDTHxNEW-HEIGHT."
+  "Scale straight RGBA DATA from WIDTH x HEIGHT to NEW-WIDTH x NEW-HEIGHT."
   (if (and (= width new-width) (= height new-height))
       data
     (let ((out (make-string (* new-width new-height 4) 0)))
@@ -841,7 +845,7 @@ Return non-nil if a buffer was presented."
 ;;; Popups
 
 (defun slothbar-backend-wayland--popup-create (backend bar x y width height)
-  "Create a popup for BAR at X,Y with WIDTH and HEIGHT."
+  "Create a popup for BAR at X,Y with WIDTH and HEIGHT in BACKEND."
   (let* ((xdg-wm (slothbar-backend-wayland-xdg-wm backend))
          (bar-state (slothbar-surface bar))
          (scale (if bar-state
@@ -905,7 +909,7 @@ Return non-nil if a buffer was presented."
 
 (cl-defmethod slothbar-backend-create-popup
     ((backend slothbar-backend-wayland) bar x y width height)
-  "Create a Wayland popup for BAR."
+  "Create a Wayland popup for BAR in BACKEND."
   (when (and (slothbar-backend-wayland-xdg-wm backend)
              (slothbar-surface bar))
     (slothbar-backend-wayland--popup-create backend bar x y width height)))
@@ -1008,7 +1012,7 @@ VISIBLE non-nil reserves the bar's exclusive zone."
     layer))
 
 (defun slothbar-backend-wayland--on-configure (surface arguments)
-  "Handle a layer-surface configure for SURFACE."
+  "Handle a layer-surface configure for SURFACE with ARGUMENTS."
   (let* ((bar (slothbar-backend-wayland-surface-bar surface))
          (serial (alist-get 'serial arguments))
          (width (alist-get 'width arguments))

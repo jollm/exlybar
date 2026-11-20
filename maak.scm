@@ -17,6 +17,10 @@
   "Export wiki/*.org files to Markdown."
   ($ (list (string-append emacs " --batch -l wiki/export.el"))))
 
+(define (checkdoc)
+  "Run checkdoc over the top-level Slothbar Emacs Lisp sources."
+  ($ (list (string-append emacs " -Q --batch -L . -l scripts/checkdoc.el"))))
+
 (define (package-lint)
   "Run package-lint with slothbar.el as the package main file."
   ($ `("guix shell -CN -m manifest.scm --"

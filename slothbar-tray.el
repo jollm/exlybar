@@ -69,12 +69,13 @@
 
 (cl-defmethod slothbar-module-supported-p
   ((_m slothbar-tray) (backend slothbar-backend))
-  "System tray requires an available tray transport."
+  "System tray requires an available BACKEND tray transport."
   (or (slothbar-backend-supports-p backend 'system-tray)
       (slothbar-tray--sni-available-p)))
 
 (cl-defmethod slothbar-module-singleton-id ((m slothbar-tray))
-  "XEmbed is a global singleton.  Statusnotifier trays may be repeated."
+  "Return a symbol id if M should be a singleton.
+XEmbed is a global singleton.  Statusnotifier trays may be repeated."
   (let ((backend (slothbar-module--backend m)))
     (when (and backend
                (slothbar-backend-supports-p backend 'system-tray))
@@ -132,7 +133,7 @@
     ('sni (slothbar-tray-sni-refresh m))))
 
 (cl-defmethod slothbar-module-reposition ((m slothbar-tray) x y)
-  "Reposition M through its tray transport."
+  "Reposition M to X, Y through its tray transport."
   (pcase (slothbar-tray-transport m)
     ('xembed (slothbar-tray-xembed-reposition m x y))
     ('sni (slothbar-tray-sni-reposition m x y))))
@@ -145,7 +146,7 @@
   (setf (slothbar-tray-transport m) nil))
 
 (cl-defmethod slothbar-module-click ((m slothbar-tray) x y button)
-  "Dispatch a tray click through the active transport."
+  "Dispatch a tray click at X, Y to M through the active transport."
   (pcase (slothbar-tray-transport m)
     ('sni (slothbar-tray-sni-click m x y button))
     (_ nil)))

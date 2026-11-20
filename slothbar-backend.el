@@ -80,7 +80,7 @@ indented line."
            stream)))
 
 (cl-defmethod cl-print-object ((backend slothbar-backend) stream)
-  "Print BACKEND compactly in Help and `cl-prin1'."
+  "Print BACKEND compactly to STREAM for use in Help and `cl-prin1'."
   (slothbar--print-object-fields
    stream "#<slothbar-backend"
    (list (format "kind=%s" (or (slothbar-backend-kind backend) "unknown"))
@@ -116,14 +116,14 @@ indented line."
   "Unmap BACKEND's BAR and release its reserved space.")
 
 (cl-defgeneric slothbar-backend-present (backend bar layout damage)
-  "Draw LAYOUT with BACKEND and update the bar.
+  "Draw LAYOUT for DAMAGE with BACKEND and update the BAR.
 LAYOUT is a list of ((X Y) . MODULE) placements as produced by
 `slothbar-layout-coordinate'.  DAMAGE is a list of (LEFT RIGHT) segments
 that must be repainted, or nil if nothing is known to be stale.")
 
 (cl-defgeneric slothbar-backend-create-popup (backend bar x y width height)
   "Create a popup anchored to BAR at X,Y with WIDTH and HEIGHT.
-Return a backend-specific popup state, or nil when unsupported.")
+Return a BACKEND specific popup state, or nil when unsupported.")
 
 (cl-defmethod slothbar-backend-create-popup ((_backend t) (_bar t) _x _y _width _height)
   "Default: this backend has no popup surfaces."
