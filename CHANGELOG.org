@@ -4,6 +4,56 @@
 All notable changes to slothbar are recorded here. Slothbar is pre-1.0, so
 internal and configuration APIs may still change between releases.
 
+* 0.33.0 - 2026-11-20
+
+** Wayland tray and dbusmenu
+
+*** Added
+
+- Add a StatusNotifierItem (SNI) tray transport for Wayland, selected when
+  D-Bus is available.
+- Share one SNI watcher across multiple bars.  XEmbed remains a global
+  singleton on X11.
+- Add secondary StatusNotifier host support, including takeover when the
+  primary watcher exits.
+- Parse watcher entries in both `service/path` and `service:path` forms and
+  preserve application-specific item object paths.
+- Add a shared icon resolver with `IconPixmap`/`IconName` support, preferred
+  icon themes by background mode, `index.theme` inheritance, parsed
+  `icon-theme.cache` lookup, direct theme-root files, and scalable/symbolic
+  SVG.
+- Add dbusmenu parsing, rendering, submenus with Back rows, hover
+  highlighting, GTK mnemonic handling, and menu updates from `LayoutUpdated`.
+- Add mouse menu interaction: left/right click opens or closes the tray menu,
+  enables item activation.
+- Menu error handling falls back to the native `ContextMenu` method when a
+  dbusmenu cannot be loaded.
+- Add tray/menu debug logging for watcher lifecycle, item registration, icon
+  lookup, image statistics, menu rows, and popup lifecycle.
+
+*** Limitations
+
+- Menu-item icons render when an application supplies `icon-name`.  `icon-data`
+  is not currently rendered.
+
+*** Fixed
+
+- Fix the refresh race between `LayoutUpdated` and menu item activation.
+- Stop sending dbusmenu `AboutToShow` for ordinary item clicks.
+- Send dbusmenu `closed` when a menu popup closes.
+- Use explicit `int32` typing for dbusmenu ids, coordinates, and depth.
+- Fix stale popup callbacks closing replacement menus.
+- Fix direct icon files being skipped when they live at an explicit
+  `IconThemePath` root.
+
+*** Tests
+
+- Add unit coverage for watcher entries, secondary-host takeover, legacy
+  service restoration, watcher-driven discovery paths, icon theme
+  preferences, inheritance, height selection, direct-root icons, scalable
+  SVG, cache invalidation, and menu behavior.
+- Add live SNI and dbusmenu smoke tests plus Wayland popup/menu coverage.
+
 * 0.32.0 - 2026-11-14
 
 ** Generic module actions
